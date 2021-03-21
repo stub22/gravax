@@ -1,0 +1,43 @@
+Gravax credits, updated 2021-Mar-14
+--------------------------------------------------
+gravax.fun software and web content are Copyright 2021 by Stu Btwotwo,
+and are distributed under terms of Apache License 2.0.
+See the file GRAVAX_LICENSE_APACHE2.txt.
+--------------------------------------------------
+Gravax also makes use of the following software, included as (build 
+and runtime) dependencies by gravax's maven pom.xml files:
+
+Apache License 2.0:
+Axiomagic               http://www.axiomagic.fun
+Maven   				https://maven.apache.org
+Jena RDF suite    		https://jena.apache.org
+Log4J    				https://logging.apache.org/log4j
+Appdapter				http://www.appdapter.org
+Apache Commons			https://commons.apache.org
+Akka					https://doc.akka.io/docs/akka/2.5/project/licenses.html
+Spray					http://spray.io/project-info/license/
+FasterXML Jackson 2.x	https://github.com/FasterXML/jackson/wiki/FAQ
+Univocity Parsers		https://github.com/uniVocity/univocity-parsers/blob/master/LICENSE-2.0.html
+Oracle NoSQL DB - Community Edition
+						https://www.oracle.com/database/technologies/nosql-database-server-downloads.html
+						https://search.maven.org/artifact/com.oracle.kv/oracle-nosql-client
+						https://search.maven.org/artifact/com.oracle.kv/oracle-nosql-server
+
+BSD 3-Clause Licensed:
+Scala				https://www.scala-lang.org/license/
+JSON-LD Java 		https://github.com/jsonld-java/jsonld-java/blob/master/LICENCE
+
+MIT-style Licensed:
+SLF4J				https://www.slf4j.org/license.html
+
+Public Domain:
+Scala-Maven-Plugin in artifact group net.alchim31.maven
+	(was previously Apache License 2.0, is now Public Domain)
+	https://github.com/davidB/scala-maven-plugin
+
+Other components may be included indirectly, via pom.xml dependencies,
+classpaths, web services, and other mechanisms.  If you notice an
+omission from the above list of credits, please let us know!
+
+Other licenses:
+Java - not included with Gravax, see your java vendor for license terms.

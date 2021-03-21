@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+		<groupId>fun.gravax</groupId>
+		<artifactId>gravax.root</artifactId>
+		<version>1.0.0-SNAPSHOT</version>	
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+    <artifactId>gravax.grind</artifactId>
+
+
+    <dependencies>
+        <!-- Pond is compatible with borkl up to a point, but jena wants a different version (1.8.1)
+        of commons-compress, whereas borkl appears to be dragging in in older 1.4.
+        So we can either cross test everything using 1.8.1, or isolate pond and borkl.
+        -->
+        <dependency>
+            <groupId>${axmgc.groupId}</groupId>
+            <artifactId>axiomagic.web.pond</artifactId>
+            <version>${axmgc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.8.1</version>
+        </dependency>
+        <!-- borkl == berleley-oracle -->
+        <!-- https://mvnrepository.com/artifact/com.oracle.kv/oracle-nosql-client -->
+        <dependency>
+            <groupId>com.oracle.kv</groupId>
+            <artifactId>oracle-nosql-client</artifactId>
+            <version>18.3.10</version>
+        </dependency>
+
+        <!-- Server 18.3.10 is latest in Maven-Central, depends on com.sleepycat.je 18.3.12
+        -->
+        <dependency>
+            <groupId>com.oracle.kv</groupId>
+            <artifactId>oracle-nosql-server</artifactId>
+            <version>18.3.10</version>
+        </dependency>
+<!--
+The oracle-server deps above automatically pull in berkeley DB - java edition - v18.3.12
+ https://mvnrepository.com/artifact/com.sleepycat/je
+        <dependency>
+            <groupId>com.sleepycat</groupId>
+            <artifactId>je</artifactId>
+            <version>18.3.12</version>
+        </dependency>
+-->
+
+        <dependency>
+            <groupId>com.univocity</groupId>
+            <artifactId>univocity-parsers</artifactId>
+            <version>2.9.0</version>
+            <type>jar</type>
+        </dependency>
+
+        <!--
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>${slf4j.log4j.version}</version>
+        </dependency>
+        -->
+
+    </dependencies>
+
+    <repositories>
+        <repository>
+            <id>snapshots-repo</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+    <build>
+        <sourceDirectory>src/main/scala</sourceDirectory>
+	<!-- This ez-dmo prj does not need a "test" folder.
+        <testSourceDirectory>src/test/scala</testSourceDirectory>
+	-->
+
+        <plugins>
+
+            <plugin>
+                <groupId>net.alchim31.maven</groupId>
+                <artifactId>scala-maven-plugin</artifactId>
+                <version>${scala.plugin.version}</version>
+            </plugin>
+        </plugins>
+
+    </build>
+</project>
