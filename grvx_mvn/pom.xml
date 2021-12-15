@@ -28,6 +28,7 @@
 
     <modules>
         <module>grvx_grind</module>
+        <module>grvx_aws</module>
     </modules>
 
     <build>

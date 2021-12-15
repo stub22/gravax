@@ -21,6 +21,14 @@
             <artifactId>axiomagic.web.pond</artifactId>
             <version>${axmgc.version}</version>
         </dependency>
+
+        <!-- Temp. pulling in fibo ont tests here, to verify some classpath stuff -->
+        <dependency>
+            <groupId>${axmgc.groupId}</groupId>
+            <artifactId>axiomagic.dmo.fibo</artifactId>
+            <version>${axmgc.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-compress</artifactId>
