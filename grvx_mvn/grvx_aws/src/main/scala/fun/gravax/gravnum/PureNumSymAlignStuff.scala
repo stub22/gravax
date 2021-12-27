@@ -99,7 +99,7 @@ trait RdfLiteralThing extends RdfNodeThing
 // Do we make scala subtypes for specific RDF-literal types?
 
 // Are we able to pass literals (Strings, Numbers, Dates) in the triple-subject i.e. input position?
-// (Suggestive of "Generalized Triples" in RDF 1.1).  
+// (Suggestive of "Generalized Triples" in RDF 1.1).
 // Or must we wrap them into
 
 
@@ -158,47 +158,5 @@ trait UnionData[OuterType]  extends DataThing {
 	val getUnionDepth : WholeIntPN
 	def getNugget : OuterType
 }
-// ListN is immutable, like all other DataThings.
-// A ListN may *not* contain java-null!
-trait ListN[X] extends DataThing {
-	val fixedListLength : WholeIntPN
-	// We must have proof that idx is in bounds!
-	def getItem(idxLteqLen : WholeIntPN) : X
-}
-abstract class ListImplN[X](len : WholeIntPN) extends ListN[X] {
-	override val fixedListLength: WholeIntPN = len
-	override val getTypeURI = UriData("uri:axtyp:LIST_" + len)
 
-	// override def getItem(idxLteqLen: WholeIntPN): X = ???
-}
-trait ListMaxN[X] extends DataThing {
-	// List of AT MOST N elements has N+1 incarnations, as List0[T]==EmptyData, List1[T]..ListN[T]
-	// possible to convert to a Union of Products
-	val fixedMaxLength : WholeIntPN
-}
-trait ListFactory[X] {
-	def verifyNoNulls(suspectArrayN : Array[X]) : Boolean = {
-		val nIdxFound = suspectArrayN.indexOf(null)
-		return (nIdxFound == -1)
-	}
-	// Build an immutable ListN (guaranteed to not have nulls) from regular Java/Scala array of length N.
-	// If any array value is null, the result will be None
-	def makeListN(inArrayN : Array[X]) : Option[ListN[X]] = {
-		val inArrLen = inArrayN.length
-		val inputFreeOfNulls = verifyNoNulls(inArrayN)
-		val lenAsPN : WholeIntPN = ???
-		// TODO:  Think about what deep-copy would mean here
-		val arrCopy: Array[X] = inArrayN.clone()
-		val outFreeOfNulls = verifyNoNulls(arrCopy)
-		val implList = new ListImplN[X](lenAsPN) {
-			override def getItem(idxLteqLen: WholeIntPN): X = {
-				// TODO:  Ensure idx in-range
-				// arrCopy.apply(idxLteqLen)
-				arrCopy.head
-			}
-		}
-		Some(implList)
-	}
-
-}
 

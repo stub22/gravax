@@ -83,3 +83,18 @@ class GravchkConsoleTests {
 	}
 
 }
+
+/*
+On updating scala version from 2.12.3 to 2.13.7 we see:
+
+[WARNING]  Expected all dependencies to require Scala version: 2.13.7
+ Expected all dependencies to require Scala version: 2.13.7
+ org.appdapter:axiomagic.web.pond:2.0.0-SNAPSHOT requires scala version: 2.12.3
+Multiple versions of scala libraries detected!
+
+[INFO] Using incremental compilation using Mixed compile order
+[INFO] Compiler bridge file: C:\Users\texpe\.sbt\1.0\zinc\org.scala-sbt\org.scala-sbt-compiler-bridge_2.13-1.5.8-bin_2.13.7__52.0-1.5.8_20211211T222914.jar
+[INFO] compiling 5 Scala sources to E:\_emnt\gravax_git_clnz\grvx_j13\grvx_mvn\grvx_grind\target\classes ...
+[ERROR] E:/_emnt/gravax_git_clnz/grvx_j13/grvx_mvn/grvx_grind/src/main/scala/fun/gravax/gravtst/console/RunGravchkConsole.scala:26: Symbol 'type scala.collection.IndexedSeqOptimized' is missing from the classpath.
+This symbol is required by 'class akka.util.ByteString'.
+ */
