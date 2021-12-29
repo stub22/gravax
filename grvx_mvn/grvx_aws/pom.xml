@@ -34,6 +34,12 @@
             <version>${axmgc.version}</version>
         </dependency>
         -->
+        <dependency>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest_2.13</artifactId>
+            <version>${scalatest.lib.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <repositories>
@@ -51,8 +57,8 @@
     <build>
         <sourceDirectory>src/main/scala</sourceDirectory>
 	<!-- This ez-dmo prj does not need a "test" folder.
-        <testSourceDirectory>src/test/scala</testSourceDirectory>
 	-->
+        <testSourceDirectory>src/test/scala</testSourceDirectory>
 
         <plugins>
 
@@ -60,6 +66,12 @@
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
                 <version>${scala.plugin.version}</version>
+            </plugin>
+            <!-- Enable execution (by maven) of scalatests in this module (without any annotations required) -->
+            <plugin>
+                <groupId>org.scalatest</groupId>
+                <artifactId>scalatest-maven-plugin</artifactId>
+                <version>${scalatest.plugin.version}</version>
             </plugin>
         </plugins>
 

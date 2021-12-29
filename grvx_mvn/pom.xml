@@ -14,8 +14,13 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <encoding>UTF-8</encoding>
 
+        <surefire.plugin.version>2.12.4</surefire.plugin.version>
+
         <scala.version>2.13.7</scala.version>
         <scala.plugin.version>4.5.6</scala.plugin.version>
+
+        <scalatest.lib.version>3.2.10</scalatest.lib.version>
+        <scalatest.plugin.version>2.0.2</scalatest.plugin.version>
 
         <oracle.nosql.version>18.3.10</oracle.nosql.version>
         <univocity.version>2.9.0</univocity.version>
@@ -72,6 +77,41 @@
                         </execution>
                     </executions>
                 </plugin>
+
+                <!--
+				Befire disabling surefire (which is included by Maven by default) we see messages like:
+				[INFO] maven-surefire-plugin:2.12.4:test (default-test) @ gravax.grind
+				[INFO] No tests to run.
+				-->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire.plugin.version}</version>
+                    <configuration>
+                        <skipTests>true</skipTests>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.scalatest</groupId>
+                    <artifactId>scalatest-maven-plugin</artifactId>
+                    <version>${scalatest.plugin.version}</version>
+                    <configuration>
+                        <reportsDirectory>${project.build.directory}/scalatest-reports</reportsDirectory>
+                        <junitxml>.</junitxml>
+                        <filereports>WDF TestSuite.txt</filereports>
+                        <skipTests>false</skipTests>
+                        <tagsToExclude>test.gravax.NoBatch</tagsToExclude>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>test</id>
+                            <goals>
+                                <goal>test</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
             </plugins>
         </pluginManagement>
     </build>
