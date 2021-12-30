@@ -13,21 +13,48 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <encoding>UTF-8</encoding>
+
+        <surefire.plugin.version>2.12.4</surefire.plugin.version>
+
+        <scala.version>2.13.7</scala.version>
+        <scala.plugin.version>4.5.6</scala.plugin.version>
+
+        <scalatest.lib.version>3.2.10</scalatest.lib.version>
+        <scalatest.plugin.version>2.0.2</scalatest.plugin.version>
+
+        <oracle.nosql.version>18.3.10</oracle.nosql.version>
+        <univocity.version>2.9.0</univocity.version>
+        <awssdk.version>2.17.99</awssdk.version>
+        <!-- Old versions displaced on 2021-12-26
+        We are upgrading to scala 2.13 so we can use the updated collections library.
+        https://docs.scala-lang.org/overviews/core/collections-migration-213.html
+
         <scala.version>2.12.3</scala.version>
         <scala.compat.version>2.12.6</scala.compat.version>
         <scala.plugin.version>3.4.2</scala.plugin.version>
+
         <akka.guts.version>2.5.16</akka.guts.version>
         <akka.http.version>10.1.4</akka.http.version>
+        -->
+
+        <!-- These are unused.  Our akka-deps are coming in via axiomagic.web.pond, which is still at Scala 2.12 version
+
+        <akka.guts.version>2.6.18</akka.guts.version>
+        <akka.http.version>10.2.7</akka.http.version>
         <spray.json.version>1.3.4</spray.json.version>
         <jena.version>3.8.0</jena.version>
         <slf4j.log4j.version>1.7.25</slf4j.log4j.version>
-		
+
+        -->
+
+
 		<axmgc.groupId>org.appdapter</axmgc.groupId>
 		<axmgc.version>2.0.0-SNAPSHOT</axmgc.version>
     </properties>
 
     <modules>
         <module>grvx_grind</module>
+        <module>grvx_aws</module>
     </modules>
 
     <build>
@@ -50,6 +77,41 @@
                         </execution>
                     </executions>
                 </plugin>
+
+                <!--
+				Befire disabling surefire (which is included by Maven by default) we see messages like:
+				[INFO] maven-surefire-plugin:2.12.4:test (default-test) @ gravax.grind
+				[INFO] No tests to run.
+				-->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire.plugin.version}</version>
+                    <configuration>
+                        <skipTests>true</skipTests>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.scalatest</groupId>
+                    <artifactId>scalatest-maven-plugin</artifactId>
+                    <version>${scalatest.plugin.version}</version>
+                    <configuration>
+                        <reportsDirectory>${project.build.directory}/scalatest-reports</reportsDirectory>
+                        <junitxml>.</junitxml>
+                        <filereports>WDF TestSuite.txt</filereports>
+                        <skipTests>false</skipTests>
+                        <tagsToExclude>test.gravax.NoBatch</tagsToExclude>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>test</id>
+                            <goals>
+                                <goal>test</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
             </plugins>
         </pluginManagement>
     </build>
