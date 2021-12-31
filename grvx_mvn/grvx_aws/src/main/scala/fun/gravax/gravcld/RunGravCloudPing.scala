@@ -22,8 +22,7 @@ object RunGravCloudPing {
 		// val loggingLauncher = new LoggingLauncher {}
 		// loggingLauncher.setup
 		val gcp = new GravCloudPing
-		// Point here is to access classpath resources from a maven jar (in an outside dependency), although we
-		// may be running in a incrementally compiled .idea context
+		// Access some cloud resources
 		gcp.doSomethin
 	}
 }

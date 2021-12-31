@@ -30,3 +30,4 @@ trait AxLamFunction extends AxLamRelation {
 	def computeSingleResult(inRsrc : RdfRsrcThing) : Option[RdfNodeThing]
 }
 trait CompositeFunc
+

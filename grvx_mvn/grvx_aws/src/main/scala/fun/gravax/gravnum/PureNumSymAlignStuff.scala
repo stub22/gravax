@@ -81,7 +81,10 @@ the domain).  From here we apply terminology:
 // All these datatypes are intended to be immutable and pure
 
 // A DataThing always has a type representable by a String, which *may* encode parametric information,
-// tho not looking to go wild with that
+// tho not looking to go wild with that.
+// Note that we should not yet simply say "DataThing extends YaflCoreDat" even though we intend it to be
+// approximately true, because we do not yet wish to promise that every DataThing is known squeaky clean.
+// Instead we pull in specific subtypes of YaflCoreDat as markers on particular subtypes of DataThing.
 trait DataThing {
 	// We may see this method as a function from domain=DataThing to codomain=UriThing
 	val getTypeURI : UriThing
@@ -135,7 +138,7 @@ case class PureNumData(myPN : PureNum) extends ScalarDataThing(FixedTypeURIs.FTU
 // Interop with JSON + RDF occurs via the action of these machine-side types.
 // Build up records from these, will be spread transparently across RDF preds or json-props.
 // Meanwhile OuterType is a logic-side strong-ish language-native type like Tuple3[TextData, PureNumData, ListMaxN[ProductData[Tuple2[TextData...
-trait ProductData[OuterType] extends DataThing
+trait CartesianProdData[OuterType] extends DataThing with YaflCartProd
 {
 	// How many elements in this cartesian product? -- this is known at the type level, e.g. if OuterType is Tuple7 then 7
 	// A product of width 0 is provably equal to EmptyData().
@@ -145,16 +148,16 @@ trait ProductData[OuterType] extends DataThing
 	// Want some way to access the types of the fields
 }
 // fieldNames must correspond exactly to the tuple-positions of pdat
-abstract class RecordAccessor[OT](fieldNames : ListN[String], pdat : ProductData[OT]) {
+abstract class RecordAccessor[OT](fieldNames : ListN[String], pdat : CartesianProdData[OT]) {
 	def getItem (fname : String) : Any // where's the type of the field?
 }
 
-trait UnionData[OuterType]  extends DataThing {
+trait AltUnionData[OuterType] extends DataThing with YaflAltSum {
 	// Recorded as some kind of union or variably-typed item.  Dependent sum in type theory.
 	// We restrict to a fixed, finite number of incarnations, in a given order, without a name.
 	// We call this number the depth of the Union.
 	// A union of depth 0 is provably equal to EmptyData().
-	// How many possible incarnations? Either is 2.
+	// How many possible incarnations? Scala "Either" is 2.
 	val getUnionDepth : WholeIntPN
 	def getNugget : OuterType
 }

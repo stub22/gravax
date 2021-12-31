@@ -5,10 +5,13 @@ private trait DependentListStuff
 
 // ListN is immutable, like all other DataThings.
 // A ListN may *not* contain java-null!
-trait ListN[X] extends DataThing {
+// ListN corresponds to list-of-N-items-of-type-X types treated by AxLam as having known finite length
+// ListN is empty iff N is 0.
+// List0[X] is the empty list (with dangling type trauma we seek to erase)
+trait ListN[Item] extends DataThing with YaflFinList {
 	val fixedListLength : WholeIntPN
 	// We must have proof that idx is in bounds!
-	def getItem(idxLteqLen : WholeIntPN) : X
+	def getItem(idxLteqLen : WholeIntPN) : Item
 }
 abstract class ListImplN[X](len : WholeIntPN) extends ListN[X] {
 	override val fixedListLength: WholeIntPN = len
@@ -16,6 +19,7 @@ abstract class ListImplN[X](len : WholeIntPN) extends ListN[X] {
 
 	// override def getItem(idxLteqLen: WholeIntPN): X = ???
 }
+// ListMaxN is type of a list which may be any length from 0 to N.
 trait ListMaxN[X] extends DataThing {
 	// List of AT MOST N elements has N+1 incarnations, as List0[T]==EmptyData, List1[T]..ListN[T]
 	// possible to convert to a Union of Products
@@ -56,7 +60,7 @@ sealed trait GoodData {
 	val verifiedClean : Boolean = verifyIngredients // Should always be true for a successfully constructed instance
 	protected def verifyIngredients : Boolean
 }
-case class GoodText(myTxt : String) extends GoodData {
+case class GoodText(myTxt : String) extends GoodData with YaflTxtDat {
 	/*
 	override val verifiedClean: Boolean = {
 		if (txt == null) {

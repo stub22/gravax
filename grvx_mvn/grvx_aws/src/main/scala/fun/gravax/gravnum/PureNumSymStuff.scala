@@ -17,12 +17,12 @@ and the type constructors are all monadic
  */
 
 trait UnaryInquiryPN {
-	def isZeroPN : Boolean
-	def isPositivePN : Boolean
-	def isNegativePN : Boolean
-	def isIntegerPN : Boolean
-	def isPosIntPN : Boolean
-	def isNegIntPN : Boolean
+	val isZeroPN : Boolean
+	val isPositivePN : Boolean
+	val isNegativePN : Boolean
+	val isIntegerPN : Boolean
+	val isPosIntPN : Boolean
+	val isNegIntPN : Boolean
 }
 trait UnaryArithPN {
 	def safeReciprocalPN : Option[PureNum]
@@ -69,33 +69,36 @@ abstract class BasePureNum extends PureNum {
 	}
 }
 trait ZeroPN extends PureNum {
-	override def isZeroPN: Boolean = true
-	override def isPositivePN: Boolean = false
-	override def isNegativePN: Boolean = false
+	override val isZeroPN: Boolean = true
+	override val isPositivePN: Boolean = false
+	override val isNegativePN: Boolean = false
 }
 trait NonzeroPN extends PureNum {
-	override def isZeroPN: Boolean = false
+	override val isZeroPN: Boolean = false
 }
 trait PositivePN extends NonzeroPN {
-	override def isPositivePN: Boolean = true
-	override def isNegativePN: Boolean = false
+	override val isPositivePN: Boolean = true
+	override val isNegativePN: Boolean = false
 }
 trait NegativePN extends NonzeroPN {
-	override def isPositivePN: Boolean = false
-	override def isNegativePN: Boolean = true
+	override val isPositivePN: Boolean = false
+	override val isNegativePN: Boolean = true
 }
-// Sets that are closed over plus and times
-trait IntegerPN extends PureNum {
-	override def isIntegerPN: Boolean = true
+// Elements form an abelian additive group (with inverse), also closed under times,
+// thus yielding algebraic ring of IntegerPNs, which are embedded in the algebraic field of RationalPNs.
+trait IntegerPN extends PureNum with YaflIntNum {
+	override val isIntegerPN: Boolean = true
 	def plusIPN(otherIPN : IntegerPN) : IntegerPN
 	def timesIPN(otherIPN : IntegerPN) : IntegerPN
-
 }
+
 trait WholeIntPN extends IntegerPN {
 	def plusWIPN(otherWIPN : WholeIntPN) : WholeIntPN
 	def timesWIPN (otherWIPN : WholeIntPN) : WholeIntPN
 }
 trait PosIntPN extends WholeIntPN with PositivePN {
+	// Not a sub-ring of WholeIntPN, because no additive identity
+
 	// Positive integer corresponds to a constructible natural number
 	def plusPIPN (otherPIPN : PosIntPN) : PosIntPN
 	def timesPIPN (otherPIPN : PosIntPN) : PosIntPN
@@ -124,33 +127,6 @@ abstract class NegIntPN(myPosComplement : PosIntPN) extends IntegerPN with Negat
 	def timesNIPN(otherNIPN : NegIntPN) : PosIntPN
 }
 
-private abstract class BigPosIntImpl(positiveBigInt: BigInt) extends BasePureNum with PosIntPN {
-}
-trait ProofPositive
-trait PurePosIntFactory {
-	def getPositiveOne : PosIntPN
-	def fromPosScalaBigInt(posBI : BigInt, proofPos : ProofPositive) : PosIntPN = {
-		??? // BigPosIntImpl(posBI)
-	}
-	def fromPosScalaLong(sl : Long) : Option[PosIntPN] = {
-		if (sl > 0L) {
-			val proof : ProofPositive = ???
-			val pipn = fromPosScalaBigInt(BigInt(sl), proof)
-			Some(pipn)
-		} else None
-	}
-}
-trait ProofNegative
-trait PureNegIntFactory {
-	def getNegativeOne : NegIntPN
-	def fromNegScalaLong(sl : Long) : Option[NegIntPN] = ???
-}
-trait ProofZero
-trait PureZeroFactory {
-	def getZero : ZeroPN
-}
-
-trait GenIntFactory extends PurePosIntFactory with PureNegIntFactory with PureZeroFactory
 
 /*
 
