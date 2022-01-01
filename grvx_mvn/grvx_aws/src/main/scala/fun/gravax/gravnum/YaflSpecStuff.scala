@@ -6,7 +6,7 @@ private trait YaflSpecStuff
 This scala file presents a definition of the core concepts and names of
 Yafl == YAFL == Yet Another Func(tional) Lang(uage)
 
-Intended as an abstract pure-function spec compatible among Scala, Idris, Haskell, Agda
+Intended as an abstract pure-function spec compatible among Scala, Idris, Agda, and similar (also Ocaml, Haskell, Lisp...)
 
 Yafl intends to be 100% pure as a specification of input-output functions in the mathematical sense.
 Yafl functions may be decidable or not.
@@ -37,8 +37,9 @@ over strong type of immutable data.
 // YaflCore is defined as functions like YaflPureFunc01[YaflCoreDat]
 All YaflCoreDat is immutable
 
-grounded in the3se three YaflPrimDat types
-   YaflInt, YaflRat, YaflTxt
+grounded in YaflPrimDat types
+   YaflNum = YaflRat
+   ), YaflTxt
 which are all primitive subtypes of YDat.
 The composite subtypes of YCoreDat are derived from these a limited , roughly
   1) Records/Cartesian-Products (N-tuples of input types)
@@ -66,8 +67,9 @@ for the mission.  Goodness of the functions is the subject of proofs.
 sealed trait YaflCoreDat
 trait YaflPrimDat extends YaflCoreDat
 trait YaflTxtDat
-trait YaflNumDat
-trait YaflRatNum extends YaflNumDat
+trait YaflNumDat // In yaflCore is always a rational
+
+trait YaflRatNum extends YaflNumDat // Rational number which may use strong HoTT equivalence like 8/4 == 4/2 == 2
 trait YaflIntNum extends YaflRatNum
 
 // YaflCore offers 3 composite types : Cartesian Product, Alternative Sum, Finite List

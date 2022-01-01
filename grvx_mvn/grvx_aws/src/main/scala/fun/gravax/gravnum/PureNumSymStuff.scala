@@ -48,9 +48,16 @@ trait NoncommutArithPN  {
 }
 // For users, PureNums are not guaranteed unique in any way, but all inquiry and arith should always work correctly,
 // and execute eagerly (to produce strong-typed result as data) to ensure fail-fast.  However fractions may be left
-// unreduced in the results.
-// Note that the result type for is the broad computational type PureNum, rather than a more restrictive
-// (hence more powerful) type.  More restrictive (hence powerful) API may be offered by specific subtypes.
+// unreduced in the results (use .reduceFractionPN to ensure reduced).
+// Note that the result type is the broad computational type PureNum, rather than a more restrictive
+// (hence more powerful) subtype, which might be discovered after execution (e.g. by case-switch,
+// and/or checking "isX" flags -- all the conventional tricks).
+// More restrictive (hence powerful) API may then be offered by specific subtypes.
+// Nothing original in the above, just ordinary scala subtyping.
+// All of this is protective, fallback typing that guards our "compute an explicit result" world.
+// Our intensional typing happens in the author's axLam world of algebraic types and functions.
+// These two worlds are intended to be compatible, just as black and white stones are compatible in Go.
+
 sealed trait PureNum extends UnaryInquiryPN with BinaryInquiryPN with UnaryArithPN with CommutArithPN with NoncommutArithPN {
 }
 abstract class BasePureNum extends PureNum {
