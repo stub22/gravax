@@ -66,7 +66,8 @@ https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/mod
 		// val bstrm: stream.Stream[Bucket] = listBucketsResponse.buckets().stream()
 		// forEach(x -> System.out.println(x.name()));
 	}
-	import scala.collection.JavaConverters._
+	import scala.jdk.CollectionConverters._
+
 	def printBucketResponse(lbucktsResp: ListBucketsResponse) : List[String] = {
 
 		val bJList: JList[Bucket] = lbucktsResp.buckets()

@@ -159,29 +159,29 @@ case class PureNumData(myPN : PureNum) extends ScalarDataThing(FixedTypeURIs.FTU
 // Interop with JSON + RDF occurs via the action of these machine-side types.
 // Build up records from these, will be spread transparently across RDF preds or json-props.
 // Meanwhile OuterType is a logic-side strong-ish language-native type like Tuple3[TextData, PureNumData, ListMaxN[ProductData[Tuple2[TextData...
-trait CartesianProdData[OuterType <: YaflCartProd] extends DataThing
+trait CartesianProdData[NuggetType <: YaflCartProd] extends DataThing
 {
 	// How many elements in this cartesian product? -- this is known at the type level, e.g. if OuterType is Tuple7 then 7
 	// A product of width 0 is provably equal to EmptyData().
 	// This product is ordered.
 	val getProductWidth : WholeIntPN
-	def getNugget : OuterType // This object represents an actual cartesian-product value, usually as a TupleN[T1..TN]
+	def getNugget : NuggetType // This object represents an actual cartesian-product value, usually as a TupleN[T1..TN]
 	// Want some way to access the types of the fields
 }
 // Input data may not be null, nor contain nulls.
 // FieldNames must correspond exactly to the tuple-positions of pdat.
-abstract class RecordAccessor[OT <: YaflCartProd](fieldNames : ListN[String], pdat : CartesianProdData[OT]) {
-	def getItem (fname : String) : Any // FIXME: where's the type of the field?
+abstract class RecordAccessor[OT <: YaflCartProd](fieldNames : FinListN[String], pdat : CartesianProdData[OT]) {
+	def getItem (fname : String) : Any // FIXME: where's the type of the field?  It is inside the OT!
 }
 
-trait AltUnionData[OuterType <: YaflAltSum] extends DataThing {
+trait AltUnionData[NuggetType <: YaflAltSum] extends DataThing {
 	// Recorded as some kind of union or variably-typed item.  Dependent sum in type theory.
 	// We restrict to a fixed, finite number of incarnations, in a given order, without a name.
 	// We call this number the depth of the Union.
 	// A union of depth 0 is provably equal to EmptyData().
 	// How many possible incarnations? Scala "Either" is 2.
 	val getUnionDepth : WholeIntPN
-	def getNugget : OuterType
+	def getNugget : NuggetType
 }
 
 

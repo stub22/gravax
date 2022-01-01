@@ -7,7 +7,7 @@ import org.scalatest.Tag
 
 object Tag_NoBatch extends Tag("test.gravax.NoBatch")
 
-class StackSpec extends AnyFlatSpec {
+class FirstFakeStackSpec extends AnyFlatSpec {
 
 	"A Stack" should "pop values in last-in-first-out order" in {
 		val stack = new Stack[Int]

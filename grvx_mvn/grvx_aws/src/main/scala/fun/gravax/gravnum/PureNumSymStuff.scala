@@ -2,7 +2,11 @@ package fun.gravax.gravnum
 
 private trait PureNumSymStuff
 
-trait GoodNum
+/*
+PureNum types are limited to subtypes of the Reals, generally expressed as algebraic numbers.
+Complex numbers are not accounted for in this framework.
+Hmmm.
+...because our main purpose is to support computation-about-computation, such as structure sizes and time durations.
 
 // These Interface traits establish interoperability for basic tests and arithmetic.
 // These ops are not quite proven safe, but they are at least in a functional and somewhat inductive pattern.
@@ -11,9 +15,8 @@ trait GoodNum
 // Implementation relies on platform plugin to supply a very limited number of features, primarily based
 // on arithmetic over positive integers (i.e. naturals)
 
-/*
-When all methods take zero or one args
-and the type constructors are all monadic
+When all methods take zero or one args, and the type constructors are 'monadic'...
+
  */
 
 trait UnaryInquiryPN {
@@ -21,8 +24,9 @@ trait UnaryInquiryPN {
 	val isPositivePN : Boolean
 	val isNegativePN : Boolean
 	val isIntegerPN : Boolean
-	val isPosIntPN : Boolean
-	val isNegIntPN : Boolean
+	final val isPosIntPN: Boolean = isPositivePN && isIntegerPN
+	final val isNegIntPN: Boolean = isNegativePN && isIntegerPN
+
 }
 trait UnaryArithPN {
 	def safeReciprocalPN : Option[PureNum]
@@ -45,6 +49,7 @@ trait CommutArithPN {
 trait NoncommutArithPN  {
 	def minusPN(otherPN : PureNum) : PureNum
 	def safelyDivideByPN(otherPN : PureNum) : Option[PureNum]
+	def divideByNonzeroPN(otherPN : NonzeroPN) : PureNum
 }
 // For users, PureNums are not guaranteed unique in any way, but all inquiry and arith should always work correctly,
 // and execute eagerly (to produce strong-typed result as data) to ensure fail-fast.  However fractions may be left
@@ -75,11 +80,6 @@ abstract class BasePureNum extends PureNum {
 		recipOth.map(ro => this.timesPN(ro).reduceFractionPN)
 	}
 }
-trait ZeroPN extends PureNum {
-	override val isZeroPN: Boolean = true
-	override val isPositivePN: Boolean = false
-	override val isNegativePN: Boolean = false
-}
 trait NonzeroPN extends PureNum {
 	override val isZeroPN: Boolean = false
 }
@@ -95,8 +95,17 @@ trait NegativePN extends NonzeroPN {
 // thus yielding algebraic ring of IntegerPNs, which are embedded in the algebraic field of RationalPNs.
 trait IntegerPN extends PureNum with YaflIntNum {
 	override val isIntegerPN: Boolean = true
+
 	def plusIPN(otherIPN : IntegerPN) : IntegerPN
 	def timesIPN(otherIPN : IntegerPN) : IntegerPN
+
+	val isPosIntPN : Boolean
+	val isNegIntPN : Boolean
+}
+trait ZeroPN extends PureNum with IntegerPN {
+	override val isZeroPN: Boolean = true
+	override val isPositivePN: Boolean = false
+	override val isNegativePN: Boolean = false
 }
 
 trait WholeIntPN extends IntegerPN {
@@ -104,8 +113,6 @@ trait WholeIntPN extends IntegerPN {
 	def timesWIPN (otherWIPN : WholeIntPN) : WholeIntPN
 }
 trait PosIntPN extends WholeIntPN with PositivePN {
-	// Not a sub-ring of WholeIntPN, because no additive identity
-
 	// Positive integer corresponds to a constructible natural number
 	def plusPIPN (otherPIPN : PosIntPN) : PosIntPN
 	def timesPIPN (otherPIPN : PosIntPN) : PosIntPN
@@ -133,7 +140,6 @@ abstract class NegIntPN(myPosComplement : PosIntPN) extends IntegerPN with Negat
 	def plusNIPN (otherNIPN : NegIntPN) : NegIntPN
 	def timesNIPN(otherNIPN : NegIntPN) : PosIntPN
 }
-
 
 /*
 

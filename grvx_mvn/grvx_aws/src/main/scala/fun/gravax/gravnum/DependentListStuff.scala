@@ -17,6 +17,7 @@ trait ListMaxN[Item] extends DataThing {
 	val fixedMaxLength : WholeIntPN
 
 	def toImmSeqMaxN : ImmSeq[Item] // Will be of some unknown len s.t.  0 <= len <= N
+
 }
 trait ListMinM[Item] extends DataThing {
 	val fixedMinLength : WholeIntPN
@@ -31,7 +32,7 @@ trait ListOfBoundedLen[Item] extends ListMaxN[Item] with ListMinM[Item] {
 	override def toImmSeqMaxN: ImmSeq[Item] = toImmSeqOfBoundedLen
 }
 
-trait ListN[Item] extends ListOfBoundedLen[Item] with YaflFinList {
+trait FinListN[Item] extends ListOfBoundedLen[Item] with YaflFinList {
 	val fixedListLength : WholeIntPN
 	// We must have proof that idx is in bounds!
 	def getItem(idxLteqLen : WholeIntPN) : Item
@@ -41,8 +42,10 @@ trait ListN[Item] extends ListOfBoundedLen[Item] with YaflFinList {
 	override val fixedMinLength: WholeIntPN = fixedListLength
 
 	override val fixedMaxLength: WholeIntPN = fixedListLength
+
+	def concat(other : FinListN[Item]) : FinListN[Item]
 }
-abstract class ListImplN[Item](len : WholeIntPN) extends ListN[Item] {
+abstract class ListImplN[Item](len : WholeIntPN) extends FinListN[Item] {
 	override val fixedListLength: WholeIntPN = len
 	override val instTypeURI = UriData("uri:axtyp:LIST_" + len)
 
@@ -60,13 +63,13 @@ trait ListFactory[Item] {
 	val flag_checkPrelim : Boolean = true
 	// Build an immutable ListN (guaranteed to not have nulls) from regular Java/Scala array of length N.
 	// If any array value is null, the result will be None
-	def makeListN(inArrayN : Array[Item]) : Option[ListN[Item]] = {
+	def makeListN(inArrayN : Array[Item]) : Option[FinListN[Item]] = {
 		// flag_checkPrelim => attempt to fail-fast by preliminary check before we copy.
 		val candv : Boolean =  !flag_checkPrelim || verifyNoNulls(inArrayN)
 		if (candv) copyAndVerify(inArrayN) else None
 	}
 	def tmp_mkWIPN (n : Int) : WholeIntPN = ???
-	def copyAndVerify(inArrayN : Array[Item]) : Option[ListN[Item]] = {
+	def copyAndVerify(inArrayN : Array[Item]) : Option[FinListN[Item]] = {
 		// TODO:  Think about what deep-copy would mean here
 		val arrCopy: Array[Item] = inArrayN.clone()
 		val inArrLen = inArrayN.length
@@ -81,6 +84,8 @@ trait ListFactory[Item] {
 			}
 
 			override def toImmSeqOfKnownLen: ImmSeq[Item] = ???
+
+			override def concat(other: FinListN[Item]): FinListN[Item] = ???
 		}
 		Some(implList)
 	}
