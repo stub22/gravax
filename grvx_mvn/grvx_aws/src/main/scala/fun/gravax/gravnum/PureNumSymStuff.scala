@@ -35,6 +35,7 @@ trait UnaryInquiryPN {
 	final val isNegIntPN: Boolean = isNegativePN && isIntegerPN
 }
 trait UnaryArithPN {
+	// Unary ops which we may invoke on any PureNum
 	type ReciprocalType <: PureNum 	// Type of the multiplicative inverse of this inst - seems knowable
 	type ComplementType <: PureNum 	// Type of the additive inverse of this inst - seems knowable
 	type ReducedFracType <: PureNum // Type of the reduced fraction of this inst - known how?
@@ -85,18 +86,30 @@ trait NoncommutArithPN  {
 // These two worlds are intended to be compatible, just as black and white stones are compatible in Go.
 
 sealed trait PureNum extends UnaryInquiryPN
-		with BinaryInquiryPN with UnaryArithPN with CommutArithPN with NoncommutArithPN
+		with BinaryInquiryPN with UnaryArithPN with CommutArithPN with NoncommutArithPN {
+	def asScalaBigDec : Option[BigDecimal]
+}
 
 trait NonzeroPN extends PureNum {
+	override type ComplementType <: NonzeroPN
+	override type ReciprocalType <: NonzeroPN
+	override type ReducedFracType <: NonzeroPN
 	override val isZeroPN: Boolean = false
+	protected def reciprocalPN : ReciprocalType
+	private lazy val myRecip : ReciprocalType = reciprocalPN
+	override def safeReciprocalPN: Option[ReciprocalType] = Some(myRecip)
 }
 trait PositivePN extends NonzeroPN {
-	type ComplementType <: NegativePN
+	override type ComplementType <: NegativePN
+	override type ReciprocalType <: PositivePN
+	override type ReducedFracType <: PositivePN
 	override val isPositivePN: Boolean = true
 	override val isNegativePN: Boolean = false
 }
 trait NegativePN extends NonzeroPN {
-	type ComplementType <: PositivePN
+	override type ComplementType <: PositivePN
+	override type ReciprocalType <: NegativePN
+	override type ReducedFracType <: NegativePN
 	override val isPositivePN: Boolean = false
 	override val isNegativePN: Boolean = true
 }
@@ -113,6 +126,9 @@ trait IntegerPN extends PureNum with YaflIntNum {
 	// When we know we are multiplying integers times integers, then we know we are within this commutative ring.
 	def timesIPN(otherIPN : IntegerPN) : IntegerPN
 
+	def asScalaBigInt : Option[BigInt]
+
+	override def asScalaBigDec: Option[BigDecimal] = ???
 }
 trait ZeroPN extends PureNum with IntegerPN {
 	override type ComplementType = ZeroPN
@@ -181,6 +197,8 @@ trait NegIntPN extends IntegerPN with NegativePN {
 	override type ComplementType <: PosIntPN
 }
 trait PureNumBaseImpl extends PureNum {
+	override def isGteqPN(otherPN: PureNum): Boolean = isGtPN(otherPN) || isEqPN(otherPN)
+
 	override def isLtPN(otherPN: PureNum): Boolean = !isGteqPN(otherPN)
 
 	override def isLteqPN(otherPN: PureNum): Boolean = !isGtPN(otherPN)
@@ -195,18 +213,13 @@ trait PureNumBaseImpl extends PureNum {
 		recipOth.map(ro => this.timesPN(ro).reduceFractionPN)
 	}
 }
-/*
-trait NegPureNumImplByCompl extends NegativePN {
-	val myComplementaryPosPN : PositivePN
-	def negateToPos : PositivePN = myComplementaryPosPN
-	override def negatePN: PureNum = negateToPos
-}
- */
+
 trait NegNumBaseImpl extends PureNumBaseImpl with NegativePN {
 	// Could use the ComplementType here
 	val myComplement : ComplementType
 
 	override def negatePN : ComplementType = myComplement
+
 }
 
 

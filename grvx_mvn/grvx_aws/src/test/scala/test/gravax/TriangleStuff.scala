@@ -31,12 +31,16 @@ object TriLegitFlavorTags {
 trait HasTriSideLengths extends KnowsTriSideIndex {
 	val myNumFactory : GenIntFactory = ???
 
-	def getSideLengthsTuple : (PositivePN, PositivePN, PositivePN)
+	type SideLen <: PositivePN
+	// If we allow for degen-tri then Area could be Zero, so we actually want NonnegPN
+	type PlanarArea <: PositivePN
+
+	def getSideLengthsTuple : (SideLen, SideLen, SideLen)
 
 	// "List" indexes are 0-based
-	def getSideLengthsList : FinListN[PositivePN] = ???
+	def getSideLengthsList : FinListN[SideLen] = ???
 
-	def getSideLength(snum : SideNum) : PositivePN = {
+	def getSideLength(snum : SideNum) : SideLen = {
 		val pos01 = myNumFactory.getPos01
 		//
 		val idxInList = snum.minusPN(pos01).asInstanceOf[WholeNumBetweenZeroAndTwo]
@@ -44,22 +48,22 @@ trait HasTriSideLengths extends KnowsTriSideIndex {
 	}
 
 
-	def computeArea() : PositivePN = {
+	def computeArea() : PlanarArea = {
 		// First choose a base side.  We know it shouldn't matter.
 		// For testing purposes we could choose randomly, sequentially, by longest, shortest, ...
 		val someSideIndex = chooseRandomSide
 		computeAreaFromBaseSide(someSideIndex)
 	}
-	def computeAreaFromBaseSide(baseSideIndex : SideNum) : PositivePN = {
+	def computeAreaFromBaseSide(baseSideIndex : SideNum) : PlanarArea = {
 		// Using:   area = base * height / 2
 		val heightPPN: PositivePN = computeHeightAboveBaseSide(baseSideIndex)
 		val basePPN: PositivePN = getSideLength(baseSideIndex)
 		val pos02: PosIntPN = myNumFactory.getPos02
 		// We are multiplying (commut.) two positive numbers, then (assoc.) dividing by a pos Int
 		val area = basePPN.timesPN(heightPPN).divideByNonzeroPN(pos02).reduceFractionPN
-		area.asInstanceOf[PositivePN]
+		area.asInstanceOf[PlanarArea]
 	}
-	def computeHeightAboveBaseSide(baseSideIndex : SideNum) : PositivePN = {
+	def computeHeightAboveBaseSide(baseSideIndex : SideNum) : PlanarArea = {
 		???
 	}
 	def findAnyLongestSide : SideNum = ???
@@ -91,7 +95,7 @@ trait HasTriSideLengths extends KnowsTriSideIndex {
 	def hasScaledSidesSameOrder(other : HasTriSideLengths) : Boolean = ???
 	def hasScaledSidesAnyOrder(other : HasTriSideLengths) : Boolean = ???
 
-	// Number we have to multiply this triangle's sides by to get
+	// Number we have to multiply this triangle's sides by to get a tri equiv to other
 	def computeScaleOfSimilarTSL(other : HasTriSideLengths) : Option[PositivePN] = ???
 	def scaleToSimilarTSL(scale : PositivePN) : HasTriSideLengths = ???
 
@@ -99,8 +103,10 @@ trait HasTriSideLengths extends KnowsTriSideIndex {
 	def reorderDecreasing : HasTriSideLengths = ???
 }
 // Do we insist that these side lengths be in reduced form?
-case class TriSideLengths(sideA : PositivePN, sideB : PositivePN, sideC : PositivePN) extends HasTriSideLengths {
-	override def getSideLengthsTuple: (PositivePN, PositivePN, PositivePN) = (sideA, sideB, sideC)
+case class TriSideLengths[SL <: PositivePN](sideA : SL, sideB : SL, sideC : SL) extends HasTriSideLengths {
+	override type SideLen = SL
+	override type PlanarArea = PositivePN
+	override def getSideLengthsTuple = (sideA, sideB, sideC)
 }
 
 class TSL_Factory {

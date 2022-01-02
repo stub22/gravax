@@ -19,18 +19,21 @@ trait PurePosIntFactory {
 	//		check and 'throw'
 	//		'assert'
 	//		'require'
+
+	def fromPosScalaBigInt(posBI : BigInt, proofPos : ProofPositive) : PosIntPN = {
+		??? // BigPosIntImpl(posBI)
+	}
 	def mkSmallPosIntPN(posSmall : Int) : PosIntPN = {
 		if (posSmall >= 1) {
-			???
+			val bigInt = BigInt(posSmall)
+			val bippn = ??? // new PosIntBigImpl(bigInt)
+			bippn
 		} else throw new IllegalArgumentException(s"Expected positive integer, got $posSmall")
 	}
 	def getPos01 : PosIntPN = mkSmallPosIntPN(1)
 	def getPos02 : PosIntPN = mkSmallPosIntPN(2)
 	def getPos03 : PosIntPN = mkSmallPosIntPN(3)
 
-	def fromPosScalaBigInt(posBI : BigInt, proofPos : ProofPositive) : PosIntPN = {
-		??? // BigPosIntImpl(posBI)
-	}
 	def fromPosScalaLong(sl : Long) : Option[PosIntPN] = {
 		if (sl > 0L) {
 			val proof : ProofPositive = ???
@@ -41,8 +44,17 @@ trait PurePosIntFactory {
 }
 trait ProofNegative
 trait PureNegIntFactory {
-	def mkSmallNegIntPN(posSmall : Int) : NegIntPN = {
+	protected val myPosIntFactory : PurePosIntFactory
+	def fromComplement(comp : PosIntPN) : NegIntPN = {
+		// NegIntCompImpl(comp)
 		???
+	}
+	def mkSmallNegIntPN(negSmall : Int) : NegIntPN = {
+		require (negSmall < 0)
+		val posCompl = negSmall * -1
+		require (posCompl > 0)
+		val posCompPN = myPosIntFactory.mkSmallPosIntPN(posCompl)
+		fromComplement(posCompPN)
 	}
 	def getNeg01 : NegIntPN = mkSmallNegIntPN(-1)
 	def getNeg02 : NegIntPN = mkSmallNegIntPN(-2)
@@ -50,14 +62,15 @@ trait PureNegIntFactory {
 }
 trait ProofZero
 trait PureZeroFactory {
-	def getZero : ZeroPN
-	def getNum00 : ZeroPN = getZero
+	val myZero = ZeroImpl()
+
+	def getNum00 : ZeroPN = myZero
 }
 
 trait GenIntFactory extends PurePosIntFactory with PureNegIntFactory with PureZeroFactory
 
 class NumFactoryImpl extends GenIntFactory {
-	override def getZero: ZeroPN = ???
+	override protected val myPosIntFactory: PurePosIntFactory = this
 
 	def mkReducedRatioOfPosInts(numer : PosIntPN, denom : PosIntPN) : PositivePN = {
 		// But because numer is positive, we should know this ratio is positive
