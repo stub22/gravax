@@ -2,63 +2,34 @@ package fun.gravax.gravnum
 
 private trait NumImplStuff
 
-abstract class BigPosIntImpl(positiveBigInt: BigInt) extends BasePureNum with PosIntPN {
+/*
+class NegIntPureNumImpl(myPosComplement : PosIntPN) extends IntegerPN with NegativePN {
+	// This is a number which is known to be a negative integer, which is equal to  -1 * myPosComplement
+	// Closed under plus, but inverted by times
+	override def negatePN: PureNum = negateNIPN
+	def negateNIPN : PosIntPN = myPosComplement
+	def plusNIPN (otherNIPN : NegIntPN) : NegIntPN
+	def timesNIPN(otherNIPN : NegIntPN) : PosIntPN
 }
-abstract class FakeBPI(positiveBigInt: BigInt) extends BigPosIntImpl(positiveBigInt) {
-	override def plusPIPN(otherPIPN: PosIntPN): PosIntPN = ???
+ */
 
-	override def timesPIPN(otherPIPN: PosIntPN): PosIntPN = ???
-
-	override def plusIPN(otherIPN: IntegerPN): IntegerPN = ???
-
-	override def timesIPN(otherIPN: IntegerPN): IntegerPN = ???
-
-	override def plusPN(otherPN: PureNum): PureNum = ???
-
-	override def timesPN(otherPN: PureNum): PureNum = ???
-
-	override def isEqPN(otherPN: PureNum): Boolean = ???
-
-	override def isGtPN(otherPN: PureNum): Boolean = ???
-
-	override def isGteqPN(otherPN: PureNum): Boolean = ???
-
-	override def safeReciprocalPN: Option[PureNum] = ???
-
-	override def negatePN: PureNum = ???
-
-	override def reduceFractionPN: PureNum = ???
-
+abstract class BigPosIntImpl(positiveBigInt: BigInt) extends PureNumBaseImpl with PosIntPN {
+	override type ComplementType = NegIntPN
+	override type ReciprocalType = PositivePN
+	override type ReducedFracType = PosIntPN
 }
-abstract class FakeNPI(complementPIPN : PosIntPN) extends NegIntPN(complementPIPN) {
-	override def plusNIPN(otherNIPN: NegIntPN): NegIntPN = ???
 
-	override def timesNIPN(otherNIPN: NegIntPN): PosIntPN = ???
+abstract class NegIntImpl(complementPosInt : PosIntPN) extends NegNumBaseImpl with NegIntPN {
+	override type ComplementType = PosIntPN
+	override val myComplement = complementPosInt
 
-	override def plusIPN(otherIPN: IntegerPN): IntegerPN = ???
+	override type ReciprocalType = NegativePN
+	override type ReducedFracType = NegIntPN
+}
 
-	override def timesIPN(otherIPN: IntegerPN): IntegerPN = ???
+abstract class ZeroImpl extends PureNumBaseImpl with ZeroPN {
+	override def plusIPN(otherIPN: IntegerPN): IntegerPN = otherIPN
 
-	override def minusPN(otherPN: PureNum): PureNum = ???
-
-	override def safelyDivideByPN(otherPN: PureNum): Option[PureNum] = ???
-
-	override def plusPN(otherPN: PureNum): PureNum = ???
-
-	override def timesPN(otherPN: PureNum): PureNum = ???
-
-	override def isEqPN(otherPN: PureNum): Boolean = ???
-
-	override def isGtPN(otherPN: PureNum): Boolean = ???
-
-	override def isGteqPN(otherPN: PureNum): Boolean = ???
-
-	override def isLtPN(otherPN: PureNum): Boolean = ???
-
-	override def isLteqPN(otherPN: PureNum): Boolean = ???
-
-	override def safeReciprocalPN: Option[PureNum] = ???
-
-	override def reduceFractionPN: PureNum = ???
+	override def timesIPN(otherIPN: IntegerPN): IntegerPN = this
 
 }

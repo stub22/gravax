@@ -21,8 +21,12 @@ trait KnowsTriSideIndex {
 	def otherSidesInOrder(someSide : SideNum) : FinListN[SideNum] = ??? // List of length 2
 	def chooseRandomSide : SideNum = ???
 }
-trait TriLegitFlavNams {
-	// Our
+// Our version of an Enum is based on Flavor Tags.  (Not "Kind", not "Type", not "Category", not "Class")
+case class TriLegitimacyFlavorTag(flavorName : String)
+object TriLegitFlavorTags {
+	val TLFN_ORDINARY 	= TriLegitimacyFlavorTag("ORDINARY")	// Interior point of legitimacy, has positive area
+	val TLFN_DEGEN 		= TriLegitimacyFlavorTag("DEGENERATE") 	// On boundary of legitimacy, has zero area
+	val TLFN_ILLEGAL	= TriLegitimacyFlavorTag("ILLEGAL")		// Outside boundary of legitimacy, not a planar triangle
 }
 trait HasTriSideLengths extends KnowsTriSideIndex {
 	val myNumFactory : GenIntFactory = ???
@@ -38,6 +42,8 @@ trait HasTriSideLengths extends KnowsTriSideIndex {
 		val idxInList = snum.minusPN(pos01).asInstanceOf[WholeNumBetweenZeroAndTwo]
 		getSideLengthsList.getItem(idxInList)
 	}
+
+
 	def computeArea() : PositivePN = {
 		// First choose a base side.  We know it shouldn't matter.
 		// For testing purposes we could choose randomly, sequentially, by longest, shortest, ...
@@ -100,5 +106,7 @@ case class TriSideLengths(sideA : PositivePN, sideB : PositivePN, sideC : Positi
 class TSL_Factory {
 	def mkTSL(sideA : PositivePN, sideB : PositivePN, sideC : PositivePN) : HasTriSideLengths
 		= TriSideLengths(sideA, sideB, sideC)
+
+	def mkCandidateTSL = ???
 }
 

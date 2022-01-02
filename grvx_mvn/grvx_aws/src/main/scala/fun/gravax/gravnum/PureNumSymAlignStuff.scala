@@ -125,8 +125,8 @@ object FixedTypeURIs {
 	val FTUTXT_TEXT = UriData("uri:axtyp:TEXT") // What about subtypes:  Text that satisfies some constraints
 	val FTUTXT_PURE_NUM = UriData("uri:axtyp:PURE_NUM") // Starts to get tricky here, because we do want subtypes
 }
-class ScalarDataThing(myTypeURI : UriData) extends DataThing {
-	override val instTypeURI = instTypeURI
+class ScalarDataThing(myIntensionalTypeURI : UriData) extends DataThing {
+	override val instTypeURI = myIntensionalTypeURI
 }
 // No DataThing may wrap or return java-null.
 // Someone seeking to "hack axLam" could seek to violate this rule.
