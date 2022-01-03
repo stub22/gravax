@@ -46,13 +46,28 @@ trait HasTriSideLengths extends KnowsTriSideIndex {
 		val idxInList = snum.minusPN(pos01).asInstanceOf[WholeNumBetweenZeroAndTwo]
 		getSideLengthsList.getItem(idxInList)
 	}
-
-
+	def computePerimeter() : PositivePN = {
+		val (sa, sb, sc) = getSideLengthsTuple
+		val perim: PureNum = sa.plusPN(sb).plusPN(sc)
+		perim.asInstanceOf[SideLen]
+	}
 	def computeArea() : PlanarArea = {
 		// First choose a base side.  We know it shouldn't matter.
 		// For testing purposes we could choose randomly, sequentially, by longest, shortest, ...
 		val someSideIndex = chooseRandomSide
 		computeAreaFromBaseSide(someSideIndex)
+	}
+	def computeAreaFromHeronsFormula() : PlanarArea = {
+		// https://en.wikipedia.org/wiki/Heron%27s_formula
+		// A = \sqrt{s(s-a)(s-b)(s-c)},
+		val perimPN = computePerimeter()
+		val pos02: PosIntPN = myNumFactory.getPos02
+		val semiPerimPN = perimPN.divideByNonzeroPN(pos02)
+		val sideLensList = getSideLengthsList
+		//  (s-a) (s-b) (s-c) are each nonnegative, and can be zero only if triangle is degenerate
+		// val diffs = sideLensList.map()
+		// val aDif
+		???
 	}
 	def computeAreaFromBaseSide(baseSideIndex : SideNum) : PlanarArea = {
 		// Using:   area = base * height / 2
@@ -63,6 +78,7 @@ trait HasTriSideLengths extends KnowsTriSideIndex {
 		val area = basePPN.timesPN(heightPPN).divideByNonzeroPN(pos02).reduceFractionPN
 		area.asInstanceOf[PlanarArea]
 	}
+
 	def computeHeightAboveBaseSide(baseSideIndex : SideNum) : PlanarArea = {
 		???
 	}

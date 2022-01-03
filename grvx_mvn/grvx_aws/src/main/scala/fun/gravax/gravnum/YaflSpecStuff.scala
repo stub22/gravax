@@ -69,7 +69,8 @@ trait YaflPrimDat extends YaflCoreDat
 trait YaflTxtDat
 trait YaflNumDat // In yaflCore is always a rational
 
-trait YaflRatNum extends YaflNumDat // Rational number which may use strong HoTT equivalence like 8/4 == 4/2 == 2
+trait YaflRatNum extends YaflNumDat // Rational number which may reduce fraction, like 8/4 : PosRat == 4/2 : PosRat == 2 : PosInt
+
 trait YaflIntNum extends YaflRatNum
 
 // YaflCore offers 3 composite types : Cartesian Product, Alternative Sum, Finite List
@@ -83,12 +84,16 @@ trait YaflCartProd extends YaflComposite
 // Dependent-typed sum, equivalent to some N-chain of Eithers over types T1, T2 .. TN
 trait YaflAltSum extends YaflComposite
 
+/*
 // Above two types are sufficient for algebraic composition purposes of what we may call finite intensional types.
-// As a design choice we include one further redundant type, Finite list.
-// FinList is a dependent-typed finite list of items
+// As a design choice we include one further dependent type, Finite list.
+// FinList is a dependent-typed finite list of items of known length (equivalent to a Product)
 // where 1) all items come from some fixed type T <: YaflCoreDat
-// and  2) Yafllength is included in type.
+// and  2) yaflList Len (a number term) is included in type of the FinList (see Barendregt lambda cube)
+//
 // Clarifying the "redundancy":  Algebraically the YaflFinList type is equivalent to a Sum over different length Products
+*/
+
 trait YaflFinList extends YaflComposite
 
 // Then punchline is to implement YaflPureFunc01 over YaflCoreDat

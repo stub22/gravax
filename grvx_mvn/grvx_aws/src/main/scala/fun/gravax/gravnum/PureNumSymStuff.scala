@@ -99,19 +99,28 @@ trait NonzeroPN extends PureNum {
 	private lazy val myRecip : ReciprocalType = reciprocalPN
 	override def safeReciprocalPN: Option[ReciprocalType] = Some(myRecip)
 }
-trait PositivePN extends NonzeroPN {
+trait NonnegPN extends PureNum
+trait NonposPN extends PureNum
+
+trait PositivePN extends NonzeroPN with NonnegPN {
 	override type ComplementType <: NegativePN
 	override type ReciprocalType <: PositivePN
 	override type ReducedFracType <: PositivePN
 	override val isPositivePN: Boolean = true
 	override val isNegativePN: Boolean = false
+
+	def plusNonnegPN(nngPN : NonnegPN) : PositivePN
+	def plusPositivePN(posPN : PositivePN) : PositivePN = plusNonnegPN(posPN)
 }
-trait NegativePN extends NonzeroPN {
+trait NegativePN extends NonzeroPN with NonposPN {
 	override type ComplementType <: PositivePN
 	override type ReciprocalType <: NegativePN
 	override type ReducedFracType <: NegativePN
 	override val isPositivePN: Boolean = false
 	override val isNegativePN: Boolean = true
+
+	def plusNonposPN(nposPN : NonposPN) : NegativePN
+	def plusNegativePN(negPN : NegativePN) : NegativePN = plusNonposPN(negPN)
 }
 
 
@@ -130,7 +139,7 @@ trait IntegerPN extends PureNum with YaflIntNum {
 
 	override def asScalaBigDec: Option[BigDecimal] = ???
 }
-trait ZeroPN extends PureNum with IntegerPN {
+trait ZeroPN extends PureNum with IntegerPN with NonnegPN with NonposPN {
 	override type ComplementType = ZeroPN
 	override type ReciprocalType = Nothing
 	override type ReducedFracType = ZeroPN

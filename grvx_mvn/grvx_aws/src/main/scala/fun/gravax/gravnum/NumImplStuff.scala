@@ -67,14 +67,6 @@ case class ReducedPosRatPairImpl(numer : PosIntPN, denom : PosIntPN) extends Pur
 		???
 	}
 
-	/*
-	private lazy val myRecip : PositivePN = {
-		val meReduced: PositivePN = reduceFractionPN
-		if (meReduced eq this) {
-			PosRatPairImpl(denom, numer)
-		} else meReduced.safeReciprocalPN.
-	}
-	 */
 	override protected def reciprocalPN: PositivePN = ReducedPosRatPairImpl(denom, numer)
 
 	override def negatePN: NegativePN = ???
@@ -89,6 +81,8 @@ case class ReducedPosRatPairImpl(numer : PosIntPN, denom : PosIntPN) extends Pur
 
 	override def plusPN(otherPN: PureNum): PureNum = ???
 
+	override def plusNonnegPN(nngPN: NonnegPN): PositivePN = ???
+
 	override def timesPN(otherPN: PureNum): PureNum = ???
 
 	override def divideByNonzeroPN(otherPN: NonzeroPN): PureNum = ???
@@ -99,6 +93,7 @@ case class ReducedPosRatPairImpl(numer : PosIntPN, denom : PosIntPN) extends Pur
 	}
 
 	override def asScalaBigDec: Option[BigDecimal] = ???
+
 
 }
 abstract class NegRatCompImpl(complementPosRat : PositivePN) extends NegNumBaseImpl  {
