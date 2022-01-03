@@ -3,15 +3,15 @@ package fun.gravax.gravnum
 private trait PureNumSymAlignStuff
 
 /*
-Define alignment from PureNum types to some well known URIs.
+Define alignment from pure types to some well known URIs.
 
-AxLam is a dependent-typed Lambda calculus
-Universes like K-DTT
+AxLam is a dependent-typed Lambda calculus (with universes like K-DTT TODO: Elaborate)
 
-AxLam is encodable as RDF following AxLam-Schema,
-Data easily translates to JSON, also Parquet.
-AxLam functions usually use JSON for input+output,
-while quietly reading from some (cachable) RDF.
+These AxLam types are instantiatable and usable for runtime computations.
+AxLam provides functors around the more abstract Yafl types, which are not explicitly used in computation.
+
+AxLam is encodable as RDF following AxLam-Schema, Data easily translates to JSON, also Parquet.
+AxLam functions usually use JSON for input+output, while quietly reading from some (cachable) RDF.
 
 AxLam composite functions are defined via RDF graphs.
 Primitive functions are declared with RDF names and
@@ -81,17 +81,31 @@ the domain).  From here we apply terminology:
 // All these datatypes are intended to be immutable and pure
 
 // A DataThing always has a type representable by a String, which *may* encode parametric information,
-// tho not looking to go wild with that
+// tho not looking to go wild with that.
+// Note that we should not yet simply say "DataThing extends YaflCoreDat" even though we intend it to be
+// approximately true, because we do not yet wish to promise that every DataThing is known squeaky clean.
+// Instead we pull in specific subtypes of YaflCoreDat as markers on particular subtypes of DataThing.
 trait DataThing {
+	// A DataThing instance "thinks of itself" as having a single instType with a fixed uri-name.
 	// We may see this method as a function from domain=DataThing to codomain=UriThing
-	val getTypeURI : UriThing
+	val instTypeURI : UriThing
+	// However, this DataThing may be equivalent to other data things which are of other types, or use other
+	// names for an equivalent type.
+	// For example, 4 : PositiveInteger is 'equivalent' to 4 : Int_GreaterThan_2 and to 4 : Rat_LessThan_5.8.
+	// In this sense of equivalence, 4 is of infinitely many distinct types (because it satisfies many propositions).
+	// In RDF/OWL these could all be the same Individual named :ourNum_4.
+	// But a particular DataThing runtime instance ourNumDataThing_4 can have only one named type which
+	// is fixed at instTypeURI.  This instTypeUri may then be used if we wish to encode the DataThing
+	// as JSON or RDF.  For JSON output we expect any downstream component (outside Axiomagic) will likely
+	// take our assigned type for granted (or "granite" cf. Morty's uncle Rick).
+	// To summarize: JSON is for Mortys, RDF is for Ricks.
 }
 
 
 trait RdfNodeThing extends DataThing
 trait RdfRsrcThing extends RdfNodeThing // Often a Uri, but may be a BNode
-trait UriThing extends RdfRsrcThing {
-	val getAbsUriTxt : String
+trait UriThing extends RdfRsrcThing with YaflUri {
+	val absUriTxt : String
 }
 trait RdfBNodeThing extends RdfRsrcThing {
 }
@@ -111,16 +125,26 @@ object FixedTypeURIs {
 	val FTUTXT_TEXT = UriData("uri:axtyp:TEXT") // What about subtypes:  Text that satisfies some constraints
 	val FTUTXT_PURE_NUM = UriData("uri:axtyp:PURE_NUM") // Starts to get tricky here, because we do want subtypes
 }
-class ScalarDataThing(myTypeURI : UriData) extends DataThing {
-	override val getTypeURI = myTypeURI
+class ScalarDataThing(myIntensionalTypeURI : UriData) extends DataThing {
+	override val instTypeURI = myIntensionalTypeURI
 }
 // No DataThing may wrap or return java-null.
+// Someone seeking to "hack axLam" could seek to violate this rule.
+// We seek to ensure that the common bad things which can happen in axLam are either unexpected EmptyData, or
+// unexpected undecidable/non-terminating/"slow" function.
+// Then we seek to give tools for constructing systems which don't do either of those things (unexpectedly).
+// From our coding perspective here, "null" should really not happen.  Can write 10 books about all that, natch ;-)
 case class EmptyData() extends ScalarDataThing(FixedTypeURIs.FTUTXT_EMPTY)
 
+// uriTxt may not be null!
 case class UriData(myUriTxt: String) extends ScalarDataThing(FixedTypeURIs.FTUTXT_URI) with UriThing {
-	override val getAbsUriTxt = myUriTxt
+	override val absUriTxt = myUriTxt
 }
+
+// myTxt may not be null!
 case class TextData(myTxt : String) extends ScalarDataThing(FixedTypeURIs.FTUTXT_TEXT)
+
+// myPN may not be null!
 case class PureNumData(myPN : PureNum) extends ScalarDataThing(FixedTypeURIs.FTUTXT_PURE_NUM)
 
 // The other types of DataThing are built algebraically over the above, amenable to formal analysis
@@ -135,28 +159,29 @@ case class PureNumData(myPN : PureNum) extends ScalarDataThing(FixedTypeURIs.FTU
 // Interop with JSON + RDF occurs via the action of these machine-side types.
 // Build up records from these, will be spread transparently across RDF preds or json-props.
 // Meanwhile OuterType is a logic-side strong-ish language-native type like Tuple3[TextData, PureNumData, ListMaxN[ProductData[Tuple2[TextData...
-trait ProductData[OuterType] extends DataThing
+trait CartesianProdData[NuggetType <: YaflCartProd] extends DataThing
 {
 	// How many elements in this cartesian product? -- this is known at the type level, e.g. if OuterType is Tuple7 then 7
 	// A product of width 0 is provably equal to EmptyData().
 	// This product is ordered.
 	val getProductWidth : WholeIntPN
-	def getNugget : OuterType // This object represents an actual cartesian-product value, usually as a TupleN[T1..TN]
+	def getNugget : NuggetType // This object represents an actual cartesian-product value, usually as a TupleN[T1..TN]
 	// Want some way to access the types of the fields
 }
-// fieldNames must correspond exactly to the tuple-positions of pdat
-abstract class RecordAccessor[OT](fieldNames : ListN[String], pdat : ProductData[OT]) {
-	def getItem (fname : String) : Any // where's the type of the field?
+// Input data may not be null, nor contain nulls.
+// FieldNames must correspond exactly to the tuple-positions of pdat.
+abstract class RecordAccessor[OT <: YaflCartProd](fieldNames : FinListN[String], pdat : CartesianProdData[OT]) {
+	def getItem (fname : String) : Any // FIXME: where's the type of the field?  It is inside the OT!
 }
 
-trait UnionData[OuterType]  extends DataThing {
+trait AltUnionData[NuggetType <: YaflAltSum] extends DataThing {
 	// Recorded as some kind of union or variably-typed item.  Dependent sum in type theory.
 	// We restrict to a fixed, finite number of incarnations, in a given order, without a name.
 	// We call this number the depth of the Union.
 	// A union of depth 0 is provably equal to EmptyData().
-	// How many possible incarnations? Either is 2.
+	// How many possible incarnations? Scala "Either" is 2.
 	val getUnionDepth : WholeIntPN
-	def getNugget : OuterType
+	def getNugget : NuggetType
 }
 
 

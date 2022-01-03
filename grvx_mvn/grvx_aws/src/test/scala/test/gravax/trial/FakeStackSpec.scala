@@ -7,7 +7,7 @@ import org.scalatest.Tag
 
 object Tag_NoBatch extends Tag("test.gravax.NoBatch")
 
-class StackSpec extends AnyFlatSpec {
+class FirstFakeStackSpec extends AnyFlatSpec {
 
 	"A Stack" should "pop values in last-in-first-out order" in {
 		val stack = new Stack[Int]
@@ -44,7 +44,7 @@ class WackySpec extends AnyFlatSpec {
 	}
 
 
-	it  should "work like in the scalatest docs" taggedAs(Tag_NoBatch) in {
+	it  should "should FAIL and show assertions described in scalatest docs" taggedAs(Tag_NoBatch) in {
 		assert(1 + 2 === 3, "this is a clue from 'assert' about MATH")
 		assertResult(5, "this is a clue from 'assertResult' about ADDITION") { 3 + 1 }
 	}

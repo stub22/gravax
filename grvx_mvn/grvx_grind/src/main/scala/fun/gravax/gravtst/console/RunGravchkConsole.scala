@@ -56,7 +56,8 @@ class GravchkConsoleTests {
 			}
 		}
 	}
-	import scala.collection.JavaConverters._
+	import scala.jdk.CollectionConverters._
+
 	def chkFileSys(fsUri : URI) : Unit = {
 		val fsParamsScala = Map[String, AnyRef]()
 		val fsParamsJava = fsParamsScala.asJava

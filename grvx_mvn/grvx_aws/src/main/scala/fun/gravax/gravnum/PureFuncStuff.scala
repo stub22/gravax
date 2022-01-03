@@ -7,15 +7,15 @@ trait EvalCtx {
 	type Pred = UriThing
 	type Rslt = Set[RdfNodeThing]
 	def evalFreshResult(inPair: (Subj,Pred)) : Option[Rslt]
-	// None => failure, which proves nothing.  Diagnosis is not available at this level.
-	// ShouldNOT be interpreted as "NO RESULTS FOUND".
-	// Instead return EmptyData == Set()
+	// None => computational failure (timeout, RAM error, ...), which proves nothing about existence of function result.
+	// Diagnosis is not available at this level.
+	// None should NOT be interpreted as "NO RESULTS FOUND", i.e. None is not the same as Some(EmptyResult).
 }
 
 // These funcs are typically instantiated within some useful context that supplies wiring implicitly.
 trait AxLamRelation {
-	val funcURI : UriData 	// This URI is used in the subject position during function definition,
-							// prop position in invocation.
+	val funcURI : UriData 	// This URI is used in the subject position of a function definition,
+							// and in the prop position of an invocation.
 							// The function input must always be an RdfRsrc
 
 	// domain type description
@@ -30,3 +30,4 @@ trait AxLamFunction extends AxLamRelation {
 	def computeSingleResult(inRsrc : RdfRsrcThing) : Option[RdfNodeThing]
 }
 trait CompositeFunc
+
