@@ -1,4 +1,4 @@
-package fun.gravax.gravnum
+package fun.gravax.axlp.core.num
 
 private trait NumImplStuff
 

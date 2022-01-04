@@ -1,6 +1,7 @@
 package test.gravax
 
-import fun.gravax.gravnum.{FinListN, GenIntFactory, ListOfBoundedLen, PosIntPN, PositivePN, PureNum, WholeIntPN, ZeroPN}
+import fun.gravax.axlp.core.num.{GenIntFactory, PosIntPN, PositivePN, PureNum, WholeIntPN}
+import fun.gravax.axlp.core.struct.{FinListN, ListOfBoundedLen}
 
 private trait TriangleStuff
 

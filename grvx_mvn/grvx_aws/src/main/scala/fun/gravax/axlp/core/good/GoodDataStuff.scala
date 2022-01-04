@@ -1,4 +1,6 @@
-package fun.gravax.gravnum
+package fun.gravax.axlp.core.good
+
+import fun.gravax.aa.yafl.core.YaflTxtDat
 
 import scala.collection.mutable.{Seq => MutSeq}
 
@@ -26,7 +28,7 @@ case class GoodText(myTxt : String) extends GoodData with YaflTxtDat {
 	}
 }
 // import scala.collection.immutable.ArraySeq  added in 2.13
-import scala.collection.immutable.{Seq => ImmSeq, ArraySeq => ImmArraySeq, Map => ImmMap}
+import scala.collection.immutable.{Seq => ImmSeq}
 
 trait GoodSeq[GD <: GoodData] extends GoodData {}
 
