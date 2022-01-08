@@ -75,40 +75,14 @@ trait GenIntFactory[PIPN <: PosIntPN, CompNIPN <: NegIntPN]
 
 class SmallFreeIntFactory extends GenIntFactory[PosIntPN, NegIntPN] {
 	override def fromPosScalaBigInt(posBI: BigInt, proofPos: ProofPositive): PosIntPN = {
-		new PosIntBigImpl(posBI) {
-			override def timesPIPN(otherPIPN: PosIntPN): PosIntPN = ???
-
-			override def plusIPN(otherIPN: IntegerPN): IntegerPN = ???
-
-			override def timesIPN(otherIPN: IntegerPN): IntegerPN = ???
-
-			override def plusNonnegPN(nngPN: NonnegPN): PositivePN = ???
-
-			override protected def reciprocalPN: PositivePN = ???
-
-			override def plusPIPN(otherPIPN: PosIntPN): PosIntPN = ???
-
-			override def negatePN: NegIntPN = ???
-
-			override def reduceFractionPN: PosIntPN = ???
-
-			override def divideByNonzeroPN(otherPN: NonzeroPN): PureNum = ???
-
-			override def plusPN(otherPN: PureNum): PureNum = ???
-
-			override def timesPN(otherPN: PureNum): PureNum = ???
-
-			override def isEqPN(otherPN: PureNum): Boolean = ???
-
-			override def isGtPN(otherPN: PureNum): Boolean = ???
-		}
+		new FullPIBI(posBI)
 	}
 
 }
-trait GeneralPureNumberFactory  {
+trait PracticeFreeNumFactory  {
 // 	protected def mkIntFactory [PIPN <: PosIntPN, CompNIPN <: NegIntPN] : GenIntFactory[PIPN, CompNIPN] = ???
 	// override protected val myPosIntFactory: PurePosIntFactory
-	def getFreeIntFactory : SmallFreeIntFactory
+	val myFreeIntFactory : SmallFreeIntFactory
 
 	def mkReducedRatioOfPosInts(numer : PosIntPN, denom : PosIntPN) : PositivePN = {
 		// But because numer is positive, we should know this ratio is positive

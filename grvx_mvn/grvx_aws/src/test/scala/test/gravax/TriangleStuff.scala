@@ -1,6 +1,6 @@
 package test.gravax
 
-import fun.gravax.axlp.core.num.{GenIntFactory, NegativePN, GeneralPureNumberFactory, PosIntPN, PositivePN, ProofPositive, PureNum, PureNumBaseImpl, PurePosIntFactory, WholeIntPN}
+import fun.gravax.axlp.core.num.{FullPIBI, GenIntFactory, NegativePN, PosIntBigImpl, PosIntPN, PositivePN, PracticeFreeNumFactory, ProofPositive, PureNum, PureNumBaseImpl, PurePosIntFactory, SmallFreeIntFactory, WholeIntPN}
 import fun.gravax.axlp.core.struct.{FinListN, ListOfBoundedLen}
 
 private trait TriangleStuff
@@ -89,8 +89,8 @@ trait TriCheckFeatures extends TriFindSides {
 	def findHypotenuseSide : Option[SideNum] = ??? // Index of the longest side IF this is a right triangle, else None
 }
 trait TriComputeMeasures extends HasTriSideLengths {
-	val myComputeNumberFactory : GeneralPureNumberFactory
-	val myFreeIntFactory = myComputeNumberFactory.getFreeIntFactory
+	val myComputeNumberFactory : PracticeFreeNumFactory
+	val myFreeIntFactory = myComputeNumberFactory.myFreeIntFactory
 	val pos02: PosIntPN = myFreeIntFactory.getPos02
 
 	def computePerimeter() : PositivePN = {
@@ -134,6 +134,7 @@ trait TriComputeMeasures extends HasTriSideLengths {
 	def scaleToSimilarTSL(scale : PositivePN) : HasTriSideLengths = ???
 
 }
+
 // Do we insist that these side lengths be in reduced form?
 abstract class TriSideLengths[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](sideA : SL, sideB : SL, sideC : SL) extends HasTriSideLengths {
 	override type SideNum = SN
@@ -141,29 +142,42 @@ abstract class TriSideLengths[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](
 	override type PlanarArea = PositivePN
 	override def getSideLengthsTuple = (sideA, sideB, sideC)
 
-	val mySideNumFactory : PurePosIntFactory[SN]
+	// This did not work as an abstract protected val.  NPE at runtime.
+	// Cannot have protected val in abstract class in Scala 2.13?
+	// Works OK with abstract protected def.
+	protected def getSideNumFactory : PurePosIntFactory[SN]
 
-	override val mySide01: SN = mySideNumFactory.getPos01
-	override val mySide02: SN = mySideNumFactory.getPos02
-	override val mySide03: SN = mySideNumFactory.getPos03
+	override val mySide01: SN = getSideNumFactory.getPos01
+	override val mySide02: SN = getSideNumFactory.getPos02
+	override val mySide03: SN = getSideNumFactory.getPos03
 }
 
 
 class TSL_Factory[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](sideNumFactory : PurePosIntFactory[SN]) {
 	def mkTSL(sideA : SL, sideB : SL, sideC : SL) : HasTriSideLengths = {
-		new TriSideLengths[SN, SL](sideA, sideB, sideC) {
-			override val mySideNumFactory: PurePosIntFactory[SN] = sideNumFactory
+		println(s"TSL_Factory.mkTsl got sideA=$sideA, sideB=$sideB, sideC=$sideC")
+		println(s"TSL_Factory.mkTsl sees sideNumFactory=$sideNumFactory")
+		val extraPos01 = sideNumFactory.getPos01
+		println(s"TSL_Factory.mkTsl found extraPos01=$extraPos01")
+		val tsl = new TriSideLengths[SN, SL](sideA, sideB, sideC) {
+			override protected def getSideNumFactory: PurePosIntFactory[SN] = sideNumFactory
 		}
+		tsl
 	}
 
 	// def mkCandidateTSL = ???
 }
 
-sealed trait PracticeSideNum extends PureNumBaseImpl with NatNumBetweenOneAndThree
+sealed trait PracticeSideNum extends NatNumBetweenOneAndThree
 
 class PracticeFactoryFactory {
 	val mySideNumFact = new PurePosIntFactory[PracticeSideNum] {
-		override def fromPosScalaBigInt(posBI: BigInt, proofPos: ProofPositive): PracticeSideNum = ???
+		override def fromPosScalaBigInt(posBI: BigInt, proofPos: ProofPositive): PracticeSideNum = {
+			new FullPIBI(posBI) with PracticeSideNum
+		}
+	}
+	val mySideLenFact = new PracticeFreeNumFactory {
+		override val myFreeIntFactory = new SmallFreeIntFactory()
 	}
 	val myTslFact  = new TSL_Factory[PracticeSideNum, PositivePN](mySideNumFact)
 

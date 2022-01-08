@@ -17,6 +17,39 @@ abstract class PosIntBigImpl(positiveBigInt: BigInt) extends PureNumBaseImpl wit
 
 	 */
 }
+case class FullPIBI(posBI: BigInt) extends PosIntBigImpl(posBI) {
+	override def timesPIPN(otherPIPN: PosIntPN): PosIntPN = ???
+
+	override def plusIPN(otherIPN: IntegerPN): IntegerPN = ???
+
+	override def timesIPN(otherIPN: IntegerPN): IntegerPN = ???
+
+	override def plusNonnegPN(nngPN: NonnegPN): PositivePN = ???
+
+	override protected def reciprocalPN: PositivePN = ???
+
+	override def plusPIPN(otherPIPN: PosIntPN): PosIntPN = {
+		val otherBI = otherPIPN.asScalaBigInt.get
+		val sumBI = posBI + otherBI
+		// TODO:  Allow the wrapper object to come from cache when this number is already in use.
+		val sumPIPN = new FullPIBI(sumBI)
+		sumPIPN
+	}
+
+	override def negatePN: NegIntPN = ???
+
+	override def reduceFractionPN: PosIntPN = ???
+
+	override def divideByNonzeroPN(otherPN: NonzeroPN): PureNum = ???
+
+	override def plusPN(otherPN: PureNum): PureNum = ???
+
+	override def timesPN(otherPN: PureNum): PureNum = ???
+
+	override def isEqPN(otherPN: PureNum): Boolean = ???
+
+	override def isGtPN(otherPN: PureNum): Boolean = ???
+}
 
 abstract  class NegIntCompImpl(complementPosInt : PosIntPN) extends NegNumBaseImpl with NegIntPN {
 	override type ComplementType = PosIntPN
