@@ -3,7 +3,7 @@ package fun.gravax.axlp.core.num
 private trait NumFactoryStuff
 
 trait ProofPositive
-trait PurePosIntFactory {
+trait PurePosIntFactory[PIPN <: PosIntPN] {
 	// Thinking about wacky encodings...
 	// A "nano" integer roughly fits in half a Java Byte  max 7
 	// A "micro" integer roughly fits in a Java Byte  max +127
@@ -20,32 +20,31 @@ trait PurePosIntFactory {
 	//		'assert'
 	//		'require'
 
-	def fromPosScalaBigInt(posBI : BigInt, proofPos : ProofPositive) : PosIntPN = {
-		??? // BigPosIntImpl(posBI)
-	}
-	def mkSmallPosIntPN(posSmall : Int) : PosIntPN = {
+	def fromPosScalaBigInt(posBI : BigInt, proofPos : ProofPositive) : PIPN
+	def mkSmallPosIntPN(posSmall : Int) : PIPN = {
 		if (posSmall >= 1) {
-			val bigInt = BigInt(posSmall)
-			val bippn = ??? // new PosIntBigImpl(bigInt)
+			val smallishBigInt = BigInt(posSmall)
+			val proofPos = new ProofPositive {}
+			val bippn = fromPosScalaBigInt(smallishBigInt, proofPos)
 			bippn
 		} else throw new IllegalArgumentException(s"Expected positive integer, got $posSmall")
 	}
-	def getPos01 : PosIntPN = mkSmallPosIntPN(1)
-	def getPos02 : PosIntPN = mkSmallPosIntPN(2)
-	def getPos03 : PosIntPN = mkSmallPosIntPN(3)
+	def getPos01 : PIPN = mkSmallPosIntPN(1)
+	def getPos02 : PIPN = mkSmallPosIntPN(2)
+	def getPos03 : PIPN = mkSmallPosIntPN(3)
 
-	def fromPosScalaLong(sl : Long) : Option[PosIntPN] = {
+	def fromPossiblyPositiveScalaLong(sl : Long) : Option[PIPN] = {
 		if (sl > 0L) {
-			val proof : ProofPositive = ???
-			val pipn = fromPosScalaBigInt(BigInt(sl), proof)
+			val proofPos  = new ProofPositive {}
+			val pipn = fromPosScalaBigInt(BigInt(sl), proofPos)
 			Some(pipn)
 		} else None
 	}
 }
 trait ProofNegative
-trait PureNegIntFactory {
-	protected val myPosIntFactory : PurePosIntFactory
-	def fromComplement(comp : PosIntPN) : NegIntPN = {
+trait PureNegIntFactory[NIPN <: NegIntPN, CompPIPN <: PosIntPN] {
+	protected val myPosIntFactory : PurePosIntFactory[CompPIPN]
+	def fromComplement(comp : CompPIPN) : NIPN = {
 		// NegIntCompImpl(comp)
 		???
 	}
@@ -67,10 +66,49 @@ trait PureZeroFactory {
 	def getNum00 : ZeroPN = myZero
 }
 
-trait GenIntFactory extends PurePosIntFactory with PureNegIntFactory with PureZeroFactory
+trait GenIntFactory[PIPN <: PosIntPN, CompNIPN <: NegIntPN]
+		extends PurePosIntFactory[PIPN]
+		with PureNegIntFactory[CompNIPN, PIPN]
+		with PureZeroFactory {
+	override protected val myPosIntFactory: PurePosIntFactory[PIPN] = this
+}
 
-class NumFactoryImpl extends GenIntFactory {
-	override protected val myPosIntFactory: PurePosIntFactory = this
+class SmallFreeIntFactory extends GenIntFactory[PosIntPN, NegIntPN] {
+	override def fromPosScalaBigInt(posBI: BigInt, proofPos: ProofPositive): PosIntPN = {
+		new PosIntBigImpl(posBI) {
+			override def timesPIPN(otherPIPN: PosIntPN): PosIntPN = ???
+
+			override def plusIPN(otherIPN: IntegerPN): IntegerPN = ???
+
+			override def timesIPN(otherIPN: IntegerPN): IntegerPN = ???
+
+			override def plusNonnegPN(nngPN: NonnegPN): PositivePN = ???
+
+			override protected def reciprocalPN: PositivePN = ???
+
+			override def plusPIPN(otherPIPN: PosIntPN): PosIntPN = ???
+
+			override def negatePN: NegIntPN = ???
+
+			override def reduceFractionPN: PosIntPN = ???
+
+			override def divideByNonzeroPN(otherPN: NonzeroPN): PureNum = ???
+
+			override def plusPN(otherPN: PureNum): PureNum = ???
+
+			override def timesPN(otherPN: PureNum): PureNum = ???
+
+			override def isEqPN(otherPN: PureNum): Boolean = ???
+
+			override def isGtPN(otherPN: PureNum): Boolean = ???
+		}
+	}
+
+}
+trait GeneralPureNumberFactory  {
+// 	protected def mkIntFactory [PIPN <: PosIntPN, CompNIPN <: NegIntPN] : GenIntFactory[PIPN, CompNIPN] = ???
+	// override protected val myPosIntFactory: PurePosIntFactory
+	def getFreeIntFactory : SmallFreeIntFactory
 
 	def mkReducedRatioOfPosInts(numer : PosIntPN, denom : PosIntPN) : PositivePN = {
 		// But because numer is positive, we should know this ratio is positive
@@ -80,3 +118,4 @@ class NumFactoryImpl extends GenIntFactory {
 	}
 
 }
+

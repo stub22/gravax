@@ -1,22 +1,30 @@
 package test.gravax
 
-import fun.gravax.axlp.core.num.NumFactoryImpl
+import fun.gravax.axlp.core.num.{GeneralPureNumberFactory, ProofPositive, PureNumBaseImpl, PurePosIntFactory, SmallFreeIntFactory}
 import org.scalatest.flatspec.AnyFlatSpec
 import test.gravax.trial.Tag_NoBatch
 
 private trait FakeAxLamTstSpcs
 
 class FirstAxLamSpec extends AnyFlatSpec {
-	val myNumFact = new NumFactoryImpl()
+	val myNumFact = new GeneralPureNumberFactory {
+		val mySFIF = new SmallFreeIntFactory() {
+		}
+		override def getFreeIntFactory: SmallFreeIntFactory = mySFIF
+	}
+
 	"A number factory" should "make some numbers" taggedAs(Tag_NoBatch) in {
-		val pos79 = myNumFact.mkSmallPosIntPN(79)
+		val pos79 = myNumFact.getFreeIntFactory.mkSmallPosIntPN(79)
 
 	}
 }
 
+
 class FirstTriSpec extends AnyFlatSpec {
-	val myNumFact = new NumFactoryImpl()
-	val myTF = new TSL_Factory()
+	// type OurSideNum = PracticeSideNum
+	// type OurSideLen =
+
+	val myPFF = new PracticeFactoryFactory // TSL_Factory()
 
 
 }
