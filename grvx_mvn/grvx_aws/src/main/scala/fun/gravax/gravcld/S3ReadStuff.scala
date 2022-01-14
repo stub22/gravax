@@ -25,7 +25,9 @@ https://github.com/aws/aws-sdk-java-v2
  */
 trait ReadS3Files {
 	val bcktNm_appOntMiscPub = "appstract-ont-misc-pub"
-	val (flg_scanBuckets, flg_loadText, flg_loadN3) = (false, false, true)
+
+	val objKey_kbPrefixes = "kbpedia_v250/supp/kbprc_prefixes.n3"
+	val (flg_scanBuckets, flg_loadText, flg_loadN3) = (true, false, true)
 	def doBucketStuff : Unit = {
 		val cli = mkS3Client
 		if (flg_scanBuckets)
@@ -34,7 +36,8 @@ trait ReadS3Files {
 			fetchSomeObjsInBucket(cli, bcktNm_appOntMiscPub, 5, 1000, 50000)
 		}
 		if (flg_loadN3) {
-			loadSomeSmallN3files(cli, bcktNm_appOntMiscPub)
+			val kbPrfxTxt = loadKbPrefixesText(cli, bcktNm_appOntMiscPub, objKey_kbPrefixes)
+			loadSomeSmallN3files(cli, bcktNm_appOntMiscPub, Some(kbPrfxTxt))
 		}
 	}
 	def mkS3Client : S3Client = {
@@ -109,20 +112,29 @@ https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/mod
 		println(s"Found ${matchingObjs.length} matching objects within size range ")
 		matchingObjs
 	}
-
-	def loadSomeSmallN3files(s3cli : S3Client, bcktNm : String) : Unit = {
+	protected def analyzeN3DataBlob(n3blob : String, modelPath : String)
+	def loadSomeSmallN3files(s3cli : S3Client, bcktNm : String, prefixTxtBlk : Option[String]) : Unit = {
 		val maxObjs = 5
 		val goodObjs = findObjsInBucket(s3cli, bcktNm, ".n3", 1000, 80000)
 		val firstObjs = goodObjs.take(maxObjs)
 		println(s"Selected ${firstObjs.length} objects expected to contain N3 data, which we now try to load.")
 		println(s"Objs to load: ", firstObjs.toString())
 		firstObjs.foreach(s3obj => {
-			val objKy = s3obj.key()
-			val objAsUtf8 = getBucktObjBytesAsUtf8(s3cli, bcktNm, objKy)
+			val objKy: String = s3obj.key()
+			val objAsUtf8: String = getBucktObjBytesAsUtf8(s3cli, bcktNm, objKy)
 			println(s"Got N3 text of length ${objAsUtf8.length} from objKey: ${objKy} in bucket: ${bcktNm}")
 			val previewTxt = objAsUtf8.take(99)
 			println(s"First 99 chars: " , previewTxt)
+			val comboTxt = prefixTxtBlk.getOrElse("").concat(objAsUtf8)
+			println(s"After prepending prefix, combo txt length is ${comboTxt.length}")
+			analyzeN3DataBlob(comboTxt, objKy)
 		})
+	}
+	def loadKbPrefixesText(s3cli : S3Client, bcktNm : String, kbprfxObjKey : String) : String = {
+		val kbprfxTxt = getBucktObjBytesAsUtf8(s3cli, bcktNm, kbprfxObjKey)
+		println(s"Loaded kb-prefix text of length=${kbprfxTxt.length}")
+		println(s"First 127 chars: ", kbprfxTxt.take(127))
+		kbprfxTxt
 	}
 
 	import scala.jdk.CollectionConverters._

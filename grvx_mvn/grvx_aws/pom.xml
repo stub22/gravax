@@ -51,6 +51,14 @@
             <artifactId>arrow-vector</artifactId>
             <version>${arrow.version}</version>
         </dependency>
+
+
+        <!-- 2022-01-14 pulling dmo.fibo project into gravcld so we can use MdlStat code to analyze RDF -->
+        <dependency>
+            <groupId>${axmgc.groupId}</groupId>
+            <artifactId>axiomagic.dmo.fibo</artifactId>
+            <version>${axmgc.version}</version>
+        </dependency>
     </dependencies>
 
     <repositories>
