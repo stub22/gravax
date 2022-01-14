@@ -125,6 +125,8 @@ case class ReducedPosRatPairImpl(numer : PosIntPN, denom : PosIntPN) extends Pur
 		???
 	}
 
+	// This value is commonly inexact, so may only be used for approximate calcs.
+	// 1/3 = 0.33333 with no way to represent the endless 3 in BigDecimal form.  Need extra dangling data...
 	override def asScalaBigDec: Option[BigDecimal] = ???
 
 

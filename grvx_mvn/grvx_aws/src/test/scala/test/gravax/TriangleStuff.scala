@@ -1,6 +1,6 @@
 package test.gravax
 
-import fun.gravax.axlp.core.num.{FullPIBI, GenIntFactory, NegativePN, PosIntBigImpl, PosIntPN, PositivePN, PracticeFreeNumFactory, ProofPositive, PureNum, PureNumBaseImpl, PurePosIntFactory, SmallFreeIntFactory, WholeIntPN}
+import fun.gravax.axlp.core.num.{FullPIBI, GenIntFactory, NegativePN, NonnegPN, PosIntBigImpl, PosIntPN, PositivePN, PracticeFreeNumFactory, ProofPositive, PureNum, PureNumBaseImpl, PurePosIntFactory, SmallFreeIntFactory, WholeIntPN}
 import fun.gravax.axlp.core.struct.{FinListN, ListOfBoundedLen}
 
 private trait TriangleStuff
@@ -14,9 +14,16 @@ Study Example:  Triangles
 //		sideC at index==3
  */
 
-// Anyref which knows it is a NatNum (Positive Int Num) between one and three, satisfying PosIntPN.
-// This trait is still a marker/placeholder as of y22-m01-d08
+// Anyref known to be a PosIntPN between one and three.
+// These nominal traits are just markers/placeholders as of y22-m01-d08
+// These nominal traits do not yet enforce their implied logical propositions.
+// In Scala 3 we get the power to do more explicit disjunctions (and conjunctions too? recheck).
+// In Scala 2.13 we can do a weak type-level conjunction by with-ing traits,
+// and a clumsy type-level disjunction with an Either or similar.
+// A Triangle "SideNumber" must be one of these
 trait NatNumBetweenOneAndThree extends PosIntPN
+
+// ...which when adapted to a zero-based collection index must be one of these:
 trait WholeNumBetweenZeroAndTwo extends WholeIntPN
 
 trait KnowsTriSideNums {
@@ -39,48 +46,51 @@ trait HasTriSideLengths extends KnowsTriSideNums {
 	type SideLen <: PositivePN
 	// type NegSideLen <: NegativePN
 	// If we allow for degen-tri then Area could be Zero, so we actually want NonnegPN
-	type PlanarArea <: PositivePN
+	type PlanarArea <: NonnegPN
 
 	def getSideLengthsTuple: (SideLen, SideLen, SideLen)
+	def getSidePairsTuple: ((SideNum, SideLen), (SideNum, SideLen), (SideNum, SideLen)) = ???
 
 	// "List" indexes are 0-based
 	def getSideLengthsList: FinListN[SideLen] = ???
+	def getSidePairsList: FinListN[(SideNum, SideLen)] = ???
 
 	def getSideLength(snum: SideNum): SideLen = {
-
+		// Boo .asInstanceOf
 		val idxInList = snum.minusPN(mySide01).asInstanceOf[WholeNumBetweenZeroAndTwo]
 		getSideLengthsList.getItem(idxInList)
 	}
 }
 trait TriFindSides extends HasTriSideLengths {
-	/*
-	These are
-	 */
-	def findAnyLongestSide : SideNum = ???
-	def findAllLongestSides : ListOfBoundedLen[SideNum] = ???  // Between one and 3 sides
-	def findAnyShortestSide : SideNum = ???
-	def findAllShortestSides : ListOfBoundedLen[SideNum] = ??? // Between one and 3 sides
+
+	def findAnyLongestSide : (SideNum, SideLen) = ???
+	def findAllLongestSides : (ListOfBoundedLen[SideNum], SideLen) = ???  // Between one and 3 sides
+	def findAnyShortestSide : (SideNum, SideLen) = ???
+	def findAllShortestSides : (ListOfBoundedLen[SideNum], SideLen) = ??? // Between one and 3 sides
 	def reorderIncreasing : HasTriSideLengths = ???
 	def reorderDecreasing : HasTriSideLengths = ???
 }
-// functions that check for certain features triangle MAY have, results are disjunctions: booleans, enums, options
+// functions that check for certain features triangle MAY have, results are disjunctive types: booleans, enums, options
 trait TriCheckFeatures extends TriFindSides {
 	def checkLegitimacy : TriLegitimacyFlavor = {
 		// Suppose the triangle
-		val	aLongestSideNum = findAnyLongestSide
-		val aLongestSideLen = getSideLength(aLongestSideNum)
+		val (longestSideNum, longestSideLen) = findAnyLongestSide
 		???
 	}
 	/*
-	We may sometimes abbreviate triSideLength as triSide or just side
+	We may sometimes abbreviate "triSideLength" as "triSide", "sideLen", or just "side".
 	To determine if two TriSideLengths tsl1 and tsl2 are equivalent, we want to know if their side lengths are
 	the same under some permutation.  If so then tsl1 and tsl2 are members of an equivalence class.
 	We may also see them as members of a permutation group <-- Make this more precise and go to town.
 	*/
 	def hasSameSidesSameOrder(other : HasTriSideLengths) : Boolean = ???
 	def hasSameSidesAnyOrder(other : HasTriSideLengths) : Boolean = ???
+
+	// See also "computeScaleOfSimilarTSL"
 	def hasScaledSidesSameOrder(other : HasTriSideLengths) : Boolean = ???
 	def hasScaledSidesAnyOrder(other : HasTriSideLengths) : Boolean = ???
+	// Number we have to multiply this triangle's sides by to get a tri equiv to other
+	def computeScaleOfSimilarTSL(other : HasTriSideLengths) : Option[PositivePN] = ???
 
 	def areAllSidesEqual : Boolean = ???
 	def areAtLeastTwoSidesEqual : Boolean = ???
@@ -89,22 +99,24 @@ trait TriCheckFeatures extends TriFindSides {
 	def findHypotenuseSide : Option[SideNum] = ??? // Index of the longest side IF this is a right triangle, else None
 }
 trait TriComputeMeasures extends HasTriSideLengths {
-	val myComputeNumberFactory : PracticeFreeNumFactory
+	val myComputeNumberFactory: PracticeFreeNumFactory
 	val myFreeIntFactory = myComputeNumberFactory.myFreeIntFactory
 	val pos02: PosIntPN = myFreeIntFactory.getPos02
 
-	def computePerimeter() : PositivePN = {
+	def computePerimeter(): PositivePN = {
 		val (sa, sb, sc) = getSideLengthsTuple
 		val perim: PureNum = sa.plusPN(sb).plusPN(sc)
 		perim.asInstanceOf[SideLen]
 	}
-	def computeArea() : PlanarArea = {
+
+	def computeArea(): PlanarArea = {
 		// First choose a base side.  We know it shouldn't matter.
 		// For testing purposes we could choose randomly, sequentially, by longest, shortest, ...
 		val someSideIndex = chooseRandomSide
 		computeAreaFromBaseSide(someSideIndex)
 	}
-	def computeAreaFromHeronsFormula() : PlanarArea = {
+
+	def computeAreaFromHeronsFormula(): PlanarArea = {
 		// https://en.wikipedia.org/wiki/Heron%27s_formula
 		// A = \sqrt{s(s-a)(s-b)(s-c)},
 		val perimPN = computePerimeter()
@@ -116,7 +128,8 @@ trait TriComputeMeasures extends HasTriSideLengths {
 		// val aDif
 		???
 	}
-	def computeAreaFromBaseSide(baseSideIndex : SideNum) : PlanarArea = {
+
+	def computeAreaFromBaseSide(baseSideIndex: SideNum): PlanarArea = {
 		// Using:   area = base * height / 2
 		val heightPPN: PositivePN = computeHeightAboveBaseSide(baseSideIndex)
 		val basePPN: PositivePN = getSideLength(baseSideIndex)
@@ -125,18 +138,19 @@ trait TriComputeMeasures extends HasTriSideLengths {
 		area.asInstanceOf[PlanarArea]
 	}
 
-	def computeHeightAboveBaseSide(baseSideIndex : SideNum) : PlanarArea = {
+	def computeHeightAboveBaseSide(baseSideIndex: SideNum): SideLen = {
 		???
 	}
-
-	// Number we have to multiply this triangle's sides by to get a tri equiv to other
-	def computeScaleOfSimilarTSL(other : HasTriSideLengths) : Option[PositivePN] = ???
-	def scaleToSimilarTSL(scale : PositivePN) : HasTriSideLengths = ???
+}
+trait TriSideTransforms extends HasTriSideLengths {
+	// Sides scaled up, with order of sides unchanged.
+	def makeScaledTSL(scale : PositivePN) : HasTriSideLengths = ???
 
 }
 
 // Do we insist that these side lengths be in reduced form?
-abstract class TriSideLengths[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](sideA : SL, sideB : SL, sideC : SL) extends HasTriSideLengths {
+abstract class TriSideLengths[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](sideA : SL,
+					sideB : SL,	sideC : SL) extends HasTriSideLengths {
 	override type SideNum = SN
 	override type SideLen = SL
 	override type PlanarArea = PositivePN
@@ -164,8 +178,6 @@ class TSL_Factory[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](sideNumFacto
 		}
 		tsl
 	}
-
-	// def mkCandidateTSL = ???
 }
 
 sealed trait PracticeSideNum extends NatNumBetweenOneAndThree
@@ -182,8 +194,3 @@ class PracticeFactoryFactory {
 	val myTslFact  = new TSL_Factory[PracticeSideNum, PositivePN](mySideNumFact)
 
 }
-
-
-
-// case class PSN_One() extends PracticeSideNum
-//case class PSN_Two extends PracticeSideNum
