@@ -24,7 +24,16 @@ case class FullPIBI(posBI: BigInt) extends PosIntBigImpl(posBI) {
 
 	override def timesIPN(otherIPN: IntegerPN): IntegerPN = ???
 
-	override def plusNonnegPN(nngPN: NonnegPN): PositivePN = ???
+	override def plusNonnegPN(nngPN: NonnegPN): PositivePN = {
+		if (nngPN.isIntegerPN) {
+			// These case breakdowns are fun as think+learn exercise, but not very practical
+		}
+		val nngBD: BigDecimal = nngPN.asScalaBigDec.get
+		val ourPosBD = BigDecimal(posBI)
+		val sumBD: BigDecimal = ourPosBD + nngBD
+		println(s"plusNonnegPN computed ${ourPosBD}+${nngBD} = sumBD=${sumBD}")
+		???
+	}
 
 	override protected def reciprocalPN: PositivePN = ???
 

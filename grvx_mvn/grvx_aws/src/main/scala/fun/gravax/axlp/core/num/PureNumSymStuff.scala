@@ -139,7 +139,11 @@ trait IntegerPN extends PureNum with YaflIntNum {
 
 	def asScalaBigInt : Option[BigInt]
 
-	override def asScalaBigDec: Option[BigDecimal] = ???
+	override def asScalaBigDec: Option[BigDecimal] = {
+		val bi_opt = asScalaBigInt
+		val bd_opt = bi_opt.map(BigDecimal(_))
+		bd_opt
+	}
 }
 trait ZeroPN extends PureNum with IntegerPN with NonnegPN with NonposPN {
 	override type ComplementType = ZeroPN

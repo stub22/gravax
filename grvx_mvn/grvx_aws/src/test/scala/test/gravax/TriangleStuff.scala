@@ -99,14 +99,14 @@ trait TriCheckFeatures extends TriFindSides {
 	def findHypotenuseSide : Option[SideNum] = ??? // Index of the longest side IF this is a right triangle, else None
 }
 trait TriComputeMeasures extends HasTriSideLengths {
-	val myComputeNumberFactory: PracticeFreeNumFactory
-	val myFreeIntFactory = myComputeNumberFactory.myFreeIntFactory
+	protected def getComputeNumberFactory: PracticeFreeNumFactory
+	private val myFreeIntFactory = getComputeNumberFactory.myFreeIntFactory
 	val pos02: PosIntPN = myFreeIntFactory.getPos02
 
 	def computePerimeter(): PositivePN = {
-		val (sa, sb, sc) = getSideLengthsTuple
-		val perim: PureNum = sa.plusPN(sb).plusPN(sc)
-		perim.asInstanceOf[SideLen]
+		val (sa, sb, sc) : (SideLen, SideLen, SideLen) = getSideLengthsTuple
+		val perim: PositivePN = sa.plusPositivePN(sb).plusPositivePN(sc)
+		perim
 	}
 
 	def computeArea(): PlanarArea = {
@@ -148,9 +148,11 @@ trait TriSideTransforms extends HasTriSideLengths {
 
 }
 
+trait TslFeatures extends HasTriSideLengths  with TriComputeMeasures with TriCheckFeatures with TriSideTransforms
+
 // Do we insist that these side lengths be in reduced form?
 abstract class TriSideLengths[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](sideA : SL,
-					sideB : SL,	sideC : SL) extends HasTriSideLengths {
+					sideB : SL,	sideC : SL) extends TslFeatures {
 	override type SideNum = SN
 	override type SideLen = SL
 	override type PlanarArea = PositivePN
@@ -167,14 +169,17 @@ abstract class TriSideLengths[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](
 }
 
 
-class TSL_Factory[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](sideNumFactory : PurePosIntFactory[SN]) {
-	def mkTSL(sideA : SL, sideB : SL, sideC : SL) : HasTriSideLengths = {
+class TSL_Factory[SN <: NatNumBetweenOneAndThree, SL <: PositivePN](sideNumFactory : PurePosIntFactory[SN],
+																	computeNumFactory : PracticeFreeNumFactory  ) {
+	def mkTSL(sideA : SL, sideB : SL, sideC : SL) : TslFeatures = {
 		println(s"TSL_Factory.mkTsl got sideA=$sideA, sideB=$sideB, sideC=$sideC")
 		println(s"TSL_Factory.mkTsl sees sideNumFactory=$sideNumFactory")
 		val extraPos01 = sideNumFactory.getPos01
 		println(s"TSL_Factory.mkTsl found extraPos01=$extraPos01")
 		val tsl = new TriSideLengths[SN, SL](sideA, sideB, sideC) {
 			override protected def getSideNumFactory: PurePosIntFactory[SN] = sideNumFactory
+
+			override protected def getComputeNumberFactory: PracticeFreeNumFactory = computeNumFactory
 		}
 		tsl
 	}
@@ -188,9 +193,13 @@ class PracticeFactoryFactory {
 			new FullPIBI(posBI) with PracticeSideNum
 		}
 	}
+	// This factory is meant to provide lengths of sides, specifically.
 	val mySideLenFact = new PracticeFreeNumFactory {
 		override val myFreeIntFactory = new SmallFreeIntFactory()
 	}
-	val myTslFact  = new TSL_Factory[PracticeSideNum, PositivePN](mySideNumFact)
+	// In theory this could be a different kind of number factory.
+	// Its role is to supply constants needed in calculations.
+	private val myComputeNumFact : PracticeFreeNumFactory = mySideLenFact
+	val myTslFact  = new TSL_Factory[PracticeSideNum, PositivePN](mySideNumFact, myComputeNumFact)
 
 }

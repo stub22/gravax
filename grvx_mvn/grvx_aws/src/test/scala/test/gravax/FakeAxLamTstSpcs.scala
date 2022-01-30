@@ -26,29 +26,42 @@ class FirstAxLamSpec extends AnyFlatSpec {
 	}
 }
 
-
-class FirstTriSpec extends AnyFlatSpec {
-	// type OurSideNum = PracticeSideNum
-	// type OurSideLen =
-
+trait TslHelper {
 	val myPFF = new PracticeFactoryFactory
 	val mySideNumFact: PurePosIntFactory[PracticeSideNum] = myPFF.mySideNumFact
 	val mySideLenFact: PracticeFreeNumFactory = myPFF.mySideLenFact
 	val myLengthyIntFact: SmallFreeIntFactory = mySideLenFact.myFreeIntFactory
 	val myTslFactory: TSL_Factory[PracticeSideNum, PositivePN] =  myPFF.myTslFact
 
+	def mkTriFromSmallPosInts(sideLenA : Int, sideLenB : Int, sideLenC :Int) : TslFeatures = {
+		val posA: PosIntPN = myLengthyIntFact.mkSmallPosIntPN(sideLenA)
+		val posB = myLengthyIntFact.mkSmallPosIntPN(sideLenB)
+		val posC = myLengthyIntFact.mkSmallPosIntPN(sideLenC)
+		val tsl: TslFeatures	 = myTslFactory.mkTSL(posA, posB, posC)
+		tsl
+	}
+}
+
+class FirstTriSpec extends AnyFlatSpec {
+	// type OurSideNum = PracticeSideNum
+	// type OurSideLen =
+	val myHelper = new TslHelper {}
+
 	"A TSL factory" should "make some triangle side lengths" taggedAs(Tag_NoBatch) in {
 		println("Hey I'm tryin to make some TSLs here")
-		val pos31 = myLengthyIntFact.mkSmallPosIntPN(31)
-		val pos17 = myLengthyIntFact.mkSmallPosIntPN(17)
-		val pos24 = myLengthyIntFact.mkSmallPosIntPN(24)
 		// First tri has integer sides
-		val tsl5001: HasTriSideLengths = myTslFactory.mkTSL(pos24, pos31, pos17)
-		println(s"Made tsl5001=${tsl5001}")
-		val slTup = tsl5001.getSideLengthsTuple
+		val goodTsl5001 = myHelper.mkTriFromSmallPosInts(33,18,27)
+		println(s"Made goodTsl5001=${goodTsl5001}")
+		val slTup = goodTsl5001.getSideLengthsTuple
 		println(s"slTup=$slTup")
+		val perim = goodTsl5001.computePerimeter()
+		println(s"perimiter=$perim")
 	}
 
+	"A TSL classifier" should "classify some TSLs to tell us which predicates they satisfy  " in {
+		val goodTsl5002 = myHelper.mkTriFromSmallPosInts(17,14,23)
+
+	}
 }
 /*
 axLam : Yafl
