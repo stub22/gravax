@@ -1,76 +1,88 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <parent>
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<parent>
 		<groupId>fun.gravax</groupId>
 		<artifactId>gravax.root</artifactId>
-		<version>1.0.0-SNAPSHOT</version>	
-    </parent>
-    <modelVersion>4.0.0</modelVersion>
-    <artifactId>gravax.xtyp</artifactId>
+		<version>1.0.0-SNAPSHOT</version>
+	</parent>
+	<modelVersion>4.0.0</modelVersion>
+	<artifactId>gravax.xtyp</artifactId>
 
 
-    <dependencies>
-        <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-library</artifactId>
-            <version>${scala.version}</version>
-        </dependency>
+	<dependencies>
+		<dependency>
+			<groupId>org.scala-lang</groupId>
+			<artifactId>scala-library</artifactId>
+			<version>${scala.version}</version>
+		</dependency>
 
-        <dependency>
-            <groupId>org.scalatest</groupId>
-            <artifactId>scalatest_2.13</artifactId>
-            <version>${scalatest.lib.version}</version>
-            <scope>test</scope>
-        </dependency>
+		<dependency>
+			<groupId>org.scalatest</groupId>
+			<artifactId>scalatest_2.13</artifactId>
+			<version>${scalatest.lib.version}</version>
+			<scope>test</scope>
+		</dependency>
 
-        <dependency>
+		<dependency>
+			<groupId>org.typelevel</groupId>
+			<artifactId>cats-core_2.13</artifactId>
+			<version>2.7.0</version>
+		</dependency>
 
-            <groupId>org.typelevel</groupId>
-            <artifactId>cats-core_2.13</artifactId>
-            <version>2.7.0</version>
+		<!-- cats-free is not required for Spire or Effect, but we trying it for higher kind modeling -->
+		<dependency>
+			<groupId>org.typelevel</groupId>
+			<artifactId>cats-free_2.13</artifactId>
+			<version>2.7.0</version>
+		</dependency>
 
-        </dependency>
+		<dependency>
+			<groupId>org.typelevel</groupId>
+			<artifactId>spire_2.13</artifactId>
+			<version>0.18.0-M3</version>
+		</dependency>
 
-        <dependency>
-            <artifactId>spire_2.13</artifactId>
-            <groupId>org.typelevel</groupId>
-            <version>0.18.0-M3</version>
-        </dependency>
 
-    </dependencies>
+		<dependency>
+			<groupId>org.typelevel</groupId>
+			<artifactId>cats-effect_2.13</artifactId>
+			<version>3.3.11</version>
+		</dependency>
 
-    <repositories>
-        <repository>
-            <id>snapshots-repo</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-            <releases>
-                <enabled>false</enabled>
-            </releases>
-            <snapshots>
-                <enabled>true</enabled>
-            </snapshots>
-        </repository>
-    </repositories>
-    <build>
-        <sourceDirectory>src/main/scala</sourceDirectory>
-        <testSourceDirectory>src/test/scala</testSourceDirectory>
+	</dependencies>
 
-        <plugins>
+	<repositories>
+		<repository>
+			<id>snapshots-repo</id>
+			<url>https://oss.sonatype.org/content/repositories/snapshots</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
+	<build>
+		<sourceDirectory>src/main/scala</sourceDirectory>
+		<testSourceDirectory>src/test/scala</testSourceDirectory>
 
-            <plugin>
-                <groupId>net.alchim31.maven</groupId>
-                <artifactId>scala-maven-plugin</artifactId>
-                <version>${scala.plugin.version}</version>
-            </plugin>
-            <!-- Enable execution (by maven) of scalatests in this module (without any annotations required) -->
-            <plugin>
-                <groupId>org.scalatest</groupId>
-                <artifactId>scalatest-maven-plugin</artifactId>
-                <version>${scalatest.plugin.version}</version>
-            </plugin>
-        </plugins>
+		<plugins>
 
-    </build>
+			<plugin>
+				<groupId>net.alchim31.maven</groupId>
+				<artifactId>scala-maven-plugin</artifactId>
+				<version>${scala.plugin.version}</version>
+			</plugin>
+			<!-- Enable execution (by maven) of scalatests in this module (without any annotations required) -->
+			<plugin>
+				<groupId>org.scalatest</groupId>
+				<artifactId>scalatest-maven-plugin</artifactId>
+				<version>${scalatest.plugin.version}</version>
+			</plugin>
+		</plugins>
+
+	</build>
 </project>

@@ -39,11 +39,14 @@ trait WeakRealNum extends ArithmeticNum with DividableNum[WeakRealNum] with Clos
 }
 
 trait ExactNum extends ArithmeticNum {
+	// Exact numbers can reliably check for equality
 	def reliableZeroCheck : Boolean
 	def reliableEqualsCheck(otherEN : MyArgTy) : Boolean
 
 	override def fastWeakZeroCheck: Option[Boolean] = Some(reliableZeroCheck)
 	override def fastWeakEqualsCheck(otherEN: MyArgTy): Option[Boolean] = Some(reliableEqualsCheck(otherEN))
+
+	def asRealNum : WeakRealNum
 }
 
 // Logical constraints may be enforced through WANT, which should actually be an extension of WeakAlgebraicNum.

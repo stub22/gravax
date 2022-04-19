@@ -10,14 +10,18 @@ trait FromSpireReal extends FromSpireNum with WeakRealNum {
 	val mySpireReal : Real
 }
 
-trait FromSpireRat extends FromSpireNum  with WeakRationalNum[FromSpireRat] {
+trait FromSpireRat extends FromSpireNum  with WeakRationalNum[FromSpireRat]  {
 	val mySpireRat : Rational
 }
 
 private class SRtNImpl(oneSpireRat : Rational) extends FromSpireRat {
 	override val mySpireRat: Rational = mySpireRat
 
-	override def plus(otherRN: FromSpireRat): FromSpireRat = ???
+	override def plus(otherFSR: FromSpireRat): FromSpireRat = {
+		val otherRat = otherFSR.mySpireRat
+		val sumRat = mySpireRat.+(otherRat)
+		new SRtNImpl(sumRat)
+	}
 
 	override def negate: FromSpireRat = ???
 
@@ -30,6 +34,8 @@ private class SRtNImpl(oneSpireRat : Rational) extends FromSpireRat {
 	override def reliableZeroCheck: Boolean = ???
 
 	override def reliableEqualsCheck(otherEN: FromSpireRat): Boolean = ???
+
+	override def asRealNum: WeakRealNum = ???
 }
 trait FromSpireAlg extends FromSpireNum with WeakAlgebraicNum[FromSpireAlg] {
 	/** *
@@ -59,4 +65,7 @@ trait FromSpireAlg extends FromSpireNum with WeakAlgebraicNum[FromSpireAlg] {
 }
 private abstract class SAlgNImpl(oneSpireAlg : Algebraic) extends FromSpireAlg {
 
+}
+object SpireBackedNumMaker {
+	def mkRat(sRat : Rational) : FromSpireRat = new SRtNImpl(sRat)
 }

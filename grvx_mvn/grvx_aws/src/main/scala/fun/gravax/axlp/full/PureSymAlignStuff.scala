@@ -19,14 +19,14 @@ AxLam is encodable as RDF following AxLam-Schema, Data easily translates to JSON
 AxLam functions usually use JSON for input+output, while quietly reading from some (cachable) RDF.
 
 AxLam composite functions are defined via RDF graphs.
-Primitive functions are declared with RDF names and
-implemented in a code library.  Primitive functions
-must be treated as unreliable by any system seeking
-to use AxLam securely, which is probably a bad idea.
+Primitive functions are declared with RDF names and implemented in a code library.
+Regarding purity and totality of a particular functions, proofs may be offered.
+
+Primitive functions must be treated as unreliable by any system seeking to use AxLam securely,
+which is probably a bad idea.
 For experimental usage, existing result data may be
-loaded from RDF and treated as "known".  The
-"code" of AxLam funcs always comes from "known
-result data".
+loaded from RDF and treated as "known".
+The "code" of AxLam funcs always comes from "known" result data.
 
 AxLam services are built using AxLamImpl runtime methods for "query" and "eval".
 Proceeding from general to specific:

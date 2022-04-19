@@ -16,17 +16,17 @@ A user model describes r-values using function composition where functions are e
     associative monoidal operations (e.g. string-concat, multiply)
 
 Each r-value composition must be describable as a single finite record of data,
-which we may treat as a term in an impredicative universe of (finite) data-only types.
+which we may treat as a term in a predicative universe of (finite) data-only types.
 
-There are no recursive functions or inductive definitions in this impredicative universe.
-This impred. universe is compatible with first order propositional logic.
-Call this universe #AxLamIFO where IFO = Impredicative First Order.
+There are no recursive functions or inductive definitions in this predicative universe.
+This pred. universe is compatible with first order propositional logic.
+Call this universe #AxLamPFO where PFO = Predicative First Order.
 Thus
 
 User identifies an l-values as typed context frames (capturing a single r-value of compatible type).
 
 An expnded r-value specifies
-1) Its imported names (URIs of types and pure-IFO-functions), with optional local alias names
+1) Its imported names (URIs of types and pure-PFO-functions), with optional local alias names
 2) Optional named typed parameters, where each type is a dependent-typed-expression
 3) Optional local constants
 4) A single composed expression as a pointed labeled DAG (directed acyclic graph).
@@ -76,5 +76,8 @@ object RunCattyWumpus {
 
 		val scs = new MakeSpireDoSomethinCool{}
 		scs.doSomeCmplxStf
+
+		val catsApiXplr = new HmmOkCats {}
+		catsApiXplr.mkMonadExamples
 	}
 }

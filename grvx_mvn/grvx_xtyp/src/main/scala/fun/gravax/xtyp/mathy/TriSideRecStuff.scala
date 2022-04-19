@@ -44,7 +44,7 @@ trait ChecksTSR_Flavors {
 }
 abstract class TSRFlavorTag(tagName : String) {
 	def getTagName : String = tagName
-	def checkTagFor(fc : ChecksTSR_Flavors) : Boolean
+	def checkTagFor(fc : ChecksTSR_Flavors) : Boolean		// Does fc have our flavor?
 }
 object TSRFlavorTags {
 	val FT_MALFORMED = new TSRFlavorTag("MALFORMED") {

@@ -13,17 +13,16 @@ A TriShape must be able to supply these numbers in a form suitable for calculati
 The 8 numbers of the triangle are related by numerous equations.
 A TriShape must satisfy all these equations, or else it should not be constructable.
 Relations involving angles depend on trigonometric functions.
-
  */
 
 trait TriShape {
 	// These types are separated as factors for definition of medium-strong subtypes of TriShape
 	type	RealNT <: WeakRealNum
 	type 	AngleTy <: GeometricPlaneAngle[RealNT]
-	type	LengthTy <: RealNT
-	type	AreaTy <: RealNT
+	type	LengthTy <:  ArithmeticNum
+	type	AreaTy <: ArithmeticNum
 	// These 8 numbers are called the "shape numbers" of the single, concrete triangle-shape.
-	// An implementor supplies these number resultss based on it's chosen representation.
+	// An implementor supplies these number results based on it's chosen representation.
 	// The results as ordered tuples allows for both type-safety and efficiency of chained computations
 	def sidesIncreasing : (LengthTy, LengthTy, LengthTy)
 	def anglesIncreasng : (AngleTy, AngleTy, AngleTy)
@@ -58,7 +57,7 @@ trait TriShapeSideAggCalc[LengthTy <: WeakAlgebraicNum[LengthTy], AreaTy <: Weak
 		val hmm: LengthTy = sideA.plus(sideB)
 		???
 	}
-	// The input lenghts must satisfy triangle inequality (or be on boundary => zero area)
+	// The input lenghts must satisfy triangle inequality (or be on boundary, implying shape.area==0)
 	def calcAreaFromPerimAndTwoSides(perim: LengthTy, sideA : LengthTy, sideB : LengthTy) : AreaTy = {
 		val numTwo: CountTy = myCountConsts.num_2
 		val promotedNumTwo = numTwo
@@ -69,3 +68,7 @@ trait TriShapeSideAggCalc[LengthTy <: WeakAlgebraicNum[LengthTy], AreaTy <: Weak
 
 }
 
+trait ParamTriShape[LengthTy <: WeakAlgebraicNum[LengthTy], AreaTy <: WeakAlgebraicNum[AreaTy], CountTy <: WeakCountNum]
+extends TriShape {
+
+}

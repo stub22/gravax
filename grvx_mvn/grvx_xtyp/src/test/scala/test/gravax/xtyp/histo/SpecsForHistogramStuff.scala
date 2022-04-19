@@ -1,4 +1,4 @@
-package test
+package test.gravax.xtyp.histo
 
 import fun.gravax.xtyp.catty.HistoBinEasy
 import org.scalatest.Tag
@@ -18,3 +18,4 @@ class FirstHistoSpec extends AnyFlatSpec {
 
 	}
 }
+
