@@ -57,6 +57,7 @@
     <modules>
         <module>grvx_grind</module>
         <module>grvx_aws</module>
+        <module>grvx_dflow</module>
         <module>grvx_xtyp</module>
     </modules>
 
