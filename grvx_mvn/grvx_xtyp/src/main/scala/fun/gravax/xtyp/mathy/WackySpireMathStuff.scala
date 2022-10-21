@@ -7,11 +7,17 @@ private trait WackySpireMathStuff
 trait MakeSpireDoSomethinCool {
 
 	def doSomeCmplxStf : Unit = {
+		import spire.implicits._
 
 		val a = 3.0
 		val b = 5.0
-		val c = Complex(a, b)
-		println(s"Made c=${c}")
+		val c01 = Complex[Double](a, b)
+		val c02 = Complex[Double](a - b, -7.0)
+		println(s"Made c01=${c01} c02=${c02}")
+		val sum : Complex[Double] = c01 + c02 // rely on implicits to bring `+` in scope
+		val prod : Complex[Double] = c01 * c02 // rely on implicits to bring `*` in scope
+		println(s"Made sum=${sum} prod=${prod}")
+
 	}
 }
 

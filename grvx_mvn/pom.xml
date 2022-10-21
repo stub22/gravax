@@ -16,7 +16,7 @@
 
         <surefire.plugin.version>2.12.4</surefire.plugin.version>
 
-        <scala.version>2.13.7</scala.version>
+        <scala.version>2.13.8</scala.version>
         <scala.plugin.version>4.5.6</scala.plugin.version>
 
         <scalatest.lib.version>3.2.10</scalatest.lib.version>

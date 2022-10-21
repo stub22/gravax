@@ -31,7 +31,7 @@
 			<version>2.7.0</version>
 		</dependency>
 
-		<!-- cats-free is not required for Spire or Effect, but we trying it for higher kind modeling -->
+		<!-- cats-free is not required for Spire or Effect, but we are trying it for higher kind modeling -->
 		<dependency>
 			<groupId>org.typelevel</groupId>
 			<artifactId>cats-free_2.13</artifactId>
@@ -41,14 +41,25 @@
 		<dependency>
 			<groupId>org.typelevel</groupId>
 			<artifactId>spire_2.13</artifactId>
-			<version>0.18.0-M3</version>
+			<version>0.18.0</version>
 		</dependency>
 
-
+<!-- Now getting this transitively from fs2
 		<dependency>
 			<groupId>org.typelevel</groupId>
 			<artifactId>cats-effect_2.13</artifactId>
 			<version>3.3.11</version>
+		</dependency>
+-->
+		<dependency>
+			<groupId>co.fs2</groupId>
+			<artifactId>fs2-core_2.13</artifactId>
+			<version>3.2.8</version>
+		</dependency>
+		<dependency>
+			<groupId>co.fs2</groupId>
+			<artifactId>fs2-io_2.13</artifactId>
+			<version>3.2.8</version>
 		</dependency>
 
 	</dependencies>

@@ -109,9 +109,9 @@ trait ExWithKleisli {
 		val process: Int => X[Double] = num => m4x.pure(num * piConst)
 		val half: Double => X[Double] = number => m4x.pure(number / 2.0)
 
-		val kg = Kleisli(generate)
-		val kp = Kleisli(process)
-		val ks = Kleisli(half)
+		val kg: Kleisli[X, Unit, Int] = Kleisli(generate)
+		val kp: Kleisli[X, Int, Double] = Kleisli(process)
+		val ks: Kleisli[X, Double, Double] = Kleisli(half)
 
 		// Our explicit monad is used to provide FlatMap[X] for compose / andThen
 		val c: Kleisli[X, Int, Double] = ks.compose(kp)(m4x)
