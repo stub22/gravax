@@ -24,9 +24,11 @@
     </dependencyManagement>
     <dependencies>
         <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>${scala.version}</version>
         </dependency>
+
         <!--
         <dependency>
             <groupId>${axmgc.groupId}</groupId>
@@ -39,6 +41,29 @@
             <artifactId>scalatest_2.13</artifactId>
             <version>${scalatest.lib.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-memory-netty</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-vector</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+
+
+        <!-- 2022-01-14 pulling dmo.fibo project into gravcld so we can use MdlStat code to analyze RDF -->
+        <dependency>
+            <groupId>${axmgc.groupId}</groupId>
+            <artifactId>axiomagic.dmo.fibo</artifactId>
+            <version>${axmgc.version}</version>
         </dependency>
     </dependencies>
 

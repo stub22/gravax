@@ -1,4 +1,4 @@
-package fun.gravax.gravnum
+package fun.gravax.aa.yafl.full
 
 private trait YaflUriStuff
 
