@@ -3,10 +3,11 @@ package fun.gravax.dflow.zrunk
 import com.fasterxml.jackson.databind.JsonNode
 import org.apache.kafka.clients.consumer.ConsumerConfig.{VALUE_DESERIALIZER_CLASS_CONFIG, _}
 import org.apache.kafka.clients.consumer.KafkaConsumer
+import org.apache.kafka.clients.producer.{KafkaProducer, Producer, ProducerRecord}
 import org.apache.kafka.common.PartitionInfo
 import org.apache.kafka.common.serialization.{Serde, Serdes, StringDeserializer}
 import org.apache.kafka.connect.json.{JsonDeserializer, JsonSerializer}
-import org.apache.kafka.streams.kstream.{Consumed, KStream, Printed}
+import org.apache.kafka.streams.kstream.{Consumed, KStream, Predicate, Printed}
 import org.apache.kafka.streams.{KafkaStreams, StreamsBuilder, Topology}
 
 import java.util
@@ -15,10 +16,22 @@ import java.util.Properties
 object RunKafkaBurps {
 	def main(args: Array[String]): Unit = {
 		println("Burping Kafka")
-		doTopicDump
-		doSomeBurpin
-
+		val bbb = new BBB{}
+		bbb.doTopicDump
+		bbb.startListeningForBurps
+		bbb.mkSomeBurps
 	}
+
+}
+// BBB = Big-Boss of Burpin
+trait BBB {
+	// "dum01" topic created from console with:
+	//  docker-compose exec kafka kafka-topics  --bootstrap-server localhost:9092  --topic dum01 --replication-factor 1 --partitions 4 --create
+	// Then in ksql console we can do:
+	// CREATE STREAM d01a WITH (KAFKA_TOPIC='dum01')
+	// INSERT INTO d01a (XTXT, YTXT, ZTXT) VALUES ('is X 3a', 'was Y 3b', 'now Z 3c')
+	// CREATE STREAM X01A AS SELECT XTXT from D01A EMIT CHANGES;
+	// CREATE STREAM Y01A WITH (VALUE_FORMAT='KAFKA') AS SELECT YTXT from D01A EMIT CHANGES;
 	val KFK_BOOTY_URL = "localhost:29092" // not "kafka:9092"
 
 	def doTopicDump : Unit = {
@@ -27,50 +40,80 @@ object RunKafkaBurps {
 		}
 		topDump.dumpTopicList
 	}
-	def doSomeBurpin : Unit = {
-		val bb = new BossBurper {
+	def startListeningForBurps : Unit = {
+		val bb = new BossBurpListener {
 			override val kfkBootyURL: String = KFK_BOOTY_URL
 		}
 
-		val strmDum01: KStream[Void, String] = bb.mkWeakStream("dum01")
-		println("Got strmDum01: " + strmDum01)
-		bb.mkTextDumpers(strmDum01, "dum01-strm", false)
+		/*
+		 "Data should be null for a VoidDeserializer."
+		 Deserialization exception handler is set to fail upon a deserialization error.
+		 If you would rather have the streaming pipeline continue after a deserialization error, please set the
+		 default.deserialization.exception.handler appropriately.
+		 */
 
-		val strmY01A : KStream[Void, String] = bb.mkWeakStream("Y01A")
+				val flg_dumAsJson = true
+				val flg_dumHasKy = true
+				if (flg_dumAsJson) {
+					if (flg_dumHasKy) {
+						val jsonStrmDum01_strngKy: KStream[String, JsonNode] = bb.mkRecordStream_strngKey("dum01")
+						bb.mkJsonDumper_withKey(jsonStrmDum01_strngKy, "json-dum01-withKey", true)
+					} else {
+						val jsonStrmDum01_noKy: KStream[Void, JsonNode] = bb.mkRecordStream_noKey("dum01")
+						bb.mkJsonDumper_noKey(jsonStrmDum01_noKy, "json-dum01-noKey", true)
+					}
+				} else {
+					val strmDum01: KStream[Void, String] = bb.mkStreamWithoutKey("dum01")
+					println("Got strmDum01: " + strmDum01)
+					bb.mkTextDumpers(strmDum01, "dum01-strm", false)
+				}
+				val strmY01A : KStream[Void, String] = bb.mkStreamWithoutKey("Y01A")
+				bb.mkTextDumpers(strmY01A, "y01a-strm", false)
 
-		bb.mkTextDumpers(strmY01A, "y01a-strm", false)
-
-		val strmX01A : KStream[Void, JsonNode] = bb.mkRecordStream("X01A")
-
-		bb.mkJsonDumper(strmX01A, "x01a-strm", true)
-
+				val jsonStrmX01A : KStream[Void, JsonNode] = bb.mkRecordStream_noKey("X01A")
+				bb.mkJsonDumper_noKey(jsonStrmX01A, "json-x01a-strm", true)
 
 		// you can also print using the `print` operator
 		// stream.print(Printed.<String, String>toSysOut().withLabel("source"));
-		bb.launchStreamsProducerApp
+		bb.launchBurpListenerStreams
 		println("END of Burp-Start")
 	}
-
+	def mkSomeBurps : Unit = {
+		val dumPost = new DummyPoster {
+			override val myKfkBootyUrl = KFK_BOOTY_URL
+		}
+		dumPost.postPracticeMsg
+	}
 }
 import org.apache.kafka.streams.StreamsConfig
 import org.apache.kafka.clients.consumer.ConsumerConfig
 
-trait BossBurper {
+trait PropMaker {
+	def scalaMapToProps(smap : Map[String, Object]) : Properties = {
+		import scala.jdk.CollectionConverters._
+		val jmap: util.Map[String, Object] = smap.asJava
+		javaMapToProps(jmap)
+	}
+	def javaMapToProps(jmap: util.Map[String, Object]) : Properties = {
+		val jup = new Properties()
+		jup.putAll(jmap)
+		jup
+	}
+}
+trait BossBurpListener {
 
 	val kfkBootyURL : String
 
-	def getProducerProps : Properties = {
+	lazy val myPMkr = new PropMaker {}
+	def getListenerProps : Properties = {
 
-		val producerPropsSMap = Map (
-			StreamsConfig.APPLICATION_ID_CONFIG -> "brp-prd-app",
+		val listenerPropsSMap = Map[String, Object] (
+			StreamsConfig.APPLICATION_ID_CONFIG -> "brp-listen-app",
 			StreamsConfig.BOOTSTRAP_SERVERS_CONFIG -> kfkBootyURL,
 			ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest"
+
 		)
-		import scala.jdk.CollectionConverters._
-		val ppJMap: util.Map[String, String] = producerPropsSMap.asJava
-		val jup = new Properties()
-		jup.putAll(ppJMap)
-		jup
+		myPMkr.scalaMapToProps(listenerPropsSMap)
 	}
 
 	def UNUSED_mkTopologyFromScratch : Topology = ???  // Unused bc We get topology from a streams-builder
@@ -80,18 +123,43 @@ trait BossBurper {
 	// https://kafka.apache.org/27/javadoc/org/apache/kafka/streams/StreamsBuilder.html
 	def getStreamsBuilder : StreamsBuilder = myStrmsBldr
 
-	def mkWeakStream(topicNm : String) : KStream[Void, String] = {
+
+	// Deserialization fails if a key unexpectedly appears.
+	def mkStreamWithoutKey(topicNm : String) : KStream[Void, String] = {
 		// This adds a stream processor to the topology we are building up, which eventually gets
 		// realized during launchStreamsProducerApp method.
 
 		// This construction step requires only the BUILDER
 		val builder = getStreamsBuilder
-		val strm: KStream[Void, String] = builder.stream(topicNm)
+		val naiveStrmNoKey: KStream[Void, String] = builder.stream(topicNm)
+		if (false) {
+			val inStrm: KStream[String, String] = builder.stream(topicNm)
+			val filtPred = mkStringKeyFilterPred[String]
+			val fStrm: KStream[String, String] = inStrm.filter(filtPred)
+			val x = ???
+			val ttStrm = fStrm.transform[Void, String](x)
+			fStrm
+			???
+		} else naiveStrmNoKey
 		//   KStream<K, V> = return this.stream((Collection)Collections.singleton(topic))
-		strm
-	}
 
-	def mkRecordStream(topicNm : String) : KStream[Void, JsonNode] = {
+	}
+	def mkStringKeyFilterPred[VTI] : Predicate[String, VTI] = {
+		new Predicate[String, VTI]() {
+			override def test(k: String, v: VTI): Boolean = {
+				k == null
+			}
+		}
+	}
+	def getPlainJsonSerde: Serde[JsonNode] = {
+		val jsonSer = new JsonSerializer();
+		val jsonDeser = new JsonDeserializer();
+		val jsonSerde: Serde[JsonNode] = Serdes.serdeFrom(jsonSer, jsonDeser);
+		jsonSerde
+	}
+	def getVoidSerde: Serde[Void] = Serdes.Void()
+	def getStringSerde: Serde[String] = Serdes.String()
+	def mkRecordStream_noKey(topicNm : String) : KStream[Void, JsonNode] = {
 /*
 public <K,V> KStream<K,V> stream(String topic,    Consumed<K,V> consumed)
 Create a KStream from the specified topic. The "auto.offset.reset" strategy, TimestampExtractor,
@@ -103,17 +171,18 @@ topic - the topic names; cannot be null
 consumed - the instance of Consumed used to define optional parameters
  */
 
-		val jsonSer = new JsonSerializer();
-		val jsonDeser = new JsonDeserializer();
-		val jsonSerde: Serde[JsonNode] = Serdes.serdeFrom(jsonSer, jsonDeser);
-		val stringSerde: Serde[String] = Serdes.String()
-		val voidSerde = Serdes.Void()
 		val builder = getStreamsBuilder
 		// val jsonNodeSerde = Serdes.
-		val cnsmrCnf = Consumed.`with`(voidSerde, jsonSerde)
+		val cnsmrCnf: Consumed[Void, JsonNode] = Consumed.`with`(getVoidSerde, getPlainJsonSerde)
 		val strm: KStream[Void, JsonNode] = builder.stream(topicNm, cnsmrCnf)
 		strm
-
+	}
+	def mkRecordStream_strngKey(topicNm : String) : KStream[String, JsonNode] = {
+		val builder = getStreamsBuilder
+		// val jsonNodeSerde = Serdes.
+		val cnsmrCnf: Consumed[String, JsonNode] = Consumed.`with`(getStringSerde, getPlainJsonSerde)
+		val strm: KStream[String, JsonNode] = builder.stream(topicNm, cnsmrCnf)
+		strm
 	}
 
 	def mkTextDumpers(strm : KStream[Void, String], labelTxt : String, flg_more : Boolean) : Unit = {
@@ -143,24 +212,46 @@ V.toString=${v.toString}
 		}
 
 	}
-	def mkJsonDumper(strm : KStream[Void, JsonNode], labelTxt : String, flg_more : Boolean) : Unit = {
+	private def dumpJsonNodeDeets(jn : JsonNode, labelTxt : String) : Unit = {
+		val xtxt: JsonNode = jn.get("XTXT")
+		val xtt : String = if (xtxt != null) xtxt.asText("OOPS") else "NULL"
+		val ytxt: JsonNode = jn.get("YTXT")
+		val ytt : String = if (ytxt != null) ytxt.asText("OUCH") else "NULL"
+
+		println(s"${labelTxt} got xtxt=${xtxt}, xtt=${xtt}, ytxt=${ytxt}, ytt=${ytt}")
+	}
+	def mkJsonDumper_noKey(strm : KStream[Void, JsonNode], labelTxt : String, flg_more : Boolean) : Unit = {
 		val noResult = strm.print(Printed.toSysOut[Void, JsonNode].withLabel(labelTxt))
 		if (flg_more) {
 			strm.foreach((k, v) => {
-				println(s"Got record on strm=${strm} K=${k}, V.class=${v.getClass} V.toPrettyString=\n${v.toPrettyString}")
+				// V.class = com.fasterxml.jackson.databind.node.ObjectNode
+				println(s"${labelTxt} got record on strm=${strm} K=${k}, V.class=${v.getClass} V.toPrettyString=\n${v.toPrettyString}")
+				dumpJsonNodeDeets(v, labelTxt)
+			})
+		}
+	}
+	def mkJsonDumper_withKey(strm : KStream[String, JsonNode], labelTxt : String, flg_more : Boolean) : Unit = {
+		val noResult = strm.print(Printed.toSysOut[String, JsonNode].withLabel(labelTxt))
+		if (flg_more) {
+			strm.foreach((k, v) => {
+				// V.class = com.fasterxml.jackson.databind.node.ObjectNode
+				println(s"${labelTxt} got record on strm=${strm} K=${k}, V.class=${v.getClass} V.toPrettyString=\n${v.toPrettyString}")
+				dumpJsonNodeDeets(v, labelTxt)
 			})
 		}
 	}
 
-	def launchStreamsProducerApp : KafkaStreams = {
+
+	def launchBurpListenerStreams : KafkaStreams = {
 		val bldr = getStreamsBuilder
 		val topo: Topology = bldr.build()
-		println("Built topology: " + topo.describe())
-		val prodConf = getProducerProps
-		val streams = new KafkaStreams(topo, prodConf);
-		println("Starting streams");
+		println("launchBurpListenerStreams found built topology: " + topo.describe())
+		val listenConf = getListenerProps
+		println("launchBurpListenerStreams found listener conf properties: " + listenConf)
+		val streams = new KafkaStreams(topo, listenConf);
+		println("launchBurpListenerStreams is starting KafkaStreams processor");
 		streams.start();
-		println("Adding shutdown hook");
+		println("launchBurpListenerStreams is adding shutdown hook");
 		// close Kafka Streams when the JVM shuts down (e.g. SIGTERM)
 		val closeThread = new Thread() {
 			override def run(): Unit = {
@@ -173,8 +264,10 @@ V.toString=${v.toString}
 		streams
 	}
 
-
 }
+
+
+
 
 trait TopicDumper {
 	val kfkBootyURL : String
