@@ -23,7 +23,7 @@ trait DummyPoster {
 		override val kfkBootyURL: String = myKfkBootyUrl
 	}
 	def postPracticeMsg : Unit = {
-		val seqNum = 5008
+		val seqNum = 5009
 		postXYZ("prac_X_" + seqNum, "prac_Y_" + seqNum, "prac_Z_" + seqNum)
 	}
 	def postXYZ(xTxt : String, yTxt : String, zTxt : String): Unit =  {

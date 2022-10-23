@@ -58,20 +58,27 @@ trait BBB {
 					if (flg_dumHasKy) {
 						val jsonStrmDum01_strngKy: KStream[String, JsonNode] = bb.mkRecordStream_strngKey("dum01")
 						bb.mkJsonDumper_withKey(jsonStrmDum01_strngKy, "json-dum01-withKey", true)
+
+						val jsonStrmX01A_withKey : KStream[String, JsonNode] = bb.mkRecordStream_strngKey("X01A")
+						bb.mkJsonDumper_withKey(jsonStrmX01A_withKey, "json-x01a-strm-withKey", true)
+
 					} else {
 						val jsonStrmDum01_noKy: KStream[Void, JsonNode] = bb.mkRecordStream_noKey("dum01")
 						bb.mkJsonDumper_noKey(jsonStrmDum01_noKy, "json-dum01-noKey", true)
+
+						val jsonStrmX01A_noKy : KStream[Void, JsonNode] = bb.mkRecordStream_noKey("X01A")
+						bb.mkJsonDumper_noKey(jsonStrmX01A_noKy, "json-x01a-strm-noKey", true)
 					}
 				} else {
 					val strmDum01: KStream[Void, String] = bb.mkStreamWithoutKey("dum01")
-					println("Got strmDum01: " + strmDum01)
 					bb.mkTextDumpers(strmDum01, "dum01-strm", false)
 				}
-				val strmY01A : KStream[Void, String] = bb.mkStreamWithoutKey("Y01A")
-				bb.mkTextDumpers(strmY01A, "y01a-strm", false)
 
-				val jsonStrmX01A : KStream[Void, JsonNode] = bb.mkRecordStream_noKey("X01A")
-				bb.mkJsonDumper_noKey(jsonStrmX01A, "json-x01a-strm", true)
+				// FIXME:  Make a withKey version of mkTextDumpers
+				val strmY01A : KStream[Void, String] = bb.mkStreamWithoutKey("Y01A")
+				bb.mkTextDumpers(strmY01A, "y01a-strm-noKey", false)
+
+
 
 		// you can also print using the `print` operator
 		// stream.print(Printed.<String, String>toSysOut().withLabel("source"));
@@ -207,7 +214,7 @@ V.toString=${v.toString}
 		*/
 		if (flg_more) {
 			strm.foreach((k, v) => {
-				println(s"Got record on strm=${strm}") //  K.class=${k.getClass}, V.class=${v.getClass}")
+				println(s"Got record on strm=${strm} with k=${k} and v=${v}")
 			})
 		}
 
@@ -218,7 +225,7 @@ V.toString=${v.toString}
 		val ytxt: JsonNode = jn.get("YTXT")
 		val ytt : String = if (ytxt != null) ytxt.asText("OUCH") else "NULL"
 
-		println(s"${labelTxt} got xtxt=${xtxt}, xtt=${xtt}, ytxt=${ytxt}, ytt=${ytt}")
+		println(s" NODE DEETS ON ${labelTxt} are xtxt=${xtxt}, xtt=${xtt}, ytxt=${ytxt}, ytt=${ytt}")
 	}
 	def mkJsonDumper_noKey(strm : KStream[Void, JsonNode], labelTxt : String, flg_more : Boolean) : Unit = {
 		val noResult = strm.print(Printed.toSysOut[Void, JsonNode].withLabel(labelTxt))
