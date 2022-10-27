@@ -1,9 +1,8 @@
 package fun.gravax.dflow.zrunk
 
 import com.fasterxml.jackson.databind.JsonNode
-import org.apache.kafka.clients.consumer.ConsumerConfig.{VALUE_DESERIALIZER_CLASS_CONFIG, _}
+import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
-import org.apache.kafka.clients.producer.{KafkaProducer, Producer, ProducerRecord}
 import org.apache.kafka.common.PartitionInfo
 import org.apache.kafka.common.serialization.{Serde, Serdes, StringDeserializer}
 import org.apache.kafka.connect.json.{JsonDeserializer, JsonSerializer}
@@ -90,6 +89,7 @@ trait BBB {
 			override val myKfkBootyUrl = KFK_BOOTY_URL
 		}
 		dumPost.postPracticeMsg
+		dumPost.close()
 	}
 }
 import org.apache.kafka.streams.StreamsConfig
@@ -211,6 +211,15 @@ Note that although incorrect Serdes are a common cause of error, the cast except
 a class cast exception could be raised during processing, but the cause would not be wrong Serdes.
 Caused by: java.lang.ClassCastException: [B cannot be cast to java.lang.String
 V.toString=${v.toString}
+
+void foreach(ForeachAction<? super K,? super V> action)
+Perform an action on each record of KStream. This is a stateless record-by-record operation
+(cf. process(ProcessorSupplier, String...)). Note that this is a terminal operation that returns void.
+Terminal operation. Performs a stateless action on each record. (details)
+You would use foreach to cause side effects based on the input data (similar to peek) and then stop further processing
+of the input data (unlike peek, which is not a terminal operation).
+Note on processing guarantees: Any side effects of an action (such as writing to external systems) are
+not trackable by Kafka, which means they will typically not benefit from Kafka’s processing guarantees.
 		*/
 		if (flg_more) {
 			strm.foreach((k, v) => {
@@ -273,9 +282,6 @@ V.toString=${v.toString}
 
 }
 
-
-
-
 trait TopicDumper {
 	val kfkBootyURL : String
 
@@ -289,8 +295,8 @@ trait TopicDumper {
 			ConsumerConfig.GROUP_ID_CONFIG -> "burp-consumer-grp",
 			ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> kfkBootyURL ,
 			ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest",
-			KEY_DESERIALIZER_CLASS_CONFIG -> sdclz0,
-			VALUE_DESERIALIZER_CLASS_CONFIG -> sdclz0
+			ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG -> sdclz0,
+			ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG -> sdclz0
 		)
 		// StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, ssclz,)
 		import scala.jdk.CollectionConverters._
