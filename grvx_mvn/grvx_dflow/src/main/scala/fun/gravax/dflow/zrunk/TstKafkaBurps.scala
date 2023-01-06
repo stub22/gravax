@@ -24,15 +24,48 @@ object RunKafkaBurps {
 }
 // BBB = Big-Boss of Burpin
 trait BBB {
+	/*** Then in ksql console we can do:
 	// "dum01" topic created from console with:
 	//  docker-compose exec kafka kafka-topics  --bootstrap-server localhost:9092  --topic dum01 --replication-factor 1 --partitions 4 --create
-	// Then in ksql console we can do:
-	// CREATE STREAM d01a WITH (KAFKA_TOPIC='dum01')
-	// INSERT INTO d01a (XTXT, YTXT, ZTXT) VALUES ('is X 3a', 'was Y 3b', 'now Z 3c')
-	// CREATE STREAM X01A AS SELECT XTXT from D01A EMIT CHANGES;
-	// CREATE STREAM Y01A WITH (VALUE_FORMAT='KAFKA') AS SELECT YTXT from D01A EMIT CHANGES;
+
+	CREATE STREAM d01a WITH (KAFKA_TOPIC='dum01')
+	But the above does not work if there are no messages in the topic.
+
+	We get:    	Statement is missing the 'VALUE_FORMAT' property from the WITH clause.
+				Either provide one or set a default via the 'ksql.persistence.default.format.value' config.
+
+	https://docs.ksqldb.io/en/latest/developer-guide/ksqldb-reference/create-stream/
+
+	So then we try:
+	 	CREATE STREAM D2301A WITH (KAFKA_TOPIC='dum2301a', VALUE_FORMAT='json')
+	or
+	 	CREATE STREAM D2301A WITH (KAFKA_TOPIC='dum2301a', FORMAT='json')
+	and we get:
+		No columns supplied.
+
+	This works:
+	CREATE STREAM D2301A (XTXT VARCHAR KEY, YTXT VARCHAR, ZTXT VARCHAR) WITH (KAFKA_TOPIC='dum2301a', FORMAT='json')
+
+
+	// INSERT INTO D2301A (XTXT, YTXT, ZTXT) VALUES ('is X 3a', 'was Y 3b', 'now Z 3c')
+	// CREATE STREAM X2301A AS SELECT XTXT from D2301A EMIT CHANGES;
+		Now gets:   The projection contains no value columns.
+	So we change to:
+		CREATE STREAM X2301A AS SELECT XTXT, ZTXT from D2301A EMIT CHANGES;
+
+	// CREATE STREAM Y2301A WITH (VALUE_FORMAT='KAFKA') AS SELECT YTXT from D2301A EMIT CHANGES;
+	Now gets:    	 Key missing from projection.
+	The query used to build `Y2301A` must include the key column XTXT in its projection.
+
+	Changed to this - note no format settings.
+	  CREATE STREAM Y2301A AS SELECT XTXT, YTXT from D2301A EMIT CHANGES;
+
+	*/
 	val KFK_BOOTY_URL = "localhost:29092" // not "kafka:9092"
 
+	val DUM_TOPIC_NAME = "D2301A"
+	val X_TOPIC_NAME = "X2301A"
+	val Y_TOPIC_NAME = "Y2301A"
 	def doTopicDump : Unit = {
 		val topDump = new TopicDumper {
 			override val kfkBootyURL: String = KFK_BOOTY_URL
@@ -55,26 +88,26 @@ trait BBB {
 				val flg_dumHasKy = true
 				if (flg_dumAsJson) {
 					if (flg_dumHasKy) {
-						val jsonStrmDum01_strngKy: KStream[String, JsonNode] = bb.mkRecordStream_strngKey("dum01")
+						val jsonStrmDum01_strngKy: KStream[String, JsonNode] = bb.mkRecordStream_strngKey(DUM_TOPIC_NAME)
 						bb.mkJsonDumper_withKey(jsonStrmDum01_strngKy, "json-dum01-withKey", true)
 
-						val jsonStrmX01A_withKey : KStream[String, JsonNode] = bb.mkRecordStream_strngKey("X01A")
+						val jsonStrmX01A_withKey : KStream[String, JsonNode] = bb.mkRecordStream_strngKey(X_TOPIC_NAME)
 						bb.mkJsonDumper_withKey(jsonStrmX01A_withKey, "json-x01a-strm-withKey", true)
 
 					} else {
-						val jsonStrmDum01_noKy: KStream[Void, JsonNode] = bb.mkRecordStream_noKey("dum01")
+						val jsonStrmDum01_noKy: KStream[Void, JsonNode] = bb.mkRecordStream_noKey(DUM_TOPIC_NAME)
 						bb.mkJsonDumper_noKey(jsonStrmDum01_noKy, "json-dum01-noKey", true)
 
-						val jsonStrmX01A_noKy : KStream[Void, JsonNode] = bb.mkRecordStream_noKey("X01A")
+						val jsonStrmX01A_noKy : KStream[Void, JsonNode] = bb.mkRecordStream_noKey(X_TOPIC_NAME)
 						bb.mkJsonDumper_noKey(jsonStrmX01A_noKy, "json-x01a-strm-noKey", true)
 					}
 				} else {
-					val strmDum01: KStream[Void, String] = bb.mkStreamWithoutKey("dum01")
+					val strmDum01: KStream[Void, String] = bb.mkStreamWithoutKey(DUM_TOPIC_NAME)
 					bb.mkTextDumpers(strmDum01, "dum01-strm", false)
 				}
 
 				// FIXME:  Make a withKey version of mkTextDumpers
-				val strmY01A : KStream[Void, String] = bb.mkStreamWithoutKey("Y01A")
+				val strmY01A : KStream[Void, String] = bb.mkStreamWithoutKey(Y_TOPIC_NAME)
 				bb.mkTextDumpers(strmY01A, "y01a-strm-noKey", false)
 
 
@@ -87,6 +120,7 @@ trait BBB {
 	def mkSomeBurps : Unit = {
 		val dumPost = new DummyPoster {
 			override val myKfkBootyUrl = KFK_BOOTY_URL
+			override val myDumTopicNm = DUM_TOPIC_NAME
 		}
 		dumPost.postPracticeMsg
 		dumPost.close()
@@ -241,7 +275,7 @@ not trackable by Kafka, which means they will typically not benefit from Kafkaâ€
 		if (flg_more) {
 			strm.foreach((k, v) => {
 				// V.class = com.fasterxml.jackson.databind.node.ObjectNode
-				println(s"${labelTxt} got record on strm=${strm} K=${k}, V.class=${v.getClass} V.toPrettyString=\n${v.toPrettyString}")
+				println(s"dumper_noKey ${labelTxt} got record on strm=${strm} K=${k}, V.class=${v.getClass} V.toPrettyString=\n${v.toPrettyString}")
 				dumpJsonNodeDeets(v, labelTxt)
 			})
 		}
@@ -251,23 +285,27 @@ not trackable by Kafka, which means they will typically not benefit from Kafkaâ€
 		if (flg_more) {
 			strm.foreach((k, v) => {
 				// V.class = com.fasterxml.jackson.databind.node.ObjectNode
-				println(s"${labelTxt} got record on strm=${strm} K=${k}, V.class=${v.getClass} V.toPrettyString=\n${v.toPrettyString}")
+				println(s"dumper_withKey ${labelTxt} got record on strm=${strm} K=${k}, V.class=${v.getClass} V.toPrettyString=\n${v.toPrettyString}")
 				dumpJsonNodeDeets(v, labelTxt)
 			})
 		}
 	}
 
-
 	def launchBurpListenerStreams : KafkaStreams = {
-		val bldr = getStreamsBuilder
-		val topo: Topology = bldr.build()
-		println("launchBurpListenerStreams found built topology: " + topo.describe())
-		val listenConf = getListenerProps
-		println("launchBurpListenerStreams found listener conf properties: " + listenConf)
-		val streams = new KafkaStreams(topo, listenConf);
-		println("launchBurpListenerStreams is starting KafkaStreams processor");
-		streams.start();
-		println("launchBurpListenerStreams is adding shutdown hook");
+		val bldr: StreamsBuilder = getStreamsBuilder
+		val listenConfProps: Properties = getListenerProps
+		println("launchBurpListenerStreams found listener conf properties: " + listenConfProps)
+		launchListenerStreams(bldr, listenConfProps)
+	}
+	def launchListenerStreams(strmsBldr : StreamsBuilder, listenConfProps : Properties) : KafkaStreams = {
+
+		val topo: Topology = strmsBldr.build()
+		println("launchListenerStreams found built topology: " + topo.describe())
+
+		val streams = new KafkaStreams(topo, listenConfProps);
+		println("launchListenerStreams is starting KafkaStreams processor");
+		val ssRsltIsUnit: Unit = streams.start();
+		println("launchListenerStreams is adding shutdown hook");
 		// close Kafka Streams when the JVM shuts down (e.g. SIGTERM)
 		val closeThread = new Thread() {
 			override def run(): Unit = {
