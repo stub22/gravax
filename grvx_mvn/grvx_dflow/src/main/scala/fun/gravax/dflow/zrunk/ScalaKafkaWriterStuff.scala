@@ -1,8 +1,7 @@
 package fun.gravax.dflow.zrunk
 
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper, SerializerProvider}
-
-import org.apache.kafka.clients.producer.{KafkaProducer, Producer, ProducerConfig, ProducerRecord, RecordMetadata}
+import org.apache.kafka.clients.producer.{Callback, KafkaProducer, Producer, ProducerConfig, ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.serialization.{StringSerializer, VoidSerializer}
 import org.apache.kafka.connect.json.JsonSerializer
 
@@ -40,13 +39,13 @@ trait DummyPoster {
 	private def postXYZ_withStringKey(xTxt : String, yTxt : String, zTxt : String): Future[RecordMetadata] = {
 		val dumNode: JsonNode = mkNode(xTxt, yTxt, zTxt)
 		println("Made node to post: " + dumNode.toPrettyString)
-		val futMet: Future[RecordMetadata] = myKVP.sendWithStringKey(xTxt, dumNode)
+		val futMet: Future[RecordMetadata] = myKVP.sendWithStringKey(xTxt, dumNode, None)
 		futMet
 	}
 	private def postXYZ_withJsonKey(xTxt : String, yTxt : String, zTxt : String): Future[RecordMetadata] = {
 		val dumNode: JsonNode = mkNode(xTxt, yTxt, zTxt)
 		println("Made node to post: " + dumNode.toPrettyString)
-		val futMet: Future[RecordMetadata] = myKVP.sendWithStringKey(xTxt, dumNode)
+		val futMet: Future[RecordMetadata] = myKVP.sendWithStringKey(xTxt, dumNode, None)
 		futMet
 	}
 	private lazy val om = new ObjectMapper()
@@ -89,12 +88,15 @@ trait KVPoster {
 		val producer = new KafkaProducer[Void, JsonNode](confProps);
 		producer
 	}
-	def sendWithStringKey(recKey : String, jsonNode : JsonNode) : Future[RecordMetadata] = {
+	def sendWithStringKey(recKey : String, jsonNode : JsonNode, cback_opt : Option[Callback]) : Future[RecordMetadata] = {
 		val producer = getProd_withStringKey
 		val topicName = getTopicName
 		println(s"Sending record with key=${recKey} to topic=${topicName}")
 		val rec = new ProducerRecord[String, JsonNode](topicName, recKey, jsonNode);
-		producer.send(rec);
+		cback_opt match {
+			case Some(cback) => producer.send(rec, cback)
+			case None => producer.send(rec)
+		}
 	}
 	def sendWithoutKey(jsonNode : JsonNode) : Future[RecordMetadata] = {
 		val producer = getProd_noKey

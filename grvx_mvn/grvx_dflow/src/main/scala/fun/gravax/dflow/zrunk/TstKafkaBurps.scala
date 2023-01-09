@@ -63,9 +63,9 @@ trait BBB {
 	*/
 	val KFK_BOOTY_URL = "localhost:29092" // not "kafka:9092"
 
-	val DUM_TOPIC_NAME = "D2301A"
-	val X_TOPIC_NAME = "X2301A"
-	val Y_TOPIC_NAME = "Y2301A"
+	val DUM_TOPIC_NAME = "D2301C"
+	val X_TOPIC_NAME = "X2301C"
+	val Y_TOPIC_NAME = "Y2301C"
 	def doTopicDump : Unit = {
 		val topDump = new TopicDumper {
 			override val kfkBootyURL: String = KFK_BOOTY_URL
@@ -91,6 +91,9 @@ trait BBB {
 						val jsonStrmDum01_strngKy: KStream[String, JsonNode] = bb.mkRecordStream_strngKey(DUM_TOPIC_NAME)
 						bb.mkJsonDumper_withKey(jsonStrmDum01_strngKy, "json-dum01-withKey", true)
 
+						val dumGrp = jsonStrmDum01_strngKy.groupByKey()
+						val dumTab = dumGrp.count()
+
 						val jsonStrmX01A_withKey : KStream[String, JsonNode] = bb.mkRecordStream_strngKey(X_TOPIC_NAME)
 						bb.mkJsonDumper_withKey(jsonStrmX01A_withKey, "json-x01a-strm-withKey", true)
 
@@ -109,6 +112,7 @@ trait BBB {
 				// FIXME:  Make a withKey version of mkTextDumpers
 				val strmY01A : KStream[Void, String] = bb.mkStreamWithoutKey(Y_TOPIC_NAME)
 				bb.mkTextDumpers(strmY01A, "y01a-strm-noKey", false)
+
 
 
 
