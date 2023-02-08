@@ -2,9 +2,15 @@ package fun.gravax.xtyp.mathy.tridesc
 
 private trait WeakNumApiStuff
 
-/* Here we define a narrow set of core numeric operations for real number types
+/*
+Here we try defining a taxonomy of numeric types using traits, type members, typer parameters, and inheritance.
+
+Here we define a narrow set of core numeric operations for real number types
 (and so far just a skeleton  for an integer/natural CountNum type).
 Composite records like TriShapes can use this API to delay binding to specific numeric constructs.
+
+This form keeps a lot of flexibility for implementors, but makes things tricky for the user-client code.
+How does client know our MyArgTy and MyRsltTy? ?
  */
 trait ArithmeticNum {
 	// Logically, our general idea is to use (almost) algebraically closed (almost) rings (rigs?) as subtypes.
@@ -25,6 +31,7 @@ trait ArithmeticNum {
 	// If not, then this number cannot be used as a divisor.
 	def fastWeakZeroCheck : Option[Boolean]
 }
+// A numeric type with a known(+exposed) Arg/Rslt type, over which we expect all operations to be closed.
 trait ClosedWRN[CWRNT <: ArithmeticNum] extends ArithmeticNum {
 	override type MyArgTy = CWRNT
 	override type MyRsltTy = CWRNT

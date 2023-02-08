@@ -4,6 +4,10 @@ import spire.math.{Algebraic, Rational, Real}
 
 private trait WeakNumSpireImplStuff
 
+/*
+Implementations using value-wrapper approach, which is becoming unfashionable.
+
+ */
 trait FromSpireNum extends ArithmeticNum {}
 
 trait FromSpireReal extends FromSpireNum with WeakRealNum {
@@ -14,8 +18,9 @@ trait FromSpireRat extends FromSpireNum  with WeakRationalNum[FromSpireRat]  {
 	val mySpireRat : Rational
 }
 
+
 private class SRtNImpl(oneSpireRat : Rational) extends FromSpireRat {
-	override val mySpireRat: Rational = mySpireRat
+	override val mySpireRat: Rational = oneSpireRat
 
 	override def plus(otherFSR: FromSpireRat): FromSpireRat = {
 		val otherRat = otherFSR.mySpireRat

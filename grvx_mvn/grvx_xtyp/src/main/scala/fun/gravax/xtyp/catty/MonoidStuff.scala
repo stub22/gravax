@@ -10,6 +10,20 @@ trait NuttyMonoids {
 	}
 }
 
+/***
+ * A HistoBin is an immutable data structure.
+ * It contains a count of observed items that are "in" the Bin identified by BinKey.
+ * BinKey is often an interval/cube in the event space.
+ * The simplest BinKeys correspond to a particular discrete event.
+ * Q:  Why wouldn't we just use Scala Map?
+ *
+ * BinKey identifies a
+ *
+ * An Event is any occurrence we might observe.
+ * An event is either IN a Bin or NOT.
+ *
+ * In some cases BinKeys may be ordered.
+ */
 trait HistoBin[BinKey, Count] {
 
 }
@@ -18,12 +32,14 @@ abstract class HistoBinImpl[BinKey, Count](key : BinKey, count :Count)  extends 
 	protected def getCountMonoid : Monoid[Count] // = Monoid[Count]
 	def combineCounts (cntA : Count, cntB : Count) = getCountMonoid.combine(cntA, cntB)
 }
-class HistoBinEasy[BinKey](key : BinKey, count : Int) extends HistoBinImpl[BinKey, Int](key, count) {
+case class HistoBinEasy[BinKey](key : BinKey, count : Int) extends HistoBinImpl[BinKey, Int](key, count) {
 	override protected def getCountMonoid: Monoid[Int] = Monoid[Int]
 }
 
 /*
 This HistoGram is an immutable data structure.
+
+A HistoGram contains a set of non-overlapping HistoBins.
 
 Perhaps worthwhile to see a HistoGram as ordered by BinKey?
  */
