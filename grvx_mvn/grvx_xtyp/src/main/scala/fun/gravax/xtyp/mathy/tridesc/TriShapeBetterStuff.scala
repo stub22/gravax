@@ -38,26 +38,41 @@ trait MakesTSX {
 		override def getField: Field[SpAlg] = SpAlg.AlgebraicAlgebra
 		override def getNRoot: NRoot[SpAlg] = SpAlg.AlgebraicAlgebra
 	}
+	private val flg_doUnsafeDebug = true
 	def mkFromSidesIncreasing(shortSide : SpAlg, medSide : SpAlg, lngSide : SpAlg) : TriShapeXactish = {
-		assert(shortSide.<=(medSide), s"ShortSide ${shortSide} must be less than MedSide ${medSide}")
-		assert(medSide.<=(lngSide))
-		assert(lngSide.<=(shortSide.+(medSide)))
+		val debugBase : String = s"Short[${shortSide}], Med[${medSide}], Long[${lngSide}]"
+		// The ordering constraints on short, med, lng are enforced here by Assert.
+		// Ideally, we would make them compile time constraints.
+		// assert will throw java.lang.AssertionError.  assert checks may be disabled with -Xelide-below ASSERTION
+		assert(shortSide.<=(medSide), s"Failed for ${debugBase} because short must be less-or-eq than med")
+		assert(medSide.<=(lngSide), s"Failed for ${debugBase} because med must be less-or-eq than lng")
+		val shortPlusMed = shortSide.+(medSide)
+		// Treat triangle inequality as a REQUIRE condition, which throws IllegalArgumentException.
+		// These cannot be disabled by compile flags.  Client might choose to handle this exception.
+		require(lngSide.<=(shortPlusMed), s"Failed for ${debugBase} because lng must be less-or-eq than shrt+med")
 		val tsx = new TriShapeXactish {
 			override def sidesIncreasing: (SpAlg, SpAlg, SpAlg) = (shortSide, medSide, lngSide)
 
-			override def anglesIncreasng: (SpNum, SpNum, SpNum) = ???
+			override def anglesOpposedIncr: (SpNum, SpNum, SpNum) = ???
 
 			override def perimeter = shortSide + medSide + lngSide
 
-			// TODO:  Make result optionally moemoizable using Eval
+			// TODO:  Make result memoizable using Eval
+			private val flg_debugArea = flg_doUnsafeDebug
 			override def area: SpAlg = {
-				val perim = perimeter
-				val semiPerim = perim./(2)
-				val sides = sidesIncreasing
-				myAlgMathOps.heronsAreaEasy(semiPerim, sides._1, sides._2, sides._3)
+				val perim: SpAlg = perimeter
+				val semiPerim: SpAlg = perim./(2)
+				val sides: (SpAlg, SpAlg, SpAlg) = sidesIncreasing
+
+				val arOut = myAlgMathOps.heronsAreaEasy(semiPerim, sides._1, sides._2, sides._3)
+				if (flg_debugArea)
+					println(s"UNSAFE DEBUG: area=${arOut} based on perim=${perim}, semiP=${semiPerim}, sides=${sides}")
+				arOut
 			}
 
 		}
+		if (flg_doUnsafeDebug)
+			println(s"UNSAFE DEBUG: mkFromSidesIncreasing made tsx=${tsx}")
 		tsx
 	}
 }

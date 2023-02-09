@@ -35,7 +35,7 @@ trait TriShape {
 	// The results as ordered tuples allows for both type-safety and efficiency of chained computations.
 
 	def sidesIncreasing : (LengthTy, LengthTy, LengthTy)
-	def anglesIncreasng : (AngleTy, AngleTy, AngleTy)
+	def anglesOpposedIncr : (AngleTy, AngleTy, AngleTy)  // The increasing angles are opposite the increasing sides
 	def perimeter : LengthTy
 	def area : AreaTy
 

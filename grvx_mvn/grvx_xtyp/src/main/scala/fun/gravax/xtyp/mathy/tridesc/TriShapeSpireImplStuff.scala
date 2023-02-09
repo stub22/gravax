@@ -18,7 +18,7 @@ trait WrongMkConcreteTriShapes {
 	def makeOne(sA : FromSpireRat, sB : FromSpireRat, sC : FromSpireRat ) = new WrongConcreteTriShape(sA, sB, sC) {
 		override def sidesIncreasing: (LengthTy, LengthTy, LengthTy) = ???
 
-		override def anglesIncreasng: (AngleTy, AngleTy, AngleTy) = ???
+		override def anglesOpposedIncr: (AngleTy, AngleTy, AngleTy) = ???
 
 		override def perimeter: LengthTy = ???
 
