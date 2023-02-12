@@ -1,6 +1,7 @@
 package fun.gravax.xtyp.fstrm
 
-import cats.{Applicative, Eval, Functor}
+import cats.effect.kernel.Sync
+import cats.{Applicative, Eval, FlatMap, Functor}
 import cats.effect.{ExitCode, IO, IOApp}
 import fun.gravax.xtyp.mathy.TriSideRec
 import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape}
@@ -24,9 +25,15 @@ object RunTriStreamGame extends IOApp {
 
 }
 trait MakesGameFeatures {
-	val ourTsMkr = new TriStreamMaker {}
+	val ourTsMkr = new TriStreamMaker[IO] {
+		override def getFM: FlatMap[IO] = implicitly[FlatMap[IO]]
+		override def getSync: Sync[IO] = implicitly[Sync[IO]]
+	}
 	val myNaiveTriMaker = new NaiveTriMaker {}
+	val myRandosForIO = new RandosBoundToIO{}
 	val myTryConsumer = new TriStreamConsumer {}
+	val myNJM = new NumJobMaker{}
+	val myOtherNums = new OtherNums {}
 	def mkJobThatPrintsFewTris: IO[Unit] = {
 		val firstSubJob = IO.apply {
 			val tshp = myNaiveTriMaker.nowMakeOneDummyTriShape
@@ -41,15 +48,21 @@ trait MakesGameFeatures {
 			println(s"9 tris:\n=================\n${outTxt}\n===================")
 
 		}
-		val job4vectFromStream: IO[Vector[Int]] = ourTsMkr.mkStreamOfRandomInts(3, 8).take(10).compile.toVector
+		val job4vectFromStream: IO[Vector[Int]] = myRandosForIO.mkStreamOfRandomInts(3, 8).take(10).compile.toVector
 		val jobChainSoFar = firstSubJob.productL(job4vectFromStream.flatMap(v => IO.println("Generated int vector-from-stream using MANY rngs: " + v)))
-		val job4strm: IO[Stream[IO, Int]] = ourTsMkr.makeJobToProduceRngAndThenNumStream(7, 39)
+		val job4strm: IO[Stream[IO, Int]] = myRandosForIO.makeJobToProduceRngAndThenNumStream(7, 39)
 		val job4out: IO[Unit] = job4strm.flatMap(strm => {
 			val outVectJob: IO[Vector[Int]] = strm.repeat.take(11).compile.toVector
 			outVectJob.flatMap(v => IO.println("Generated int vector-from-stream using ONE rng: " + v))
 		})
-		val lastJobChain = jobChainSoFar.productL(job4out)
-		lastJobChain
+		val bigOlJobChain = jobChainSoFar.productL(job4out)
+		val oneMore = myNJM.makeRangedNumJobUsingSyncRandom[IO](50, 60)
+		val omd: IO[Unit] = oneMore.flatMap(num => IO.println(s"Effect produced num: ${num}"))
+		val yetAnother = IO.apply {
+
+			// val triSidesEvalJob = ourTsMkr.makeTriSidesJob[Eval]()
+		}
+		bigOlJobChain *> omd
 	}
 
 	def dbgNow(dbgHead: String, dbgBody: String): Unit = println(dbgHead, dbgBody)
@@ -57,7 +70,8 @@ trait MakesGameFeatures {
 	def mkJobThatPrintsManyTris: IO[Unit] = {
 		val dbgHead = "mkJobThatPrintsManyTris"
 		IO.apply {
-			val someInts = ourTsMkr.streamSomeInts
+
+			val someInts = myOtherNums.streamNumsUsingUnfold
 			val outInts = someInts.toList
 			dbgNow(dbgHead, s"Dumped someInts=${someInts} as outInts=${outInts}")
 			val perimsRange = Stream.range(10, 40, 3)
@@ -72,8 +86,6 @@ trait MakesGameFeatures {
 		}
 	}
 }
-
-
 
 
 /*
@@ -98,6 +110,8 @@ https://www.javadoc.io/doc/co.fs2/fs2-docs_2.13/3.5.0/fs2/Stream.html
 
  val s1c = Stream.chunk(Chunk.array(Array(1.0, 2.0, 3.0)))
 
+
+.prefetch(n).parEvalMapUnordered(n)
 
 	 StringBuilder is faster than StringBuffer, because it is not threadsafe/synchronized.
  */

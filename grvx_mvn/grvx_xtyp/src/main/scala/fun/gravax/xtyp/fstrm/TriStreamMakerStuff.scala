@@ -1,98 +1,80 @@
 package fun.gravax.xtyp.fstrm
 
+import cats.{Eval, FlatMap, Functor}
 import cats.effect.IO
+import cats.effect.kernel.Sync
 import fs2.{Pure, Stream}
 import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape}
 
-import scala.util.Random
+import scala.util.{Random => ScRandom}
+import cats.effect.std.{Random => CatsRandom}
 
 private trait TriStreamMakerStuff
 
-trait TriStreamMaker {
+/*
+	// Stages of tri gen
+	// Generate parameters, e.g. perimeter & minLen.  May be done randomly or determ.
+		// These params may be supplied as a stream of 2-tuples.
+	// Generate side-Lengths and order them.  Usually requires 2 randoms.
+		// Could be a stream of 3-tuples.
+	// Build the actual triangle, which may fail with exception due to triangle-inequality.
+		// Does not require any additional random nums.
 
-	//  def unfold[F[x] >: fs2.Pure[x], S, O](s : S)(f : scala.Function1[S, scala.Option[scala.Tuple2[O, S]]]) : fs2.Stream[F, O] = { /* compiled code */ }
-	def streamSomeInts : Stream[Pure, Int] = {
-		val initState : String = "wow"
-		val strm = Stream.unfold(initState)(st => {
-			val stLen = st.length
-			if (stLen > 25) None else {
-				val nextState = st + (-1 * stLen).toString
-				val output : Int = stLen * 100
-				Some((output, nextState))
-			}
+ */
+
+trait TriStreamMaker[Eff[_]] { 	// User must bind an effect type when instantiating the trait.
+	def getFM : FlatMap[Eff]	// We need this instance a lot.  We pass it explicitly.
+	def getSync : Sync[Eff]		// We need this only when we are making an RNG
+	val myNJM = new NumJobMaker{}
+
+	val impSync = getSync
+	implicit val impFMF = getFM
+
+	def makeTriSidesJob(rng: CatsRandom[Eff], perim: Int, minSideLen: Int): Eff[(Int, Int, Int)] = {
+		assert(perim >= 3 * minSideLen)
+		val maxSideLen = perim - 2 * minSideLen
+
+		// Here we automatically get a reference to
+		val sideLenX_job: Eff[Int] = myNJM.makeRandomRangedNumEffect(rng, minSideLen, maxSideLen)
+		// Now that we have a job to make sideLenX, we chain with flatMap into a dependent generation of sideLenY.
+
+		val sidesTuple = impFMF.flatMap(sideLenX_job)(sideLenX => {
+			val maxY = perim - sideLenX - minSideLen
+
+			// This time we choose to pass impFMF in explicitly.
+			val sideLenY_job: Eff[Int] = myNJM.makeRandomRangedNumEffect(rng, minSideLen, maxY)(impFMF)
+			impFMF.map(sideLenY_job)(sideLenY => {
+				// Now that we have sideLenX and sideLenY, we can compute sideLenZ as the remainder (of perimeter).
+				val sideLenZ = perim - sideLenX - sideLenY
+				assert((sideLenX + sideLenY + sideLenZ) == perim) // sanity check
+				// Now we want to put the 3 sides in increaing order.
+				// FIXME:  Do this ordering more elegantly
+				val lame: Seq[Int] = Vector(sideLenX, sideLenY, sideLenZ).sorted
+				val sidesTupleRslt = lame match {
+					case Seq(a, b, c) => (a, b, c) // Can we find an easier way to make a tuple from a Seq?
+				}
+				sidesTupleRslt
+			})
 		})
-		strm
+		sidesTuple
 	}
-	// FIXME:  The randomness makes it not really Pure.  Also the possibility of exception is impure-ish
-	def streamRandomTris(cnt_opt : Option[Int], perim : Int, minSideLen : Int) : Stream[Pure, TriShape] = {
+
+	def makeTriSidesStream[F[_] : FlatMap](rng: CatsRandom[F], pairStrm: Stream[F, (Int, Int)]): Stream[F, (Int, Int, Int)] = {
+		???
+	}
+	// PureRandomized => Random-Effects were already run, to capture a stream of random ints into memory.
+	// But this is not really any better than an eagerly produced List of Tris.
+	def getFinitePureRandomizedTris(cnt: Int, perim: Int, minSideLen: Int): Stream[Pure, TriShape] = {
 		// TODO:  Use .handleErrorWith / .attempt to map exceptions caused by triangle-inequality.
 		???
 	}
-
-
-	import cats.effect.std.{Random => CatsRandom}
-	// Each time this job is run, it returns a reference to a good source of random numbers.
-	// We don't know if it's the same instance of scalaUtilRandom, but as long as we are using
-	// it within cats-effect we expect it to behave well, even under concurrency.
-	// However if we run it millions of times, then we MIGHT have created millions of ScalaRandom instances?!
-	// In source for v~3.3 looks like it does create a new one on each access to scalaUtilRandom, but scalaUtilRandomN is
-	// mmore subtle.  See cats-effect code snippets at bottom of this file
-	// TODO:  Try out .scalaUtilRandomSeedInt/Long and  .scalaUtilRandomN
-	val myRngMakerJob : IO[CatsRandom[IO]] = CatsRandom.scalaUtilRandom[IO]
-
-
-	def mkTriProducer[F[_]](rng : CatsRandom[F], perim : Int, minSideLen : Int): F[TriShape] = {
-		???
-	}
-
-	// val myRngMakerEval = CatsRandom.scalaUtilRandom[Eval]
-	def makeRngJob(minIncl : Int, maxIncl : Int) = {
-		val range = maxIncl - minIncl + 1
-		// job is responsible for both building an rng AND then generating the value.
-		// So if we run this job 1000 times, we have created 1000 rngs, which is not what we want.
-		val job: IO[Int] = myRngMakerJob.flatMap(rng => {
-			rng.nextIntBounded(range).map(_ + minIncl)
-		})
-	}
-	def streamOfRands : Unit = {
-		//
-	}
-	def mkStreamOfRandomInts(minIncl : Int, maxIncl : Int) : Stream[IO, Int] = {
-		val range = maxIncl - minIncl + 1
-		val streamOne: Stream[IO, Int] = Stream.eval {
-
-			val compoundJobHereIsJustAsBad = myRngMakerJob.flatMap(rng => {
-				val x: CatsRandom[IO] = rng
-				val jobToMakeNum: IO[Int] = rng.nextIntBounded(range).map(_ + minIncl)
-				jobToMakeNum
-			})
-			compoundJobHereIsJustAsBad
-		}
-		streamOne.repeat
-	}
-
-	// Here we assume that a single rng is already made for us, which allows us to wire it directly into an effect.
-	// How could we constrain F to ensure it has .map()?
-	def makeRandomNumStream[F[_]](rng : CatsRandom[F], minIncl : Int, maxIncl : Int) : Stream[F, Int] = {
-		val range = maxIncl - minIncl + 1
-		val streamOne: Stream[F, Int] = Stream.eval {
-			// We don't have any type info allowing us to call numJob.map
-			val numJob: F[Int] = rng.nextIntBounded(range)  // . // map(_ + minIncl)
-			numJob
-		}
-		// ...and instead we perform a .map out here at the stream level.
-		streamOne.map(_ + minIncl) // Just one element in the stream
-	}
-	def makeJobToProduceRngAndThenNumStream(minIncl : Int, maxIncl : Int) : IO[Stream[IO, Int]] = {
-		myRngMakerJob.map(rng => makeRandomNumStream(rng, minIncl, maxIncl))
-	}
-
 }
+
 trait NaiveTriMaker {
 	private val myTsxMaker = new MakesTSX {}
 
 	// Naive RNG is used directly.  There is no suspending of effect.
-	private val myRndm = new Random()
+	private val myRndm = new ScRandom()
 
 
 	def nowMkTriWithRandSidesForFixedPerim(perim: Int, minSideLen: Int): TriShape = {
@@ -123,6 +105,8 @@ trait NaiveTriMaker {
 		val tsx345 = myTsxMaker.mkFromSidesIncreasing(3, 4, 5)
 		tsx345
 	}
+
+
 }
 
 /*
@@ -158,4 +142,14 @@ trait NaiveTriMaker {
       def selectRandom = incrGet.map(array(_))
       new ScalaRandom[F](selectRandom) {}
     }
+
+
+def eval[F[_], O](fo: F[O]): Stream[F, O]
+Creates a single element stream that gets its value by evaluating the supplied effect.
+If the effect fails, the returned stream fails.
+Use attemptEval instead if a failure while evaluating the effect should be emitted as a value.
+
+def attemptEval[F[_], O](fo: F[O]): Stream[F, Either[Throwable, O]]
+Creates a single element stream that gets its value by evaluating the supplied effect.
+If the effect fails, a Left is emitted. Otherwise, a Right is emitted.
  */
