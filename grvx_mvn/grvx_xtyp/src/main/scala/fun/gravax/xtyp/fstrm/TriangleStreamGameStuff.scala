@@ -1,13 +1,13 @@
 package fun.gravax.xtyp.fstrm
 
 import cats.effect.kernel.Sync
-import cats.{Applicative, Eval, FlatMap, Functor}
+import cats.FlatMap
 import cats.effect.{ExitCode, IO, IOApp}
-import fun.gravax.xtyp.mathy.TriSideRec
 import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape}
 import fs2.{Pipe, Pure, Stream}
 
-import scala.util.Random
+import scala.util.Try
+
 
 private trait TriangleStreamGameStuff
 
@@ -26,8 +26,8 @@ object RunTriStreamGame extends IOApp {
 }
 trait MakesGameFeatures {
 	val ourTsMkr = new TriStreamMaker[IO] {
-		override def getFM: FlatMap[IO] = implicitly[FlatMap[IO]]
-		override def getSync: Sync[IO] = implicitly[Sync[IO]]
+		override def getFM: FlatMap[IO] = IO.asyncForIO  // Uh, this "works"...
+		override def getSync: Sync[IO] = Sync[IO]
 	}
 	val myNaiveTriMaker = new NaiveTriMaker {}
 	val myRandosForIO = new RandosBoundToIO{}
@@ -46,6 +46,9 @@ trait MakesGameFeatures {
 			val strmOf9 = strmOf30.takeRight(9)
 			val outTxt = myTryConsumer.dumpFinitePureStreamOfTrisIntoTxtBlock(strmOf9)
 			println(s"9 tris:\n=================\n${outTxt}\n===================")
+			val summStrm: Stream[Pure, TriSetStat] = myTryConsumer.summarizeTriStream(strmOf9)
+			val summOut = summStrm.toList
+			println(s"Summarized 9 tris as: ${summOut}")
 
 		}
 		val job4vectFromStream: IO[Vector[Int]] = myRandosForIO.mkStreamOfRandomInts(3, 8).take(10).compile.toVector
@@ -58,10 +61,6 @@ trait MakesGameFeatures {
 		val bigOlJobChain = jobChainSoFar.productL(job4out)
 		val oneMore = myNJM.makeRangedNumJobUsingSyncRandom[IO](50, 60)
 		val omd: IO[Unit] = oneMore.flatMap(num => IO.println(s"Effect produced num: ${num}"))
-		val yetAnother = IO.apply {
-
-			// val triSidesEvalJob = ourTsMkr.makeTriSidesJob[Eval]()
-		}
 		bigOlJobChain *> omd
 	}
 
@@ -69,21 +68,39 @@ trait MakesGameFeatures {
 
 	def mkJobThatPrintsManyTris: IO[Unit] = {
 		val dbgHead = "mkJobThatPrintsManyTris"
-		IO.apply {
+		val pairlyEffect: IO[Stream[Pure, (Int, Int)]] = IO.apply {
 
 			val someInts = myOtherNums.streamNumsUsingUnfold
 			val outInts = someInts.toList
 			dbgNow(dbgHead, s"Dumped someInts=${someInts} as outInts=${outInts}")
 			val perimsRange = Stream.range(10, 40, 3)
 			dbgNow(dbgHead, s"Rangey stream .toList = ${perimsRange.toList}")
-			val pairly = perimsRange.flatMap(perim => Stream.range(1, 4).map(minLen => (perim, minLen)))
+			val pairly: Stream[Pure, (Int, Int)] = perimsRange.flatMap(perim =>
+					Stream.range(1, 4).map(minLen => (perim, minLen)))
 			dbgNow(dbgHead, s"Pairly stream .toList = ${pairly.toList}")
-			val triStrm = pairly.map(pair => {
+			val naiveTriStrm = pairly.map(pair => {
 				myNaiveTriMaker.nowMkTriWithRandSidesForFixedPerim(pair._1, pair._2)
 			})
-			val outTxt = myTryConsumer.dumpFinitePureStreamOfTrisIntoTxtBlock(triStrm)
-			dbgNow(dbgHead, s"many tris:\n=================\n${outTxt}\n===================")
+
+			val outTxt: Try[String] = Try(myTryConsumer.dumpFinitePureStreamOfTrisIntoTxtBlock(naiveTriStrm))
+			dbgNow(dbgHead, s"NAIVE tris:\n=================\n${outTxt}\n===================")
+			pairly
 		}
+
+		import cats.effect.std.{Random => CatsRandom}
+		val rngMakerJob: IO[CatsRandom[IO]] = CatsRandom.scalaUtilRandom[IO]
+		val bothPrecursors: IO[(Stream[Pure, (Int, Int)], CatsRandom[IO])] = pairlyEffect.both(rngMakerJob)
+		val sidesEff: IO[Unit] = bothPrecursors.flatMap(precPair => {
+			val (pairStrm, rng) = precPair
+			val betterPairStrm: Stream[IO, (Int, Int)] = pairStrm.covary[IO]
+
+			val triSidesStrm: Stream[IO, (Int, Int, Int)] = ourTsMkr.makeTriSidesStreamUsingEvalMap(rng, betterPairStrm)
+			val dbgStrm = triSidesStrm.debug()
+			val listJob: IO[List[(Int, Int, Int)]] = dbgStrm.compile.toList
+			val listDumpJob = listJob.flatMap(lst => IO.println(s"Side-Stream-list: ${lst}"))
+			listDumpJob
+		})
+		sidesEff
 	}
 }
 

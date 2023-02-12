@@ -2,11 +2,40 @@ package fun.gravax.xtyp.fstrm
 
 import cats.effect.IO
 import fs2.{Pipe, Pure, Stream}
-import fun.gravax.xtyp.mathy.tridesc.TriShape
+import fun.gravax.xtyp.mathy.tridesc.{TriShape, TriShapeXactish}
 
 private trait TriStreamConsumerStuff
 
+class TriSetStat(numTris : Int, totalArea : Double, totalPerim : Double)  {
+	def getNumTris = numTris
+	def getTotalArea = totalArea
+	def getTotalPerim = totalPerim
+	def getAvgArea = getTotalArea / getNumTris
+	def getAvgPerim = getTotalPerim / getNumTris
+
+	def combine(otherTSS : TriSetStat) = new TriSetStat(otherTSS.getNumTris + numTris, otherTSS.getTotalArea + totalArea, otherTSS.getTotalPerim + totalPerim)
+	def addTri(nxtTri : TriShape) = {
+		val tmpStat = nxtTri match {
+			case tsx : TriShapeXactish => {
+				val areaDouble = tsx.area.toDouble
+				// https://docs.oracle.com/javase/7/docs/api/java/math/MathContext.html
+				// val areaDecim = tsx.area.toBigDecimal()
+				val perimDouble = tsx.perimeter.toDouble
+				new TriSetStat(1, areaDouble, perimDouble)
+			}
+		}
+		combine(tmpStat)
+	}
+	override def toString : String = s"[num=${numTris}, totAr=${totalArea}, avgAr=${getAvgArea}, totPerim=${totalPerim}, avgPerim=${getAvgPerim}"
+}
+
 trait TriStreamConsumer {
+	private def myZeroStat = new TriSetStat(0, 0.0, 0.0)
+	def summarizeTriStream[Eff[_]](strmOfTri : Stream[Eff, TriShape]) : Stream[Eff, TriSetStat] = {
+		strmOfTri.fold(myZeroStat)((prevRslt, nxtTri) => {
+			prevRslt.addTri(nxtTri)
+		})
+	}
 	def dumpFinitePureStreamOfTrisIntoTxtBlock(pureStrmOfTri : Stream[Pure, TriShape]) : String = {
 		val trisWithIdx: Stream[Pure, (TriShape, Long)] = pureStrmOfTri.zipWithIndex
 		val outLinesStrm: Stream[Pure, String] = trisWithIdx.map(tup => s"tri #=${tup._2} as txt=${triShapeToTxt(tup._1)}}")

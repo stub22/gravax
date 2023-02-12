@@ -20,7 +20,9 @@ trait NumJobMaker {
 	def makeRandomRangedNumEffect[F[_] : Functor](rng: CatsRandom[F], minIncl: Int, maxIncl: Int): F[Int] = {
 		val range = maxIncl - minIncl + 1
 		val rangedNumJob: F[Int] = rng.nextIntBounded(range)
-		val shiftedNumJob = implicitly[Functor[F]].map(rangedNumJob)(num => num + minIncl)
+		val impFunct: Functor[F] = implicitly[Functor[F]]
+		println(s"makeRandomRangedNumEffect got implicit functor instance: ${impFunct}, minIncl=${minIncl}, maxIncl=${maxIncl}")
+		val shiftedNumJob = impFunct.map(rangedNumJob)(num => num + minIncl)
 		shiftedNumJob
 	}
 
@@ -28,7 +30,9 @@ trait NumJobMaker {
 		// This works, but notice that our RNG-fetching is part of the job.  So when we repeat this job...
 		val rngMakerJob: F[CatsRandom[F]] = CatsRandom.scalaUtilRandom[F] // requires implicit evidence : cats.effect.kernel.Sync[F]
 		// Sync => Monad => FlatMap
-		implicitly[FlatMap[F]].flatMap(rngMakerJob)(rng => makeRandomRangedNumEffect(rng, minIncl, maxIncl))
+		val impFM = implicitly[FlatMap[F]]
+		println(s"makeRangedNumJobUsingSyncRandom got implicit FlatMapper instance: ${impFM}")
+		impFM.flatMap(rngMakerJob)(rng => makeRandomRangedNumEffect(rng, minIncl, maxIncl))
 	}
 	// Here we assume that a single rng is already made for us, which allows us to wire it directly into an effect.
 	// Functor constraint ensures that F supports map()
@@ -36,7 +40,9 @@ trait NumJobMaker {
 		val range = maxIncl - minIncl + 1
 		val streamOne: Stream[F, Int] = Stream.eval {
 			val numJob: F[Int] = rng.nextIntBounded(range)
-			val shifted = implicitly[Functor[F]].map(numJob)(_ + minIncl)
+			val impFunct = implicitly[Functor[F]]
+			println(s"makeRandomNumStream got implicit functor instance: ${impFunct}, minIncl=${minIncl}, maxIncl=${maxIncl}")
+			val shifted = impFunct.map(numJob)(_ + minIncl)
 			shifted
 		}
 		// If we wanted to avoid the "implicitly" magic, we could perform a .map out here at the stream level.

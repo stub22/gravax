@@ -28,13 +28,18 @@ trait TriStreamMaker[Eff[_]] { 	// User must bind an effect type when instantiat
 	val myNJM = new NumJobMaker{}
 
 	val impSync = getSync
-	implicit val impFMF = getFM
+	implicit val impFMF: FlatMap[Eff] = getFM // This val is used by the calls below to .makeRandomRangedNumEffect
 
 	def makeTriSidesJob(rng: CatsRandom[Eff], perim: Int, minSideLen: Int): Eff[(Int, Int, Int)] = {
+		// Same algo used in NaiveTriMaker, but all randomness is suspended in the Eff-ect.
+		// Note that we use the rng TWICE, and the param for the second is dependent on result from the first.
 		assert(perim >= 3 * minSideLen)
 		val maxSideLen = perim - 2 * minSideLen
 
-		// Here we automatically get a reference to
+		// If we don't pass impFMF, the code compiles but makeRandomRangedNumEffect can't see the value and
+		// it winds up using a NULL functor value.  Gross!
+		// Hmm, even when it is passed....
+		println(s"makeTriSidesJob: impFMF=${impFMF}")
 		val sideLenX_job: Eff[Int] = myNJM.makeRandomRangedNumEffect(rng, minSideLen, maxSideLen)
 		// Now that we have a job to make sideLenX, we chain with flatMap into a dependent generation of sideLenY.
 
@@ -42,7 +47,7 @@ trait TriStreamMaker[Eff[_]] { 	// User must bind an effect type when instantiat
 			val maxY = perim - sideLenX - minSideLen
 
 			// This time we choose to pass impFMF in explicitly.
-			val sideLenY_job: Eff[Int] = myNJM.makeRandomRangedNumEffect(rng, minSideLen, maxY)(impFMF)
+			val sideLenY_job: Eff[Int] = myNJM.makeRandomRangedNumEffect(rng, minSideLen, maxY)
 			impFMF.map(sideLenY_job)(sideLenY => {
 				// Now that we have sideLenX and sideLenY, we can compute sideLenZ as the remainder (of perimeter).
 				val sideLenZ = perim - sideLenX - sideLenY
@@ -58,8 +63,19 @@ trait TriStreamMaker[Eff[_]] { 	// User must bind an effect type when instantiat
 		})
 		sidesTuple
 	}
+	// TODO: Make this shorter using .through
+	def makeTriSidesStreamUsingEvalMap(rng: CatsRandom[Eff], pairStrm: Stream[Eff, (Int, Int)]): Stream[Eff, (Int, Int, Int)] = {
 
-	def makeTriSidesStream[F[_] : FlatMap](rng: CatsRandom[F], pairStrm: Stream[F, (Int, Int)]): Stream[F, (Int, Int, Int)] = {
+		// Generate exactly one ordered-side-triple for each input param-pair.
+		// def evalMap[F2[x] >: F[x], O2](f: (O) => F2[O2]): Stream[F2, O2]
+		// Alias for flatMap(o => Stream.eval(f(o))).
+		pairStrm.evalMap(paramPair => {
+			println(s"makeTriSidesStreamUsingEvalMap:  rng=${rng}, paramPair=${paramPair}")
+			makeTriSidesJob(rng, paramPair._1, paramPair._2)
+		})
+	}
+	def makeTriSidesStreamUsingThrough(rng: CatsRandom[Eff], pairStrm: Stream[Eff, (Int, Int)]): Stream[Eff, (Int, Int, Int)] = {
+		//	wrong = pairStrm.through
 		???
 	}
 	// PureRandomized => Random-Effects were already run, to capture a stream of random ints into memory.
