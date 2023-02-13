@@ -1,12 +1,12 @@
 package fun.gravax.xtyp.fstrm
 
-import cats.{Eval, FlatMap, Functor}
+import cats.{Applicative, Eval, FlatMap, Functor}
 import cats.effect.IO
 import cats.effect.kernel.Sync
 import fs2.{Pure, Stream}
-import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape}
+import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape, TriShapeXactish}
 
-import scala.util.{Random => ScRandom}
+import scala.util.{Try, Random => ScRandom}
 import cats.effect.std.{Random => CatsRandom}
 
 private trait TriStreamMakerStuff
@@ -21,13 +21,13 @@ private trait TriStreamMakerStuff
 		// Does not require any additional random nums.
 
  */
-
-trait TriStreamMaker[Eff[_]] { 	// User must bind an effect type when instantiating the trait.
+// traits cannot have type parameters with context bounds `: ...` nor view bounds `<% ...`
+trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantiating the trait.
 	def getFM : FlatMap[Eff]	// We need this instance a lot.  We pass it explicitly.
 	def getSync : Sync[Eff]		// We need this only when we are making an RNG
 	val myNJM = new NumJobMaker{}
-
-	val impSync = getSync
+	private val flg_dbgImps : Boolean = false
+	// val impSync = getSync
 	implicit val impFMF: FlatMap[Eff] = getFM // This val is used by the calls below to .makeRandomRangedNumEffect
 
 	def makeTriSidesJob(rng: CatsRandom[Eff], perim: Int, minSideLen: Int): Eff[(Int, Int, Int)] = {
@@ -39,11 +39,11 @@ trait TriStreamMaker[Eff[_]] { 	// User must bind an effect type when instantiat
 		// If we don't pass impFMF, the code compiles but makeRandomRangedNumEffect can't see the value and
 		// it winds up using a NULL functor value.  Gross!
 		// Hmm, even when it is passed....
-		println(s"makeTriSidesJob: impFMF=${impFMF}")
+		if (flg_dbgImps) println(s"makeTriSidesJob: impFMF=${impFMF}")
 		val sideLenX_job: Eff[Int] = myNJM.makeRandomRangedNumEffect(rng, minSideLen, maxSideLen)
 		// Now that we have a job to make sideLenX, we chain with flatMap into a dependent generation of sideLenY.
 
-		val sidesTuple = impFMF.flatMap(sideLenX_job)(sideLenX => {
+		val sidesTupleJob: Eff[(Int, Int, Int)] = impFMF.flatMap(sideLenX_job)(sideLenX => {
 			val maxY = perim - sideLenX - minSideLen
 
 			// This time we choose to pass impFMF in explicitly.
@@ -61,7 +61,7 @@ trait TriStreamMaker[Eff[_]] { 	// User must bind an effect type when instantiat
 				sidesTupleRslt
 			})
 		})
-		sidesTuple
+		sidesTupleJob
 	}
 	// TODO: Make this shorter using .through
 	def makeTriSidesStreamUsingEvalMap(rng: CatsRandom[Eff], pairStrm: Stream[Eff, (Int, Int)]): Stream[Eff, (Int, Int, Int)] = {
@@ -74,6 +74,38 @@ trait TriStreamMaker[Eff[_]] { 	// User must bind an effect type when instantiat
 			makeTriSidesJob(rng, paramPair._1, paramPair._2)
 		})
 	}
+	private val myTsxMaker = new MakesTSX {}
+	type TriErrMsg = String
+	// Should mkXactTriOrErr build an effect, or claim to be pure?
+	// A function which catches an exception might be deemed less than 100% pure.
+	// If we pre-checked the tri-ineq, then we would have a pure and fast failure, and exceptions would never happen.
+	// This is a function we expect to execute a lot.
+	// We might sometimes execute it against pure inputs.  Doing 'catch' implies some performance penalty.
+	def mkXactTriJob(orderedSidesTup : (Int, Int, Int)) : Eff[Either[TriErrMsg, TriShapeXactish]] = {
+		val (a, b, c) = orderedSidesTup
+		// mkFromSidesIncreasing may throw
+		// If we were committed to IO affect we could: IO.apply(myTsxMaker.mkFromSidesIncreasing(a, b, c))
+		// But using IO directly in this kind of domain-oriented compute is questionable as a practice.
+		// If we know an instance of some helper/companion for Eff, such as Sync[Eff], then we can lift the compute with that.
+		// At that point we are implying all the laws of Sync[Eff], but in a way that is a bit wobbly from proof standpoint.
+		val syncEff = getSync
+		// "If your side effect is not thread-blocking then you can use Sync[F].delay"
+		var bareTriEff: Eff[TriShapeXactish] = syncEff.delay(myTsxMaker.mkFromSidesIncreasing(a, b, c))
+		// Now to handle the exception we use
+		val redeemedToEith: Eff[Either[TriErrMsg, TriShapeXactish]] = syncEff.redeem(bareTriEff)(thrn => Left(thrn.toString), tri => Right(tri))
+		// With attempt we can immediately get the Either, but note that to map we again, we have to pull in an instance,
+		// because the Eff type has no methods.
+		val bareAttempted: Eff[Either[Throwable, TriShapeXactish]] = syncEff.attempt(bareTriEff)
+
+		// bareTriEff.redeem[Either[TriErrMsg, TriShapeXactish]](thrn => Left(thrn.toString), tri => Right(tri))
+		redeemedToEith
+	}
+	def mkExactTriSemipure(orderedSidesTup : (Int, Int, Int)) : Either[TriErrMsg, TriShapeXactish] = {
+		val (a, b, c) = orderedSidesTup
+		val triTry = Try(myTsxMaker.mkFromSidesIncreasing(a, b, c))
+		val eithThrw: Either[Throwable, TriShapeXactish] = triTry.toEither
+		eithThrw.left.map(thrn => thrn.toString)
+	}
 	def makeTriSidesStreamUsingThrough(rng: CatsRandom[Eff], pairStrm: Stream[Eff, (Int, Int)]): Stream[Eff, (Int, Int, Int)] = {
 		//	wrong = pairStrm.through
 		???
@@ -85,6 +117,11 @@ trait TriStreamMaker[Eff[_]] { 	// User must bind an effect type when instantiat
 		???
 	}
 }
+
+class ClzWithContextBound[Eff[_] : Sync] { //
+	val impFM = implicitly[FlatMap[Eff]]
+}
+
 
 trait NaiveTriMaker {
 	private val myTsxMaker = new MakesTSX {}
@@ -112,13 +149,14 @@ trait NaiveTriMaker {
 		assert((sideLenX + sideLenY + sideLenZ) == perim)
 		val lame: Seq[Int] = Vector(sideLenX, sideLenY, sideLenZ).sorted
 		val tsx = lame match {
-			case Seq(a, b, c) => myTsxMaker.mkFromSidesIncreasing(a, b, c)
+			case Seq(a, b, c) => myTsxMaker.mkFromSidesIncreasing(a, b, c)	// may throw
 		}
 		tsx
 	}
 
-	def nowMakeOneDummyTriShape : TriShape = {
-		val tsx345 = myTsxMaker.mkFromSidesIncreasing(3, 4, 5)
+	def nowMakeOneRightTriShape(scale : Int) : TriShape = {
+		assert (scale >= 1)
+		val tsx345 = myTsxMaker.mkFromSidesIncreasing(scale * 3, scale * 4, scale * 5)
 		tsx345
 	}
 

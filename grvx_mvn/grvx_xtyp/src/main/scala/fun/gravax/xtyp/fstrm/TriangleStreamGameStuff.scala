@@ -3,7 +3,7 @@ package fun.gravax.xtyp.fstrm
 import cats.effect.kernel.Sync
 import cats.FlatMap
 import cats.effect.{ExitCode, IO, IOApp}
-import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape}
+import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape, TriShapeXactish}
 import fs2.{Pipe, Pure, Stream}
 
 import scala.util.Try
@@ -16,7 +16,7 @@ object RunTriStreamGame extends IOApp {
 	val ourMGF = new MakesGameFeatures {}
 
 	override def run(args: List[String]): IO[ExitCode] = {
-		val helloJob: IO[Unit] = IO.println("RunTriStreamGame asks:  Who wants to play with Triangles?")
+		val helloJob: IO[Unit] = IO.println("RunTriStreamGame/run/helloJob asks:  Who wants to play with Triangles?")
 		val triJob = ourMGF.mkJobThatPrintsFewTris
 		val manyJob = ourMGF.mkJobThatPrintsManyTris
 		helloJob.productR(triJob).productR(manyJob).as(ExitCode.Success)
@@ -36,19 +36,20 @@ trait MakesGameFeatures {
 	val myOtherNums = new OtherNums {}
 	def mkJobThatPrintsFewTris: IO[Unit] = {
 		val firstSubJob = IO.apply {
-			val tshp = myNaiveTriMaker.nowMakeOneDummyTriShape
-			val ttxt = myTryConsumer.triShapeToTxt(tshp)
-			println(s"Dumped tshp=${tshp} as txt=${ttxt}")
-			val randT = myNaiveTriMaker.nowMkTriWithRandSidesForFixedPerim(20, 4)
-			println(s"Dumped randT=${tshp} as txt=${myTryConsumer.triShapeToTxt(randT)}")
-			val strmOf2: Stream[Pure, TriShape] = Stream.emits(List(tshp, randT))
+			val firstTri = myNaiveTriMaker.nowMakeOneRightTriShape(1)
+			val ttxt = myTryConsumer.triShapeToTxt(firstTri)
+			println(s"Dumped firstTri=${firstTri} as txt=${ttxt}")
+			val randTT = Try(myNaiveTriMaker.nowMkTriWithRandSidesForFixedPerim(20, 4))
+			println(s"Dumped randTT=${randTT}")
+			val secondTri = randTT.getOrElse(myNaiveTriMaker.nowMakeOneRightTriShape(7))
+			val strmOf2: Stream[Pure, TriShape] = Stream.emits(List(firstTri, secondTri))
 			val strmOf30 = strmOf2.repeatN(15)
-			val strmOf9 = strmOf30.takeRight(9)
-			val outTxt = myTryConsumer.dumpFinitePureStreamOfTrisIntoTxtBlock(strmOf9)
-			println(s"9 tris:\n=================\n${outTxt}\n===================")
-			val summStrm: Stream[Pure, TriSetStat] = myTryConsumer.summarizeTriStream(strmOf9)
+			val strmOf5 = strmOf30.takeRight(5)
+			val outTxt = myTryConsumer.dumpFinitePureStreamOfTrisIntoTxtBlock(strmOf5)
+			println(s"5 tris:\n=================\n${outTxt}\n===================")
+			val summStrm: Stream[Pure, TriSetStat] = myTryConsumer.summarizeTriStream(strmOf5)
 			val summOut = summStrm.toList
-			println(s"Summarized 9 tris as: ${summOut}")
+			println(s"Summarized 5 tris as: ${summOut}")
 
 		}
 		val job4vectFromStream: IO[Vector[Int]] = myRandosForIO.mkStreamOfRandomInts(3, 8).take(10).compile.toVector
@@ -60,7 +61,7 @@ trait MakesGameFeatures {
 		})
 		val bigOlJobChain = jobChainSoFar.productL(job4out)
 		val oneMore = myNJM.makeRangedNumJobUsingSyncRandom[IO](50, 60)
-		val omd: IO[Unit] = oneMore.flatMap(num => IO.println(s"Effect produced num: ${num}"))
+		val omd: IO[Unit] = oneMore.flatMap(num => IO.println(s"'oneMore' job from makeRangedNumJobUsingSyncRandom produced num: ${num}"))
 		bigOlJobChain *> omd
 	}
 
@@ -68,7 +69,7 @@ trait MakesGameFeatures {
 
 	def mkJobThatPrintsManyTris: IO[Unit] = {
 		val dbgHead = "mkJobThatPrintsManyTris"
-		val pairlyEffect: IO[Stream[Pure, (Int, Int)]] = IO.apply {
+		val pairStrmJob: IO[Stream[Pure, (Int, Int)]] = IO.apply {
 
 			val someInts = myOtherNums.streamNumsUsingUnfold
 			val outInts = someInts.toList
@@ -87,20 +88,60 @@ trait MakesGameFeatures {
 			pairly
 		}
 
-		import cats.effect.std.{Random => CatsRandom}
-		val rngMakerJob: IO[CatsRandom[IO]] = CatsRandom.scalaUtilRandom[IO]
-		val bothPrecursors: IO[(Stream[Pure, (Int, Int)], CatsRandom[IO])] = pairlyEffect.both(rngMakerJob)
-		val sidesEff: IO[Unit] = bothPrecursors.flatMap(precPair => {
-			val (pairStrm, rng) = precPair
-			val betterPairStrm: Stream[IO, (Int, Int)] = pairStrm.covary[IO]
+		val sidesStreamJob: IO[Stream[IO, (Int, Int, Int)]] = makeSidesTupleStreamJob(pairStrmJob)
 
-			val triSidesStrm: Stream[IO, (Int, Int, Int)] = ourTsMkr.makeTriSidesStreamUsingEvalMap(rng, betterPairStrm)
-			val dbgStrm = triSidesStrm.debug()
+		val sideStrmDebugCompiledJob = sidesStreamJob.map(_.debug().compile) // type= IO[Stream.CompileOps[IO, IO, (Int, Int, Int)]]
+		val sideStrmLstDumpJob: IO[List[(Int, Int, Int)]] = sideStrmDebugCompiledJob.flatMap(compStrm => {
+			val sidesTupleListEff: IO[List[(Int, Int, Int)]] = compStrm.toList
+			// FlatTap inserts an effect without changing the output
+			val tappedEff: IO[List[(Int, Int, Int)]] = sidesTupleListEff.flatTap(sidesTupleList => {
+				IO.println(s"${dbgHead}.tappedEff got SidesTuple-list: ${sidesTupleList}")
+			})
+			tappedEff // Will execute our tapped-print, and then produce the List
+		})
+
+		// Although it is cumbersome to initialize all these 'job' vals, the payoff is that we can later choose which
+		// of them actually get run, without having to disable the setup code.
+		val sidesEff: IO[Unit] = sidesStreamJob.flatMap(strm => {
+			val dbgStrm = strm.debug()
 			val listJob: IO[List[(Int, Int, Int)]] = dbgStrm.compile.toList
 			val listDumpJob = listJob.flatMap(lst => IO.println(s"Side-Stream-list: ${lst}"))
 			listDumpJob
 		})
-		sidesEff
+
+		val triEithStrmJob: IO[Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]] = sidesStreamJob.map(stupStrm => {
+			stupStrm.evalMap(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
+		})
+		val triWinStrmJob: IO[Stream[IO, TriShapeXactish]] = triEithStrmJob.map(triStrm => {
+			// We drop all the errors and keep the TriShapes
+			triStrm.debug().flatMap(eith => {
+				val errOrTri: Either[ourTsMkr.TriErrMsg, TriShapeXactish] = eith
+				Stream.fromOption(eith.toOption)
+			})
+		})
+		val triSummStrmJob: IO[Stream[IO, TriSetStat]] = triWinStrmJob.map(triStrm => myTryConsumer.summarizeTriStream(triStrm))
+		val triSummEff: IO[Unit] = triSummStrmJob.flatMap(triSummStrm => {
+			val outSummJob: IO[List[TriSetStat]] = triSummStrm.compile.toList
+			outSummJob.flatMap(summLst => IO.println(s"${dbgHead} Tri-Summ-list: ${summLst}"))
+		})
+		// Cats effect 3.3 does not have "IO.andWait"
+		sidesEff >> triSummEff
+		// is >> exactly the same as productR?
+		// >> [B](that: => IO[B]): IO[B]
+		//Runs the current IO, then runs the parameter, keeping its result. The result of the first action is ignored.
+		// If the source fails, the other action won't run. Evaluation of the parameter is done lazily, making this
+		// suitable for recursion.
+	}
+
+	def makeSidesTupleStreamJob(pairStreamJob: IO[Stream[Pure, (Int, Int)]]): IO[Stream[IO, (Int, Int, Int)]] = {
+		import cats.effect.std.{Random => CatsRandom}
+		val rngMakerJob: IO[CatsRandom[IO]] = CatsRandom.scalaUtilRandom[IO]
+		val bothPrecursors: IO[(Stream[Pure, (Int, Int)], CatsRandom[IO])] = pairStreamJob.both(rngMakerJob)
+		val sidesTupleStreamJob: IO[Stream[IO, (Int, Int, Int)]] = bothPrecursors.map(precPair => {
+			val (pairStrm, rng) = precPair
+			ourTsMkr.makeTriSidesStreamUsingEvalMap(rng, pairStrm.covary[IO])	// uses Stream.PureOps.covary
+		})
+		sidesTupleStreamJob
 	}
 }
 
@@ -131,4 +172,35 @@ https://www.javadoc.io/doc/co.fs2/fs2-docs_2.13/3.5.0/fs2/Stream.html
 .prefetch(n).parEvalMapUnordered(n)
 
 	 StringBuilder is faster than StringBuffer, because it is not threadsafe/synchronized.
+
+IO combinators:
+
+   * Like [[*>]], but keeps the result of the source.
+   * For a similar method that also runs the parameter in case of failure or interruption, see
+   * [[guarantee]].
+
+  def <*[B](that: IO[B]): IO[A] =  productL(that)
+
+   * Runs the current IO, then runs the parameter, keeping its result. The result of the first
+   * action is ignored. If the source fails, the other action won't run. Not suitable for use
+   * when the parameter is a recursive reference to the current expression.
+
+  def *>[B](that: IO[B]): IO[B] = productR(that)
+
+   * Runs the current IO, then runs the parameter, keeping its result. The result of the first
+   * action is ignored. If the source fails, the other action won't run. Evaluation of the
+   * parameter is done lazily, making this suitable for recursion.
+
+  def >>[B](that: => IO[B]): IO[B] = flatMap(_ => that)
+
+  def !>[B](that: IO[B]): IO[B] =   forceR(that)
+
+   * Runs this IO and the parameter in parallel.
+   * Failure in either of the IOs will cancel the other one. If the whole computation is
+   * canceled, both actions are also canceled.
+  def &>[B](that: IO[B]): IO[B] =   both(that).map { case (_, b) => b }
+
+   * Like [[&>]], but keeps the result of the source
+  def <&[B](that: IO[B]): IO[A] =  both(that).map { case (a, _) => a }
+
  */

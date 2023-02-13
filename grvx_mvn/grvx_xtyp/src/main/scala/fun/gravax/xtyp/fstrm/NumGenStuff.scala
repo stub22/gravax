@@ -13,15 +13,21 @@ private trait NumGenStuff
 trait NumJobMaker {
 	// These functions each allow a type paramter for effect type F.
 	// This is unnecessarily general, since whatever context builds the NumJobMaker
-	// will probably use the same Effect type.  So might as well use a trait-level type parameter,
-	// as we do in TriStreamMaker.
+	// will probably use the same Effect type.  So might as well use a trait or class level type parameter,
+	// as we do in TriStreamMaker.  However, note that traits cannot use context bounds.
 
 	// Here we constrain F to support .map, using   :Functor and implicitly
+	// "Generally, a type parameter with a context bound is of the form [T: Bound]; it is expanded to plain type
+	// parameter T together with an implicit parameter of type Bound[T]."
+	// https://www.baeldung.com/scala/view-context-bounds
+	// https://www.baeldung.com/scala/implicitly
+
+	private val dbgImps : Boolean = false
 	def makeRandomRangedNumEffect[F[_] : Functor](rng: CatsRandom[F], minIncl: Int, maxIncl: Int): F[Int] = {
 		val range = maxIncl - minIncl + 1
 		val rangedNumJob: F[Int] = rng.nextIntBounded(range)
 		val impFunct: Functor[F] = implicitly[Functor[F]]
-		println(s"makeRandomRangedNumEffect got implicit functor instance: ${impFunct}, minIncl=${minIncl}, maxIncl=${maxIncl}")
+		if (dbgImps) println(s"makeRandomRangedNumEffect got implicit functor instance: ${impFunct}, minIncl=${minIncl}, maxIncl=${maxIncl}")
 		val shiftedNumJob = impFunct.map(rangedNumJob)(num => num + minIncl)
 		shiftedNumJob
 	}
@@ -31,7 +37,7 @@ trait NumJobMaker {
 		val rngMakerJob: F[CatsRandom[F]] = CatsRandom.scalaUtilRandom[F] // requires implicit evidence : cats.effect.kernel.Sync[F]
 		// Sync => Monad => FlatMap
 		val impFM = implicitly[FlatMap[F]]
-		println(s"makeRangedNumJobUsingSyncRandom got implicit FlatMapper instance: ${impFM}")
+		if (dbgImps) println(s"makeRangedNumJobUsingSyncRandom got implicit FlatMapper instance: ${impFM}")
 		impFM.flatMap(rngMakerJob)(rng => makeRandomRangedNumEffect(rng, minIncl, maxIncl))
 	}
 	// Here we assume that a single rng is already made for us, which allows us to wire it directly into an effect.
@@ -41,7 +47,7 @@ trait NumJobMaker {
 		val streamOne: Stream[F, Int] = Stream.eval {
 			val numJob: F[Int] = rng.nextIntBounded(range)
 			val impFunct = implicitly[Functor[F]]
-			println(s"makeRandomNumStream got implicit functor instance: ${impFunct}, minIncl=${minIncl}, maxIncl=${maxIncl}")
+			if (dbgImps) println(s"makeRandomNumStream got implicit functor instance: ${impFunct}, minIncl=${minIncl}, maxIncl=${maxIncl}")
 			val shifted = impFunct.map(numJob)(_ + minIncl)
 			shifted
 		}
@@ -54,6 +60,7 @@ trait NumJobMaker {
 
 trait RandosBoundToIO {
 	type Eff[X] = IO[X] // How do we weaken this to say only that Eff must implement FlatMap?
+	// A class-param context bound can do that.
 
 	// Each time this job is run, it returns a reference to a good source of random numbers.
 	// We don't know if it's the same instance of scalaUtilRandom, but as long as we are using
@@ -90,6 +97,7 @@ trait RandosBoundToIO {
 	def makeJobToProduceRngAndThenNumStream(minIncl : Int, maxIncl : Int) : Eff[Stream[Eff, Int]] = {
 		myRngMakerJob.map(rng => myNJM.makeRandomNumStream(rng, minIncl, maxIncl))
 	}
+
 }
 trait OtherNums {
 	//  def unfold[F[x] >: fs2.Pure[x], S, O](s : S)(f : scala.Function1[S, scala.Option[scala.Tuple2[O, S]]]) : fs2.Stream[F, O] = { /* compiled code */ }

@@ -38,12 +38,13 @@ trait MakesTSX {
 		override def getField: Field[SpAlg] = SpAlg.AlgebraicAlgebra
 		override def getNRoot: NRoot[SpAlg] = SpAlg.AlgebraicAlgebra
 	}
-	private val flg_doUnsafeDebug = true
+	private val flg_doUnsafeDebug = false
 	def mkFromSidesIncreasing(shortSide : SpAlg, medSide : SpAlg, lngSide : SpAlg) : TriShapeXactish = {
 		val debugBase : String = s"Short[${shortSide}], Med[${medSide}], Long[${lngSide}]"
 		// The ordering constraints on short, med, lng are enforced here by Assert.
 		// Ideally, we would make them compile time constraints.
 		// assert will throw java.lang.AssertionError.  assert checks may be disabled with -Xelide-below ASSERTION
+		// https://www.baeldung.com/scala/assert-vs-require
 		assert(shortSide.<=(medSide), s"Failed for ${debugBase} because short must be less-or-eq than med")
 		assert(medSide.<=(lngSide), s"Failed for ${debugBase} because med must be less-or-eq than lng")
 		val shortPlusMed = shortSide.+(medSide)
