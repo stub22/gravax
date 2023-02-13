@@ -70,7 +70,7 @@ trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantia
 		// def evalMap[F2[x] >: F[x], O2](f: (O) => F2[O2]): Stream[F2, O2]
 		// Alias for flatMap(o => Stream.eval(f(o))).
 		pairStrm.evalMap(paramPair => {
-			println(s"makeTriSidesStreamUsingEvalMap:  rng=${rng}, paramPair=${paramPair}")
+			if (false) println(s"makeTriSidesStreamUsingEvalMap:  rng=${rng}, paramPair=${paramPair}")
 			makeTriSidesJob(rng, paramPair._1, paramPair._2)
 		})
 	}

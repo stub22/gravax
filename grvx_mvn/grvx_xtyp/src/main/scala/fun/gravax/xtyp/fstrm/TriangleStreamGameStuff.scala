@@ -78,7 +78,8 @@ trait MakesGameFeatures {
 			dbgNow(dbgHead, s"Rangey stream .toList = ${perimsRange.toList}")
 			val pairly: Stream[Pure, (Int, Int)] = perimsRange.flatMap(perim =>
 					Stream.range(1, 4).map(minLen => (perim, minLen)))
-			dbgNow(dbgHead, s"Pairly stream .toList = ${pairly.toList}")
+			val pairlyList = pairly.toList
+			dbgNow(dbgHead, s"Pairly .toList len = ${pairlyList.length}, contents = ${pairlyList}")
 			val naiveTriStrm = pairly.map(pair => {
 				myNaiveTriMaker.nowMkTriWithRandSidesForFixedPerim(pair._1, pair._2)
 			})
@@ -112,20 +113,40 @@ trait MakesGameFeatures {
 		val triEithStrmJob: IO[Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]] = sidesStreamJob.map(stupStrm => {
 			stupStrm.evalMap(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
 		})
-		val triWinStrmJob: IO[Stream[IO, TriShapeXactish]] = triEithStrmJob.map(triStrm => {
-			// We drop all the errors and keep the TriShapes
-			triStrm.debug().flatMap(eith => {
+
+		// Unused fork showing how we could keep counts for Left+Right using zipWithScan
+		val triEithWithCntsJob: IO[Stream[IO, (Either[ourTsMkr.TriErrMsg, TriShapeXactish], (Int, Int))]] =
+				triEithStrmJob.map(eithStrm => eithStrm.zipWithScan1((0,0))((cntPair, eot) => {
+			val leftIncr = if (eot.isLeft) 1 else 0
+			val rightIncr = if (eot.isRight) 1 else 0
+			(cntPair._1 + leftIncr, cntPair._2 + rightIncr)
+		}))
+		val triEithCntOutEff = triEithWithCntsJob.flatMap(eithPlusCntsStrm => {
+			val lstEff = eithPlusCntsStrm.compile.toList
+			val newline = "\n"
+			lstEff.flatMap (lst => IO.println(s"eithers with counts: ${lst.mkString(newline)}"))
+		})
+
+		// val failedCountStrmJob = triEithStrmJob.flatTap(triEithStrm => )
+		// // , IO[(Int, Int)]
+		val triWinStrmJob: IO[Stream[IO, TriShapeXactish]] = triEithStrmJob.map(triEithStrm => {
+			// We drop all the errors and keep the TriShapes.  Easiest way to expose number of failures?
+			val mightDebug = if (false) triEithStrm.debug() else triEithStrm
+			val triWinStrm: Stream[IO, TriShapeXactish] = mightDebug.flatMap(eith => {
 				val errOrTri: Either[ourTsMkr.TriErrMsg, TriShapeXactish] = eith
 				Stream.fromOption(eith.toOption)
 			})
+			triWinStrm
 		})
-		val triSummStrmJob: IO[Stream[IO, TriSetStat]] = triWinStrmJob.map(triStrm => myTryConsumer.summarizeTriStream(triStrm))
+
+		val triSummStrmJob = triWinStrmJob.map(triWinStrm => myTryConsumer.summarizeTriStream(triWinStrm))
 		val triSummEff: IO[Unit] = triSummStrmJob.flatMap(triSummStrm => {
 			val outSummJob: IO[List[TriSetStat]] = triSummStrm.compile.toList
 			outSummJob.flatMap(summLst => IO.println(s"${dbgHead} Tri-Summ-list: ${summLst}"))
 		})
+
 		// Cats effect 3.3 does not have "IO.andWait"
-		sidesEff >> triSummEff
+		sidesEff >> triSummEff >> triEithCntOutEff
 		// is >> exactly the same as productR?
 		// >> [B](that: => IO[B]): IO[B]
 		//Runs the current IO, then runs the parameter, keeping its result. The result of the first action is ignored.
@@ -142,6 +163,18 @@ trait MakesGameFeatures {
 			ourTsMkr.makeTriSidesStreamUsingEvalMap(rng, pairStrm.covary[IO])	// uses Stream.PureOps.covary
 		})
 		sidesTupleStreamJob
+	}
+	def countingJob(eithStrm : Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]) : Unit = {
+		val initCntPair = (0, 0)
+		val countStreamOf1: Stream[IO, (Int, Int)] = eithStrm.fold(initCntPair)((cntPair, eot) => {
+			val leftIncr = if (eot.isLeft) 1 else 0
+			val rightIncr = if (eot.isRight) 1 else 0
+			(cntPair._1 + leftIncr, cntPair._2 + rightIncr)
+		})
+		val cntOutPairJob: IO[(Int, Int)] = countStreamOf1.compile.toList.map(_.head)
+
+		// But
+
 	}
 }
 
