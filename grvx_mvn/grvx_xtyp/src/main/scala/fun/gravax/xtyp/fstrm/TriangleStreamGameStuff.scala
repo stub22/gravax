@@ -17,6 +17,7 @@ object RunTriStreamGame extends IOApp {
 
 	override def run(args: List[String]): IO[ExitCode] = {
 		val helloJob: IO[Unit] = IO.println("RunTriStreamGame/run/helloJob asks:  Who wants to play with Triangles?")
+		ourMGF.useCBoundClz
 		val triJob = ourMGF.mkJobThatPrintsFewTris
 		val manyJob = ourMGF.mkJobThatPrintsManyTris
 		helloJob.productR(triJob).productR(manyJob).as(ExitCode.Success)
@@ -34,6 +35,8 @@ trait MakesGameFeatures {
 	val myTryConsumer = new TriStreamConsumer {}
 	val myNJM = new NumJobMaker{}
 	val myOtherNums = new OtherNums {}
+
+	val myPieceMaker = new TriStreamPieceMaker{}
 	def mkJobThatPrintsFewTris: IO[Unit] = {
 		val firstSubJob = IO.apply {
 			val firstTri = myNaiveTriMaker.nowMakeOneRightTriShape(1)
@@ -69,36 +72,17 @@ trait MakesGameFeatures {
 
 	def mkJobThatPrintsManyTris: IO[Unit] = {
 		val dbgHead = "mkJobThatPrintsManyTris"
+
 		val pairStrmJob: IO[Stream[Pure, (Int, Int)]] = IO.apply {
-
-			val someInts = myOtherNums.streamNumsUsingUnfold
-			val outInts = someInts.toList
-			dbgNow(dbgHead, s"Dumped someInts=${someInts} as outInts=${outInts}")
-			val perimsRange = Stream.range(10, 40, 3)
-			dbgNow(dbgHead, s"Rangey stream .toList = ${perimsRange.toList}")
-			val pairly: Stream[Pure, (Int, Int)] = perimsRange.flatMap(perim =>
-					Stream.range(1, 4).map(minLen => (perim, minLen)))
-			val pairlyList = pairly.toList
-			dbgNow(dbgHead, s"Pairly .toList len = ${pairlyList.length}, contents = ${pairlyList}")
-			val naiveTriStrm = pairly.map(pair => {
-				myNaiveTriMaker.nowMkTriWithRandSidesForFixedPerim(pair._1, pair._2)
-			})
-
-			val outTxt: Try[String] = Try(myTryConsumer.dumpFinitePureStreamOfTrisIntoTxtBlock(naiveTriStrm))
-			dbgNow(dbgHead, s"NAIVE tris:\n=================\n${outTxt}\n===================")
-			pairly
+			val pairStrm = myPieceMaker.mkPureStreamOfPairs
+			myPieceMaker.dumpSmallSampleOfTris(pairStrm)
+			pairStrm
 		}
 
 		val sidesStreamJob: IO[Stream[IO, (Int, Int, Int)]] = makeSidesTupleStreamJob(pairStrmJob)
 
-		val sideStrmDebugCompiledJob = sidesStreamJob.map(_.debug().compile) // type= IO[Stream.CompileOps[IO, IO, (Int, Int, Int)]]
-		val sideStrmLstDumpJob: IO[List[(Int, Int, Int)]] = sideStrmDebugCompiledJob.flatMap(compStrm => {
-			val sidesTupleListEff: IO[List[(Int, Int, Int)]] = compStrm.toList
-			// FlatTap inserts an effect without changing the output
-			val tappedEff: IO[List[(Int, Int, Int)]] = sidesTupleListEff.flatTap(sidesTupleList => {
-				IO.println(s"${dbgHead}.tappedEff got SidesTuple-list: ${sidesTupleList}")
-			})
-			tappedEff // Will execute our tapped-print, and then produce the List
+		val sideStrmLstDumpJob: IO[List[(Int, Int, Int)]] = sidesStreamJob.flatMap(tstrm => {
+			myPieceMaker.dumpSomeTrisToList(tstrm)
 		})
 
 		// Although it is cumbersome to initialize all these 'job' vals, the payoff is that we can later choose which
@@ -122,9 +106,7 @@ trait MakesGameFeatures {
 			(cntPair._1 + leftIncr, cntPair._2 + rightIncr)
 		}))
 		val triEithCntOutEff = triEithWithCntsJob.flatMap(eithPlusCntsStrm => {
-			val lstEff = eithPlusCntsStrm.compile.toList
-			val newline = "\n"
-			lstEff.flatMap (lst => IO.println(s"eithers with counts: ${lst.mkString(newline)}"))
+			myPieceMaker.sampleTriResultsWithCnts(eithPlusCntsStrm)
 		})
 
 		// val failedCountStrmJob = triEithStrmJob.flatTap(triEithStrm => )
@@ -146,7 +128,9 @@ trait MakesGameFeatures {
 		})
 
 		// Cats effect 3.3 does not have "IO.andWait"
-		sidesEff >> triSummEff >> triEithCntOutEff
+		val summThenCnts = triSummEff >> triEithCntOutEff
+		val toDoChain = if(false) sidesEff >> summThenCnts else summThenCnts
+		toDoChain
 		// is >> exactly the same as productR?
 		// >> [B](that: => IO[B]): IO[B]
 		//Runs the current IO, then runs the parameter, keeping its result. The result of the first action is ignored.
@@ -164,7 +148,7 @@ trait MakesGameFeatures {
 		})
 		sidesTupleStreamJob
 	}
-	def countingJob(eithStrm : Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]) : Unit = {
+	def otherCountingJob(eithStrm : Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]) : Unit = {
 		val initCntPair = (0, 0)
 		val countStreamOf1: Stream[IO, (Int, Int)] = eithStrm.fold(initCntPair)((cntPair, eot) => {
 			val leftIncr = if (eot.isLeft) 1 else 0
@@ -172,12 +156,72 @@ trait MakesGameFeatures {
 			(cntPair._1 + leftIncr, cntPair._2 + rightIncr)
 		})
 		val cntOutPairJob: IO[(Int, Int)] = countStreamOf1.compile.toList.map(_.head)
+	}
 
-		// But
-
+	def useCBoundClz : IO[Unit] = {
+		val x= new ClzWithContextBound[IO]
+		val preJob = IO.println("useCBoundClz/preJob says Hi!")
+		// val outJob = x.processUsingCtx(preJob)
+		preJob
 	}
 }
+trait TriStreamPieceMaker {
+	val myNaiveTriMaker = new NaiveTriMaker {}
+	val myRandosForIO = new RandosBoundToIO{}
+	val myTryConsumer = new TriStreamConsumer {}
+	val myNJM = new NumJobMaker{}
+	val myOtherNums = new OtherNums {}
 
+	def dbgNow(dbgHead: String, dbgBody: String): Unit = println(dbgHead, dbgBody)
+
+
+	def mkPureStreamOfPairs : Stream[Pure, (Int, Int)] = {
+		val dbgHead = "mkPureStreamOfPairs"
+		val someInts = myOtherNums.streamNumsUsingUnfold
+		val outInts = someInts.toList
+		dbgNow(dbgHead, s"Dumped someInts=${someInts} as outInts=${outInts}")
+		val perimsRange = Stream.range(10, 4000, 3)
+		dbgNow(dbgHead, s"Rangey stream sample .toList = ${perimsRange.take(10).toList}")
+		val pairly: Stream[Pure, (Int, Int)] = perimsRange.flatMap(perim =>
+			Stream.range(1, perim / 5).map(minLen => (perim, minLen)))
+
+		pairly
+	}
+	def dumpSmallSampleOfTris(pairly: Stream[Pure, (Int, Int)]) : Unit = {
+		val dbgHead = "mkPureStreamOfPairs"
+		val pairlyList = pairly.take(10).toList
+		dbgNow(dbgHead, s"Pairly-sample-list .toList len = ${pairlyList.length}, contents = ${pairlyList}")
+		val naiveTriStrm = pairly.map(pair => {
+			myNaiveTriMaker.nowMkTriWithRandSidesForFixedPerim(pair._1, pair._2)
+		})
+
+		val outTxt: Try[String] = Try(myTryConsumer.dumpFinitePureStreamOfTrisIntoTxtBlock(naiveTriStrm))
+		dbgNow(dbgHead, s"NAIVE tris:\n=================\n${outTxt}\n===================")
+	}
+
+	def dumpSomeTrisToList(tripleStrm : Stream[IO, (Int, Int, Int)]) : IO[List[(Int, Int, Int)]] = {
+		val dbgHead = "dumpSomeTrisToList"
+		val compStrm = tripleStrm.debug().compile
+		val sidesTupleListEff: IO[List[(Int, Int, Int)]] = compStrm.toList
+		// FlatTap inserts an effect without changing the output
+		val tappedEff: IO[List[(Int, Int, Int)]] = sidesTupleListEff.flatTap(sidesTupleList => {
+			IO.println(s"${dbgHead}.tappedEff got SidesTuple-list: ${sidesTupleList}")
+		})
+		tappedEff // Will execute our tapped-print, and then produce the List
+
+	}
+	def sampleTriResultsWithCnts[SomeTriErrMsg](eithPlusCntsStrm : Stream[IO, (Either[SomeTriErrMsg, TriShapeXactish], (Int, Int))]) : IO[Unit] = {
+		val front = eithPlusCntsStrm.take(5)
+		val back = eithPlusCntsStrm.takeRight(5)
+		val sample = front.append(back)
+		val flg_dumpAll = false
+		val dumpMe = if (flg_dumpAll) eithPlusCntsStrm else sample
+		val lstEff = dumpMe.compile.toList
+		val newline = "\n"
+		val outJob: IO[Unit] = lstEff.flatMap (lst => IO.println(s"eithers with counts: ${lst.mkString(newline)}"))
+		outJob
+	}
+}
 
 /*
 
@@ -236,4 +280,48 @@ IO combinators:
    * Like [[&>]], but keeps the result of the source
   def <&[B](that: IO[B]): IO[A] =  both(that).map { case (a, _) => a }
 
+ */
+
+/*
+DELETE:
+
+val someInts = myOtherNums.streamNumsUsingUnfold
+val outInts = someInts.toList
+dbgNow(dbgHead, s"Dumped someInts=${someInts} as outInts=${outInts}")
+val perimsRange = Stream.range(10, 4000, 3)
+dbgNow(dbgHead, s"Rangey stream sample .toList = ${perimsRange.take(10).toList}")
+val pairly: Stream[Pure, (Int, Int)] = perimsRange.flatMap(perim =>
+		Stream.range(1, perim / 5).map(minLen => (perim, minLen)))
+val pairlyList = pairly.take(10).toList
+dbgNow(dbgHead, s"Pairly-sample-list .toList len = ${pairlyList.length}, contents = ${pairlyList}")
+val naiveTriStrm = pairly.map(pair => {
+	myNaiveTriMaker.nowMkTriWithRandSidesForFixedPerim(pair._1, pair._2)
+})
+
+val outTxt: Try[String] = Try(myTryConsumer.dumpFinitePureStreamOfTrisIntoTxtBlock(naiveTriStrm))
+dbgNow(dbgHead, s"NAIVE tris:\n=================\n${outTxt}\n===================")
+pairly
+ */
+
+//		val sideStrmDebugCompiledJob = sidesStreamJob.map(_.debug().compile) // type= IO[Stream.CompileOps[IO, IO, (Int, Int, Int)]]
+//		val sideStrmLstDumpJob: IO[List[(Int, Int, Int)]] = sideStrmDebugCompiledJob.flatMap(compStrm => {
+
+
+/*			val compStrm = tstrm.debug().compile
+			val sidesTupleListEff: IO[List[(Int, Int, Int)]] = compStrm.toList
+			// FlatTap inserts an effect without changing the output
+			val tappedEff: IO[List[(Int, Int, Int)]] = sidesTupleListEff.flatTap(sidesTupleList => {
+				IO.println(s"${dbgHead}.tappedEff got SidesTuple-list: ${sidesTupleList}")
+			})
+			tappedEff // Will execute our tapped-print, and then produce the List
+ */
+/*
+val front = eithPlusCntsStrm.take(5)
+val back = eithPlusCntsStrm.takeRight(5)
+val sample = front.append(back)
+val flg_dumpAll = false
+val dumpMe = if (flg_dumpAll) eithPlusCntsStrm else sample
+val lstEff = dumpMe.compile.toList
+val newline = "\n"
+lstEff.flatMap (lst => IO.println(s"eithers with counts: ${lst.mkString(newline)}"))
  */

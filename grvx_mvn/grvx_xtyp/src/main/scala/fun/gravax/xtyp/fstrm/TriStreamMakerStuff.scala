@@ -120,6 +120,10 @@ trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantia
 
 class ClzWithContextBound[Eff[_] : Sync] { //
 	val impFM = implicitly[FlatMap[Eff]]
+
+	def processUsingCtx(inJob : Eff[String]): Unit = {
+
+	}
 }
 
 
