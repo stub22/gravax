@@ -30,6 +30,29 @@ trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantia
 	// val impSync = getSync
 	implicit val impFMF: FlatMap[Eff] = getFM // This val is used by the calls below to .makeRandomRangedNumEffect
 
+
+	// Produces a job which generates ONE triple of partially constrained side lengths (which *may* form a legal
+	// triangle) each time it is run.
+	// TODO:  Produce a more general version that can use different numeric types (from Spire).
+	// Note this will be type-variance in the DOMAIN-MODELING dimension rather than the PLATFORM-TECH dimension (Eff).
+	// When we are fully polymorphic in both, then we are closer to capturing the essence of the domain-functional
+	// idea (generate 3 random-ish side-lengths which *may* form a legal triangle).
+	// Question:  How much faster is it to produce a chunk of N of these triples in one go, rather than to run this
+	// job N times?
+
+	// Elements of the computation:
+	// Constraints:  perim, minSideLen
+	// Impure data-source:  rng
+	// Output triple of numbers
+	// NUM type
+	// EFF type
+	// Algorithm of generation, with implied biases.  This algo implies a distribution for the side-triples.
+
+	// TODO:  Produce a version that can generate using SAS = Side-Angle-Side, which can give us one intuitive
+	// kind of uniformity in the distribution of triangles, avoiding illegal triangles.  The tradeoff is in the
+	// gnarliness of dealing with angles.  Sensible constraints could be just minSideLen and maxSideLen, although
+	// we could also constrain the angles.
+
 	def makeTriSidesJob(rng: CatsRandom[Eff], perim: Int, minSideLen: Int): Eff[(Int, Int, Int)] = {
 		// Same algo used in NaiveTriMaker, but all randomness is suspended in the Eff-ect.
 		// Note that we use the rng TWICE, and the param for the second is dependent on result from the first.

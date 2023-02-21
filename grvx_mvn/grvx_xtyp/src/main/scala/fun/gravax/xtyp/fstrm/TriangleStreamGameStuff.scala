@@ -70,23 +70,34 @@ trait MakesGameFeatures {
 
 	def dbgNow(dbgHead: String, dbgBody: String): Unit = println(dbgHead, dbgBody)
 
-	def mkJobThatPrintsManyTris: IO[Unit] = {
-		val dbgHead = "mkJobThatPrintsManyTris"
+	def mkJobProducingStreamOfTriEithers: IO[Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]] = {
+		val dbgHead = "mkJobProducingStreamOfTriEithers"
 
+		// We start with a stream of int-pairs that each constrain a triangle-generation step.
 		val pairStrmJob: IO[Stream[Pure, (Int, Int)]] = IO.apply {
 			val pairStrm = myPieceMaker.mkPureStreamOfPairs
 			myPieceMaker.dumpSmallSampleOfTris(pairStrm)
 			pairStrm
 		}
 
+		// FIXME:  From a readability perspective, the wrapping and unwrapping overwhelms the business code.
+		// If we can put the business data transforms into methods of a trait, then invoke them all in
+		// one long functional chain, that may be more readable.
 		val sidesStreamJob: IO[Stream[IO, (Int, Int, Int)]] = makeSidesTupleStreamJob(pairStrmJob)
 
+		// Hmm we are making these debug jobs now, but we won't use them until a bunch of other useful work
+		// is done (which we might prefer to split into a different method).  Also we note that this job
+		// will NOT see the same input as the more important triEithStrmJob below.  We can only get it
+		// to see the same input if we place this work into the same chain, or use some kind of buffering
+		// to share the data between jobs (e.g. fs2 Topic).
 		val sideStrmLstDumpJob: IO[List[(Int, Int, Int)]] = sidesStreamJob.flatMap(tstrm => {
 			myPieceMaker.dumpSomeTrisToList(tstrm)
 		})
 
-		// Although it is cumbersome to initialize all these 'job' vals, the payoff is that we can later choose which
-		// of them actually get run, without having to disable the setup code.
+		// It is cumbersome to initialize all these 'job' vals.
+		// One payoff is that we can later choose which of them actually get run, without having to disable the setup code.
+		// However, we can't easily share these vals across methods.
+		// If we replace each job-val with a job-def...
 		val sidesEff: IO[Unit] = sidesStreamJob.flatMap(strm => {
 			val dbgStrm = strm.debug()
 			val listJob: IO[List[(Int, Int, Int)]] = dbgStrm.compile.toList
@@ -97,14 +108,21 @@ trait MakesGameFeatures {
 		val triEithStrmJob: IO[Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]] = sidesStreamJob.map(stupStrm => {
 			stupStrm.evalMap(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
 		})
-
-		// Unused fork showing how we could keep counts for Left+Right using zipWithScan
+		triEithStrmJob
+		// TODO:  Want to insert an fs2.Topic here to allow different consumers to process the Either results.
+	}
+	def mkJobThatPrintsManyTris: IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers
+		val dbgHead = "mkJobThatPrintsManyTris"
+		// Counting instances of Left+Right using zipWithScan.
+		// Here we are embedding accumulator data into the record stream.
 		val triEithWithCntsJob: IO[Stream[IO, (Either[ourTsMkr.TriErrMsg, TriShapeXactish], (Int, Int))]] =
 				triEithStrmJob.map(eithStrm => eithStrm.zipWithScan1((0,0))((cntPair, eot) => {
 			val leftIncr = if (eot.isLeft) 1 else 0
 			val rightIncr = if (eot.isRight) 1 else 0
 			(cntPair._1 + leftIncr, cntPair._2 + rightIncr)
 		}))
+
 		val triEithCntOutEff = triEithWithCntsJob.flatMap(eithPlusCntsStrm => {
 			myPieceMaker.sampleTriResultsWithCnts(eithPlusCntsStrm)
 		})
@@ -129,6 +147,7 @@ trait MakesGameFeatures {
 
 		// Cats effect 3.3 does not have "IO.andWait"
 		val summThenCnts = triSummEff >> triEithCntOutEff
+		val sidesEff : IO[Unit] = IO.println("sidesEff is disabled") // sidesEff was built in old long-form of this method.
 		val toDoChain = if(false) sidesEff >> summThenCnts else summThenCnts
 		toDoChain
 		// is >> exactly the same as productR?
@@ -148,6 +167,7 @@ trait MakesGameFeatures {
 		})
 		sidesTupleStreamJob
 	}
+
 	def otherCountingJob(eithStrm : Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]) : Unit = {
 		val initCntPair = (0, 0)
 		val countStreamOf1: Stream[IO, (Int, Int)] = eithStrm.fold(initCntPair)((cntPair, eot) => {
@@ -174,7 +194,7 @@ trait TriStreamPieceMaker {
 
 	def dbgNow(dbgHead: String, dbgBody: String): Unit = println(dbgHead, dbgBody)
 
-
+	// Generates pairs of (perimeter, min-side-length)
 	def mkPureStreamOfPairs : Stream[Pure, (Int, Int)] = {
 		val dbgHead = "mkPureStreamOfPairs"
 		val someInts = myOtherNums.streamNumsUsingUnfold
@@ -282,46 +302,3 @@ IO combinators:
 
  */
 
-/*
-DELETE:
-
-val someInts = myOtherNums.streamNumsUsingUnfold
-val outInts = someInts.toList
-dbgNow(dbgHead, s"Dumped someInts=${someInts} as outInts=${outInts}")
-val perimsRange = Stream.range(10, 4000, 3)
-dbgNow(dbgHead, s"Rangey stream sample .toList = ${perimsRange.take(10).toList}")
-val pairly: Stream[Pure, (Int, Int)] = perimsRange.flatMap(perim =>
-		Stream.range(1, perim / 5).map(minLen => (perim, minLen)))
-val pairlyList = pairly.take(10).toList
-dbgNow(dbgHead, s"Pairly-sample-list .toList len = ${pairlyList.length}, contents = ${pairlyList}")
-val naiveTriStrm = pairly.map(pair => {
-	myNaiveTriMaker.nowMkTriWithRandSidesForFixedPerim(pair._1, pair._2)
-})
-
-val outTxt: Try[String] = Try(myTryConsumer.dumpFinitePureStreamOfTrisIntoTxtBlock(naiveTriStrm))
-dbgNow(dbgHead, s"NAIVE tris:\n=================\n${outTxt}\n===================")
-pairly
- */
-
-//		val sideStrmDebugCompiledJob = sidesStreamJob.map(_.debug().compile) // type= IO[Stream.CompileOps[IO, IO, (Int, Int, Int)]]
-//		val sideStrmLstDumpJob: IO[List[(Int, Int, Int)]] = sideStrmDebugCompiledJob.flatMap(compStrm => {
-
-
-/*			val compStrm = tstrm.debug().compile
-			val sidesTupleListEff: IO[List[(Int, Int, Int)]] = compStrm.toList
-			// FlatTap inserts an effect without changing the output
-			val tappedEff: IO[List[(Int, Int, Int)]] = sidesTupleListEff.flatTap(sidesTupleList => {
-				IO.println(s"${dbgHead}.tappedEff got SidesTuple-list: ${sidesTupleList}")
-			})
-			tappedEff // Will execute our tapped-print, and then produce the List
- */
-/*
-val front = eithPlusCntsStrm.take(5)
-val back = eithPlusCntsStrm.takeRight(5)
-val sample = front.append(back)
-val flg_dumpAll = false
-val dumpMe = if (flg_dumpAll) eithPlusCntsStrm else sample
-val lstEff = dumpMe.compile.toList
-val newline = "\n"
-lstEff.flatMap (lst => IO.println(s"eithers with counts: ${lst.mkString(newline)}"))
- */
