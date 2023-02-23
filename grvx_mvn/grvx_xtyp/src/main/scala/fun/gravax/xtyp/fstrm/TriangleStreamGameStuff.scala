@@ -19,8 +19,9 @@ object RunTriStreamGame extends IOApp {
 		val helloJob: IO[Unit] = IO.println("RunTriStreamGame/run/helloJob asks:  Who wants to play with Triangles?")
 		ourMGF.useCBoundClz
 		val triJob = ourMGF.mkJobThatPrintsFewTris
-		val manyJob = ourMGF.mkJobThatPrintsManyTris
-		helloJob.productR(triJob).productR(manyJob).as(ExitCode.Success)
+		val manyJob = ourMGF.mkJobThatPrintsManyTris(200)
+		val parJob = ourMGF.mkJobForParallelTris
+		helloJob.productR(triJob).productR(manyJob).productR(parJob).as(ExitCode.Success)
 	}
 	// (IO(println("started")) >> IO.never).onCancel(IO(println("canceled")))
 
@@ -30,6 +31,7 @@ trait MakesGameFeatures {
 		override def getFM: FlatMap[IO] = IO.asyncForIO  // Uh, this "works"...
 		override def getSync: Sync[IO] = Sync[IO]
 	}
+	type OurTriGenRslt = ourTsMkr.TriGenRslt	// Either
 	val myNaiveTriMaker = new NaiveTriMaker {}
 	val myRandosForIO = new RandosBoundToIO{}
 	val myTryConsumer = new TriStreamConsumer {}
@@ -70,12 +72,12 @@ trait MakesGameFeatures {
 
 	def dbgNow(dbgHead: String, dbgBody: String): Unit = println(dbgHead, dbgBody)
 
-	def mkJobProducingStreamOfTriEithers: IO[Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]] = {
+	def mkJobProducingStreamOfTriEithers(maxPerim : Int): IO[Stream[IO, OurTriGenRslt]] = {
 		val dbgHead = "mkJobProducingStreamOfTriEithers"
 
 		// We start with a stream of int-pairs that each constrain a triangle-generation step.
 		val pairStrmJob: IO[Stream[Pure, (Int, Int)]] = IO.apply {
-			val pairStrm = myPieceMaker.mkPureStreamOfPairs
+			val pairStrm = myPieceMaker.mkPureStreamOfPairs(maxPerim)
 			myPieceMaker.dumpSmallSampleOfTris(pairStrm)
 			pairStrm
 		}
@@ -105,18 +107,18 @@ trait MakesGameFeatures {
 			listDumpJob
 		})
 
-		val triEithStrmJob: IO[Stream[IO, Either[ourTsMkr.TriErrMsg, TriShapeXactish]]] = sidesStreamJob.map(stupStrm => {
+		val triEithStrmJob: IO[Stream[IO, OurTriGenRslt]] = sidesStreamJob.map(stupStrm => {
 			stupStrm.evalMap(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
 		})
 		triEithStrmJob
 		// TODO:  Want to insert an fs2.Topic here to allow different consumers to process the Either results.
 	}
-	def mkJobThatPrintsManyTris: IO[Unit] = {
-		val triEithStrmJob = mkJobProducingStreamOfTriEithers
+	def mkJobThatPrintsManyTris(maxPerim : Int): IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(maxPerim)
 		val dbgHead = "mkJobThatPrintsManyTris"
 		// Counting instances of Left+Right using zipWithScan.
 		// Here we are embedding accumulator data into the record stream.
-		val triEithWithCntsJob: IO[Stream[IO, (Either[ourTsMkr.TriErrMsg, TriShapeXactish], (Int, Int))]] =
+		val triEithWithCntsJob: IO[Stream[IO, (OurTriGenRslt, (Int, Int))]] =
 				triEithStrmJob.map(eithStrm => eithStrm.zipWithScan1((0,0))((cntPair, eot) => {
 			val leftIncr = if (eot.isLeft) 1 else 0
 			val rightIncr = if (eot.isRight) 1 else 0
@@ -155,6 +157,21 @@ trait MakesGameFeatures {
 		//Runs the current IO, then runs the parameter, keeping its result. The result of the first action is ignored.
 		// If the source fails, the other action won't run. Evaluation of the parameter is done lazily, making this
 		// suitable for recursion.
+	}
+	val myPipeOps = new TriStrmPipeOps{}
+	def mkJobForParallelTris : IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(200)
+		val dbgHead = "processTrisInParallel"
+		val x: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			val countedTwice: Stream[IO, Int] = strm.broadcastThrough(myPipeOps.countTriFailures, myPipeOps.countTriFailures)
+			val dumpJob = countedTwice.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got parallel err-counts: ${lst}"))
+			val goodPipe = myPipeOps.onlyWins _ andThen myPipeOps.accumStats // Stream[IO, Either[myPipeOps.OurTriErr, TriShapeXactish]] => Stream[IO, TriSetStat]
+			val wideOut: Stream[IO, Any] = strm.broadcastThrough(myPipeOps.countTriFailures, goodPipe)
+			val wideJob: IO[Unit] = wideOut.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got parallel wide-out: ${lst}"))
+
+			dumpJob.both(wideJob).void
+		})
+		x
 	}
 
 	def makeSidesTupleStreamJob(pairStreamJob: IO[Stream[Pure, (Int, Int)]]): IO[Stream[IO, (Int, Int, Int)]] = {
@@ -195,12 +212,12 @@ trait TriStreamPieceMaker {
 	def dbgNow(dbgHead: String, dbgBody: String): Unit = println(dbgHead, dbgBody)
 
 	// Generates pairs of (perimeter, min-side-length)
-	def mkPureStreamOfPairs : Stream[Pure, (Int, Int)] = {
+	def mkPureStreamOfPairs(maxPerim : Int) : Stream[Pure, (Int, Int)] = {
 		val dbgHead = "mkPureStreamOfPairs"
 		val someInts = myOtherNums.streamNumsUsingUnfold
 		val outInts = someInts.toList
 		dbgNow(dbgHead, s"Dumped someInts=${someInts} as outInts=${outInts}")
-		val perimsRange = Stream.range(10, 4000, 3)
+		val perimsRange = Stream.range(10, maxPerim, 3)
 		dbgNow(dbgHead, s"Rangey stream sample .toList = ${perimsRange.take(10).toList}")
 		val pairly: Stream[Pure, (Int, Int)] = perimsRange.flatMap(perim =>
 			Stream.range(1, perim / 5).map(minLen => (perim, minLen)))

@@ -52,6 +52,7 @@ trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantia
 	// kind of uniformity in the distribution of triangles, avoiding illegal triangles.  The tradeoff is in the
 	// gnarliness of dealing with angles.  Sensible constraints could be just minSideLen and maxSideLen, although
 	// we could also constrain the angles.
+	// This alternate algo provides variation in the DOMAIN-MODELING dimension.
 
 	def makeTriSidesJob(rng: CatsRandom[Eff], perim: Int, minSideLen: Int): Eff[(Int, Int, Int)] = {
 		// Same algo used in NaiveTriMaker, but all randomness is suspended in the Eff-ect.
@@ -65,12 +66,12 @@ trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantia
 		if (flg_dbgImps) println(s"makeTriSidesJob: impFMF=${impFMF}")
 		val sideLenX_job: Eff[Int] = myNJM.makeRandomRangedNumEffect(rng, minSideLen, maxSideLen)
 		// Now that we have a job to make sideLenX, we chain with flatMap into a dependent generation of sideLenY.
-
+		// TODO: Consider other ways we can generate and constrain the distribution of the tri-sides.
 		val sidesTupleJob: Eff[(Int, Int, Int)] = impFMF.flatMap(sideLenX_job)(sideLenX => {
 			val maxY = perim - sideLenX - minSideLen
 
 			// This time we choose to pass impFMF in explicitly.
-			val sideLenY_job: Eff[Int] = myNJM.makeRandomRangedNumEffect(rng, minSideLen, maxY)
+			val sideLenY_job: Eff[Int] = myNJM.makeRandomRangedNumEffect(rng, minSideLen, maxY)(impFMF)
 			impFMF.map(sideLenY_job)(sideLenY => {
 				// Now that we have sideLenX and sideLenY, we can compute sideLenZ as the remainder (of perimeter).
 				val sideLenZ = perim - sideLenX - sideLenY
@@ -99,12 +100,13 @@ trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantia
 	}
 	private val myTsxMaker = new MakesTSX {}
 	type TriErrMsg = String
+	type TriGenRslt = Either[TriErrMsg, TriShapeXactish]
 	// Should mkXactTriOrErr build an effect, or claim to be pure?
 	// A function which catches an exception might be deemed less than 100% pure.
 	// If we pre-checked the tri-ineq, then we would have a pure and fast failure, and exceptions would never happen.
 	// This is a function we expect to execute a lot.
 	// We might sometimes execute it against pure inputs.  Doing 'catch' implies some performance penalty.
-	def mkXactTriJob(orderedSidesTup : (Int, Int, Int)) : Eff[Either[TriErrMsg, TriShapeXactish]] = {
+	def mkXactTriJob(orderedSidesTup : (Int, Int, Int)) : Eff[TriGenRslt] = {
 		val (a, b, c) = orderedSidesTup
 		// mkFromSidesIncreasing may throw
 		// If we were committed to IO affect we could: IO.apply(myTsxMaker.mkFromSidesIncreasing(a, b, c))
@@ -123,7 +125,7 @@ trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantia
 		// bareTriEff.redeem[Either[TriErrMsg, TriShapeXactish]](thrn => Left(thrn.toString), tri => Right(tri))
 		redeemedToEith
 	}
-	def mkExactTriSemipure(orderedSidesTup : (Int, Int, Int)) : Either[TriErrMsg, TriShapeXactish] = {
+	def mkExactTriSemipure(orderedSidesTup : (Int, Int, Int)) : TriGenRslt = {
 		val (a, b, c) = orderedSidesTup
 		val triTry = Try(myTsxMaker.mkFromSidesIncreasing(a, b, c))
 		val eithThrw: Either[Throwable, TriShapeXactish] = triTry.toEither

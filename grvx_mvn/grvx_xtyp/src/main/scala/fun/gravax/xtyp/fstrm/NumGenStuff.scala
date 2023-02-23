@@ -23,6 +23,7 @@ trait NumJobMaker {
 	// https://www.baeldung.com/scala/implicitly
 
 	private val dbgImps : Boolean = false
+	// The Functor context bound implies the existince of an implicit parameter.
 	def makeRandomRangedNumEffect[F[_] : Functor](rng: CatsRandom[F], minIncl: Int, maxIncl: Int): F[Int] = {
 		val range = maxIncl - minIncl + 1
 		val rangedNumJob: F[Int] = rng.nextIntBounded(range)
@@ -40,6 +41,7 @@ trait NumJobMaker {
 		if (dbgImps) println(s"makeRangedNumJobUsingSyncRandom got implicit FlatMapper instance: ${impFM}")
 		impFM.flatMap(rngMakerJob)(rng => makeRandomRangedNumEffect(rng, minIncl, maxIncl))
 	}
+
 	// Here we assume that a single rng is already made for us, which allows us to wire it directly into an effect.
 	// Functor constraint ensures that F supports map()
 	def makeRandomNumStream[F[_] : Functor](rng: CatsRandom[F], minIncl: Int, maxIncl: Int): Stream[F, Int] = {

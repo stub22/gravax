@@ -81,8 +81,10 @@ trait TriStreamConsumer {
 	/*
 	https://fs2.io/#/guide?id=building-streams
 
-	The eval function works for any effect type, not just IO. FS2 does not care what effect type you use for your streams. You may use IO for effects or bring your own, just by implementing a few interfaces for your effect type (e.g., cats.MonadError[?, Throwable], cats.effect.Sync, cats.effect.Async, cats.effect.Concurrent). Here's the signature of eval:
-
+	The eval function works for any effect type, not just IO.
+	FS2 does not care what effect type you use for your streams.
+	You may use IO for effects or bring your own, just by implementing a few interfaces for your effect type
+	(e.g., cats.MonadError[?, Throwable], cats.effect.Sync, cats.effect.Async, cats.effect.Concurrent).
 	Any Stream formed using eval is called 'effectful' and can't be run using toList or toVector
 	 */
 	def mkPauseStream(msec : Long) : Stream[IO, Unit] = {
