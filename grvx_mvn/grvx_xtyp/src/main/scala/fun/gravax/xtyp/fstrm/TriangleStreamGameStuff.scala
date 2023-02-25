@@ -3,9 +3,11 @@ package fun.gravax.xtyp.fstrm
 import cats.effect.kernel.Sync
 import cats.FlatMap
 import cats.effect.{ExitCode, IO, IOApp}
+import fs2.timeseries.TimeStamped
 import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape, TriShapeXactish}
 import fs2.{Pipe, Pure, Stream}
 
+import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 
@@ -159,19 +161,35 @@ trait MakesGameFeatures {
 		// suitable for recursion.
 	}
 	val myPipeOps = new TriStrmPipeOps{}
+	val myUtilStrms = new SomeUtilityStreams {}
 	def mkJobForParallelTris : IO[Unit] = {
-		val triEithStrmJob = mkJobProducingStreamOfTriEithers(200)
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(500)
 		val dbgHead = "processTrisInParallel"
 		val x: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
 			val countedTwice: Stream[IO, Int] = strm.broadcastThrough(myPipeOps.countTriFailures, myPipeOps.countTriFailures)
-			val dumpJob = countedTwice.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got parallel err-counts: ${lst}"))
+			val doubleCountJob = countedTwice.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got parallel err-counts: ${lst}"))
+			val timedDoubleCount = doubleCountJob.timed.map(pair => printIoDur("DOUBLE-COUNT")(pair))
 			val goodPipe = myPipeOps.onlyWins _ andThen myPipeOps.accumStats // Stream[IO, Either[myPipeOps.OurTriErr, TriShapeXactish]] => Stream[IO, TriSetStat]
 			val wideOut: Stream[IO, Any] = strm.broadcastThrough(myPipeOps.countTriFailures, goodPipe)
 			val wideJob: IO[Unit] = wideOut.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got parallel wide-out: ${lst}"))
+			val wideJobTimed: IO[(FiniteDuration, Unit)] = wideJob.timed
 
-			dumpJob.both(wideJob).void
+			val wideJobTimeDumped = wideJobTimed.map(pair => printIoDur("WIDE")(pair))
+			val winTimePipe = myPipeOps.onlyWins _ andThen myPipeOps.stampyShapes
+			val stmpd: Stream[IO, TimeStamped[TriShape]] = strm.through(winTimePipe)
+			val stmpdWithIdx: Stream[IO, (TimeStamped[TriShape], Long)] = stmpd.zipWithIndex
+			val subset = stmpdWithIdx.filter(_._2 % 100 == 0)
+			val timed = myUtilStrms.timedStream("STAMPED+INDEXED+SUBBED")
+			val timedSub = timed.flatMap(dur => subset)
+			val stmpJob = timedSub.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got stamped+indexed sample out: ${lst}"))
+			val outerWRD = stmpJob.timed.map(pair => printIoDur("STAMPY-OUTER")(pair))
+			val comboJob = timedDoubleCount.both(wideJobTimeDumped).both(outerWRD).timed.map(pair => printIoDur("COMBO")(pair)) //  pair => {println(s"Combo job got duration via IO.timed: ${pair._1}")})
+			comboJob
 		})
 		x
+	}
+	def printIoDur(heading: String)(ioTimedOutPair : (FiniteDuration, _)) : Unit = {
+		println(s"${heading} got duration via IO.timed: ${ioTimedOutPair._1}")
 	}
 
 	def makeSidesTupleStreamJob(pairStreamJob: IO[Stream[Pure, (Int, Int)]]): IO[Stream[IO, (Int, Int, Int)]] = {
