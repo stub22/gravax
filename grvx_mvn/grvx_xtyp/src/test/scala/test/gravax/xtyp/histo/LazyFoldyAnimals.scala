@@ -20,6 +20,7 @@ case object Eeyore extends Animal {
 	override def getWeightInKG: Float = 350.7f
 }
 
+// absorbOne returns another absorber
 trait Absorber[-X] {
 	def absorbOne(x : X) : Absorber[X] = ???
 }
@@ -41,9 +42,8 @@ trait EatEmUp {
 
 	def absorbAnimals : Unit = {
 		monkeyAbsorber.absorbOne(m1)
-		rabbitAbsorber.absorbOne(r1)
-		genAbsorber.absorbOne(r1)
-		genAbsorber.absorbOne(e1)
+		val nextRabAbs = rabbitAbsorber.absorbOne(r1)
+		genAbsorber.absorbOne(r1).absorbOne(e1)
 		// Since genAbsorber can absorb any animal, it can absorb monkeys
 		val narrowAbsorber : Absorber[Monkey] = genAbsorber
 		// The information about generality is lost, so can't do this

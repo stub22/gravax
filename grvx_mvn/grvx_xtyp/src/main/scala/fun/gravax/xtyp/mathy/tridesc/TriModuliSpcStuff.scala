@@ -5,10 +5,10 @@ private trait TriModuliSpcStuff
 /**
  * All Unique Triangle Shapes
  * The space of all equivalence-classes of similar triangles may be parameterized by 2 or more real-ish numbers,
- * which may in be treated as a tuple of real-ish nums, as a (constrained) complex num, or as a (constrained) vector.
+ * which may be treated as a tuple of real-ish nums, as a (constrained) complex num, or as a (constrained) vector.
  * In order to describe a valid triangle, the nums must satisfy bounds criteria on some numeric functions.
  * Moduli Spaces are a general theory of these parameter spaces.
- * Searching "Moduli Space of Similar Triangles" will give plenty of help, here are a few free semi-free links to improve on:
+ * Searching "Moduli Space of Similar Triangles" will give plenty of help, here are a few free & semi-free links to improve on:
  *
  * https://en.wikipedia.org/wiki/Moduli_space
  *

@@ -1,5 +1,7 @@
 package fun.gravax.xtyp.mathy
 
+import spire.math.{Rational => SpRat}
+
 private trait TriSideRecStuff
 
 // SideLen must be an exact number type (or at least have explicit precision)
@@ -17,15 +19,21 @@ trait TriSide[SideLen] {
 	def isGluableTo (otherSide : TriSide[SideLen]) : Boolean = {
 		hasSameLengthAs(otherSide)
 	}
+
 }
 trait TriSideRec {
-	type ScaleNum
-	type SideLenNum
+	type ScaleNum	// The type of number I can be scaled by
+	type SideLenNum	// The type of number used in my side lengths
 	def reorderSidesIncreasing : IncrTSR
+	def areSidesIncreasing : Boolean
 
 	def isIdenticalTo (other : TriSideRec) : Boolean
 	def isCongruentTo (other : TriSideRec) : Boolean
 	def isSimilarTo (other : TriSideRec) : Boolean
+	def findScaleTo (other : TriSideRec) : Option[ScaleNum]
+
+	def scaleBy(scl : ScaleNum) : TriSideRec // But what do we know about the type-params of the result?
+
 
 	def countGluingOpportunities (other : TriSideRec) : Boolean
 
@@ -84,12 +92,48 @@ trait IncrTSR {
 
 trait DecrTSR
 
-class TriSideImpl[SL](sideLen : SL) extends TriSide[SL] {
+private class TriSideImpl[SL](sideLen : SL) extends TriSide[SL] {
 	override def getSideLen: SL = sideLen
 }
-abstract class TSR_Bland[SL](slA : SL, slB : SL, slC : SL) extends TriSideRec with ChecksTSR_Flavors {
+protected abstract class TSR_Bland[SL](slA : SL, slB : SL, slC : SL) extends TriSideRec with ChecksTSR_Flavors {
 	override type SideLenNum = SL
 	private val mySidesTuple = (new TriSideImpl(slA), new TriSideImpl(slB), new TriSideImpl(slC))
 
 	override def getSidesTuple: (TriSide[SL], TriSide[SL], TriSide[SL]) = mySidesTuple
+}
+
+class TSR_Rat (slenA : SpRat, slenB : SpRat, slenC : SpRat) extends TSR_Bland[SpRat](slenA, slenB, slenC) {
+	override type ScaleNum = SpRat
+
+	override def reorderSidesIncreasing: IncrTSR = ???
+
+	override def areSidesIncreasing: Boolean = ???
+
+	override def isIdenticalTo(other: TriSideRec): Boolean = ???
+
+	override def isCongruentTo(other: TriSideRec): Boolean = ???
+
+	override def isSimilarTo(other: TriSideRec): Boolean = ???
+
+	override def findScaleTo(other: TriSideRec): Option[SpRat] = ???
+
+	override def scaleBy(scl: SpRat): TriSideRec = ???
+
+	override def countGluingOpportunities(other: TriSideRec): Boolean = ???
+
+	override def isMalformed: Boolean = ???
+
+	override def isInconsistent: Boolean = ???
+
+	override def isDegenerate: Boolean = ???
+
+	override def isOrdinary: Boolean = ???
+
+	override def isRight: Boolean = ???
+
+	override def isIsosceles: Boolean = ???
+
+	override def isEquilateral: Boolean = ???
+
+	override def isScalene: Boolean = ???
 }

@@ -18,7 +18,7 @@ class FirstExactTriSpec extends AnyFlatSpec {
 //
 // 2) Partitioned by congruence or similarity class, with output of the total number of equiv-classes,
 // and total shape-descs in the most populous equiv-classes.   Perhaps additional results consolidation,
-// where the equiv-classes are further unified.  May also compute total area and perimiter of matching shapes.
+// where the equiv-classes are further unified.  May also compute total area and perimeter of matching shapes.
 // Area is interesting because algebraic num.
 // Total area/perim/count of all shapes must be same regardless of how shapes are partitioned into classes.
 // This is harder to reduce on, since there may be any number of equiv-class bins.
@@ -101,7 +101,7 @@ trait ShapeStat[SD, KWrap[_]] {
 }
 trait TriShapeStat[TSD <: TriShape, KWrap[_]] {
 	// def getPerim : TSD.LengthTy
-	def perimFor(tsd : TSD) = tsd.perimeter
+	def perimFor(tsd : TSD): TSD#LengthTy = tsd.perimeter
 	def areaFor(tsd : TSD) = tsd.area
 	def keyFor(tsd : TSD) : KWrap[TSD]
 	// totalArea  - same as SD.AreaType
