@@ -74,6 +74,7 @@ trait MakesGameFeatures {
 
 	def dbgNow(dbgHead: String, dbgBody: String): Unit = println(dbgHead, dbgBody)
 
+	// CONSIDER:  insert an fs2.Topic to allow different consumers to process the Either results.
 	def mkJobProducingStreamOfTriEithers(maxPerim : Int): IO[Stream[IO, OurTriGenRslt]] = {
 		val dbgHead = "mkJobProducingStreamOfTriEithers"
 
@@ -87,6 +88,8 @@ trait MakesGameFeatures {
 		// FIXME:  From a readability perspective, the wrapping and unwrapping overwhelms the business code.
 		// If we can put the business data transforms into methods of a trait, then invoke them all in
 		// one long functional chain, that may be more readable.
+		// A scala-idiomatic approach is to use a for-comprehension.
+		// A categorical approach is to use Kleislis to component-ize our xforms.
 		val sidesStreamJob: IO[Stream[IO, (Int, Int, Int)]] = makeSidesTupleStreamJob(pairStrmJob)
 
 		// Hmm we are making these debug jobs now, but we won't use them until a bunch of other useful work
@@ -113,8 +116,9 @@ trait MakesGameFeatures {
 			stupStrm.evalMap(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
 		})
 		triEithStrmJob
-		// TODO:  Want to insert an fs2.Topic here to allow different consumers to process the Either results.
+
 	}
+
 	def mkJobThatPrintsManyTris(maxPerim : Int): IO[Unit] = {
 		val triEithStrmJob = mkJobProducingStreamOfTriEithers(maxPerim)
 		val dbgHead = "mkJobThatPrintsManyTris"
