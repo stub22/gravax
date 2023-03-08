@@ -23,7 +23,8 @@ object RunTriStreamGame extends IOApp {
 		val triJob = ourMGF.mkJobThatPrintsFewTris
 		val manyJob = ourMGF.mkJobThatPrintsManyTris(200)
 		val parJob = ourMGF.mkJobForParallelTris
-		helloJob.productR(triJob).productR(manyJob).productR(parJob).as(ExitCode.Success)
+		val histJob = ourMGF.mkJobForWinnerHisto
+		helloJob.productR(triJob).productR(manyJob).productR(parJob).productR(histJob).as(ExitCode.Success)
 	}
 	// (IO(println("started")) >> IO.never).onCancel(IO(println("canceled")))
 
@@ -168,8 +169,14 @@ trait MakesGameFeatures {
 	val myUtilStrms = new SomeUtilityStreams {}
 	def mkJobForParallelTris : IO[Unit] = {
 		val triEithStrmJob = mkJobProducingStreamOfTriEithers(500)
-		val dbgHead = "processTrisInParallel"
+		val dbgHead = "jobForParallelTris"
 		val x: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			/* broadcastThrough:
+			**Error** Any error raised from the input stream, or from any pipe, will stop the pulling from this stream and from any pipe, and the error will be raised by the resulting stream.
+			**Output**: the result stream collects and emits the outputs emitted from each pipe, mixed in an unknown way, with these guarantees:
+			* 1. each output chunk was emitted by one pipe exactly once.
+			* 2. chunks from each pipe come out of the resulting stream in the same order as they came out of the pipe, and without skipping any chunk.
+			 */
 			val countedTwice: Stream[IO, Int] = strm.broadcastThrough(myPipeOps.countTriFailures, myPipeOps.countTriFailures)
 			val doubleCountJob = countedTwice.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got parallel err-counts: ${lst}"))
 			val timedDoubleCount = doubleCountJob.timed.map(pair => printIoDur("DOUBLE-COUNT")(pair))
@@ -183,14 +190,28 @@ trait MakesGameFeatures {
 			val stmpd: Stream[IO, TimeStamped[TriShape]] = strm.through(winTimePipe)
 			val stmpdWithIdx: Stream[IO, (TimeStamped[TriShape], Long)] = stmpd.zipWithIndex
 			val subset = stmpdWithIdx.filter(_._2 % 100 == 0)
-			val timed = myUtilStrms.timedStream("STAMPED+INDEXED+SUBBED")
-			val timedSub = timed.flatMap(dur => subset)
+			val timed: Stream[IO, FiniteDuration] = myUtilStrms.timedStream("STAMPED+INDEXED+SUBBED")
+			val timedSub: Stream[IO, (TimeStamped[TriShape], Long)] = timed.flatMap(dur => subset)
 			val stmpJob = timedSub.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got stamped+indexed sample out: ${lst}"))
 			val outerWRD = stmpJob.timed.map(pair => printIoDur("STAMPY-OUTER")(pair))
 			val comboJob = timedDoubleCount.both(wideJobTimeDumped).both(outerWRD).timed.map(pair => printIoDur("COMBO")(pair)) //  pair => {println(s"Combo job got duration via IO.timed: ${pair._1}")})
 			comboJob
 		})
 		x
+	}
+	def mkJobForWinnerHisto : IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(100)
+		val dbgHead = "jobForWinnerHisto"
+		val hsm = new TriHistoStreamMaker {}
+
+		val hpj: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			val oneHistoRslt = strm.broadcastThrough(hsm.foldToOneHistoResult) // , hsm.scanToPartialHistoResults)
+			val timed =  myUtilStrms.timedStream("FOLD-TO-HISTO")
+			val oneHistoGrabJob: IO[List[NumRangeHisto]] = timed.flatMap(dur => oneHistoRslt).compile.toList
+			val oneHistoDumpJob = oneHistoGrabJob.flatMap(lst => IO.println(s"${dbgHead} got histo-list: ${lst}"))
+			oneHistoDumpJob
+		})
+		hpj
 	}
 	def printIoDur(heading: String)(ioTimedOutPair : (FiniteDuration, _)) : Unit = {
 		println(s"${heading} got duration via IO.timed: ${ioTimedOutPair._1}")

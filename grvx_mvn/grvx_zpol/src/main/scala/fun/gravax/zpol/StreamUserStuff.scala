@@ -138,7 +138,11 @@ case class EzEmptyStrm[X]() extends PureInheritStrm[X] with EmptyStream[X] {
 abstract class JavaStream[X]() extends PureInheritStrm[X] {
 }
 
-
+trait StreamImplAdapter[S[_]] {
+	def mkEmptyStream[X] : S[X]
+	def mkSingletonStream[X](x : X) : S[X]
+	def mkFiniteStream[X](xseq : Seq[X]) : S[X]
+}
 
 trait RosterWorkout {
 	val myRostFact = new RosterFactory {
