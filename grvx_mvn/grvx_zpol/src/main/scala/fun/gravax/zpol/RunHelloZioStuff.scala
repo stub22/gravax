@@ -20,6 +20,7 @@ object RunHelloZio extends ZIOAppDefault {
 			_	<- ZIO.log("This message written with ZIO.log")
 			_	<- mkPetGameJob.refineToOrDie[IOException]
 			_ 	<- moreLogStuff
+			_	<- mkVehicleGameJob.refineToOrDie[IOException]
 			_	<- mkRosterGameJob.refineToOrDie[IOException]
 		} yield ()
 
@@ -28,6 +29,22 @@ object RunHelloZio extends ZIOAppDefault {
 		val plOut = pl.go
 		println(s"mkPetGameJob.println says plOut=${plOut}")
 		// ZIO.log(s"plOut:\n${plOut}")
+	}
+	def mkVehicleGameJob = ZIO.attempt {
+		val vops = new VehicleOps {}
+		val oldTruck = new Truck("dusty")
+		val nxtTruck = oldTruck.rename("shiny")
+		println(s"Renamed ${oldTruck} to ${nxtTruck}")
+		val thirdTruck = vops.renameVehic(nxtTruck, "fancy")
+		println(s"Renamed ${nxtTruck} to ${thirdTruck}")
+		val truck04 = vops.renameWTP(thirdTruck, "weird")
+		println(s"Renamed ${thirdTruck} to ${truck04}")
+		val flg_doBadCasts = false
+		if (flg_doBadCasts) {
+			val oldCar = new SportsCar("fast")
+			val nxtCar = oldCar.rename("quick")
+			println(s"Renamed ${oldCar} to ${nxtCar}")
+		}
 	}
 	def mkRosterGameJob = ZIO.attempt {
 		val rw = new RosterWorkout {}
