@@ -39,7 +39,8 @@ trait TriStrmPipeOps {
 
 	def somePullStuff(shpStrm: Stream[IO, TriShape]) : Unit = {
 		val p = shpStrm.pull
-		val x = shpStrm.compile.drain.background
+
+		val z = shpStrm.compile.drain.background
 	}
 
 }

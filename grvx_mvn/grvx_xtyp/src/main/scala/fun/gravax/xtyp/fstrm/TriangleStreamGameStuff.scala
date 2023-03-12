@@ -23,8 +23,9 @@ object RunTriStreamGame extends IOApp {
 		val triJob = ourMGF.mkJobThatPrintsFewTris
 		val manyJob = ourMGF.mkJobThatPrintsManyTris(200)
 		val parJob = ourMGF.mkJobForParallelTris
-		val histJob = ourMGF.mkJobForWinnerHisto
-		helloJob.productR(triJob).productR(manyJob).productR(parJob).productR(histJob).as(ExitCode.Success)
+		val oneHistJob = ourMGF.mkJobForWinnerHisto
+		val multiHistJob = ourMGF.mkParJobForWinnerHistos(48)
+		helloJob.productR(triJob).productR(manyJob).productR(parJob).productR(oneHistJob).productR(multiHistJob).as(ExitCode.Success)
 	}
 	// (IO(println("started")) >> IO.never).onCancel(IO(println("canceled")))
 
@@ -91,7 +92,11 @@ trait MakesGameFeatures {
 		// one long functional chain, that may be more readable.
 		// A scala-idiomatic approach is to use a for-comprehension.
 		// A categorical approach is to use Kleislis to component-ize our xforms.
-		val sidesStreamJob: IO[Stream[IO, (Int, Int, Int)]] = makeSidesTupleStreamJob(pairStrmJob)
+		val flg_useParSidegen = false
+		val sidesStreamJob: IO[Stream[IO, (Int, Int, Int)]] = if (flg_useParSidegen)
+			makeParSidesTupleStreamJob(pairStrmJob)
+		else
+			makeSidesTupleStreamJob(pairStrmJob)
 
 		// Hmm we are making these debug jobs now, but we won't use them until a bunch of other useful work
 		// is done (which we might prefer to split into a different method).  Also we note that this job
@@ -112,9 +117,13 @@ trait MakesGameFeatures {
 			val listDumpJob = listJob.flatMap(lst => IO.println(s"Side-Stream-list: ${lst}"))
 			listDumpJob
 		})
-
+		val flg_useParTribuild = false
 		val triEithStrmJob: IO[Stream[IO, OurTriGenRslt]] = sidesStreamJob.map(stupStrm => {
-			stupStrm.evalMap(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
+			if (flg_useParTribuild)
+				stupStrm.parEvalMap(4)(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
+			else
+				stupStrm.evalMap(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
+
 		})
 		triEithStrmJob
 
@@ -200,16 +209,34 @@ trait MakesGameFeatures {
 		x
 	}
 	def mkJobForWinnerHisto : IO[Unit] = {
-		val triEithStrmJob = mkJobProducingStreamOfTriEithers(100)
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(300)
 		val dbgHead = "jobForWinnerHisto"
 		val hsm = new TriHistoStreamMaker {}
 
 		val hpj: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
-			val oneHistoRslt = strm.broadcastThrough(hsm.foldToOneHistoResult) // , hsm.scanToPartialHistoResults)
+			val oneHistoRslt: Stream[IO, NumRangeHisto] = strm.through(hsm.foldToOneHistoResult) // , hsm.scanToPartialHistoResults)
 			val timed =  myUtilStrms.timedStream("FOLD-TO-HISTO")
 			val oneHistoGrabJob: IO[List[NumRangeHisto]] = timed.flatMap(dur => oneHistoRslt).compile.toList
 			val oneHistoDumpJob = oneHistoGrabJob.flatMap(lst => IO.println(s"${dbgHead} got histo-list: ${lst}"))
 			oneHistoDumpJob
+		})
+		hpj
+	}
+	def mkParJobForWinnerHistos(numStrms : Int) : IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(300)
+		val dbgHead = "jobForWinnerHisto"
+		val hsm = new TriHistoStreamMaker {}
+
+		val hpj: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			val multipleFoldingStreams: Stream[Pure, Stream[IO, NumRangeHisto]] = Stream.range(0, numStrms).map(n => {
+				val oneHistoRslt: Stream[IO, NumRangeHisto] = strm.through(hsm.foldToOneHistoResult) // , hsm.scanToPartialHistoResults)
+				val timed = myUtilStrms.timedStream(s"PAR-FOLD-TO-HISTO_${n}")
+				timed.flatMap(dur => oneHistoRslt)
+			})
+			val joined: Stream[IO, NumRangeHisto] = multipleFoldingStreams.parJoinUnbounded
+			val multiHistoGrabJob: IO[List[NumRangeHisto]] = joined.compile.toList
+			val multiHistoDumpJob = multiHistoGrabJob.flatMap(lst => IO.println(s"${dbgHead} got histo-list: " + lst.mkString("\n")))
+			multiHistoDumpJob
 		})
 		hpj
 	}
@@ -224,6 +251,22 @@ trait MakesGameFeatures {
 		val sidesTupleStreamJob: IO[Stream[IO, (Int, Int, Int)]] = bothPrecursors.map(precPair => {
 			val (pairStrm, rng) = precPair
 			ourTsMkr.makeTriSidesStreamUsingEvalMap(rng, pairStrm.covary[IO])	// uses Stream.PureOps.covary
+		})
+		sidesTupleStreamJob
+	}
+	def makeParSidesTupleStreamJob(pairStreamJob: IO[Stream[Pure, (Int, Int)]]): IO[Stream[IO, (Int, Int, Int)]] = {
+		import cats.effect.std.{Random => CatsRandom}
+		val rngMakerJob: IO[CatsRandom[IO]] = CatsRandom.scalaUtilRandom[IO]
+		val bothPrecursors: IO[(Stream[Pure, (Int, Int)], CatsRandom[IO])] = pairStreamJob.both(rngMakerJob)
+		val sidesTupleStreamJob: IO[Stream[IO, (Int, Int, Int)]] = bothPrecursors.map(precPair => {
+			val (pairStrm, rng) = precPair
+
+			// ourTsMkr.makeTriSidesStreamUsingEvalMap(rng, pairStrm.covary[IO])	// uses Stream.PureOps.covary
+			// Using any of the parEvalMap variants seems to impose an overall performance penalty.
+			// Presumably this indicates that the job is "too small" to benefit.
+			pairStrm.covary[IO].parEvalMapUnbounded(paramPair => {
+				ourTsMkr.makeTriSidesJob(rng, paramPair._1, paramPair._2)
+			})
 		})
 		sidesTupleStreamJob
 	}

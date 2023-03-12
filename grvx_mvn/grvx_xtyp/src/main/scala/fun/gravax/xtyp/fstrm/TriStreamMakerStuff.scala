@@ -98,6 +98,7 @@ trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantia
 			makeTriSidesJob(rng, paramPair._1, paramPair._2)
 		})
 	}
+
 	private val myTsxMaker = new MakesTSX {}
 	type TriErrMsg = String
 	type TriGenRslt = Either[TriErrMsg, TriShapeXactish]

@@ -21,6 +21,7 @@ private trait TriHistoStreamStuff
 case class NumRangeHistoBin(lowerBoundExcl : BigDecimal, upperBoundIncl : BigDecimal, count : Int) {
 	def oldCnt = count
 	def incr = copy(count = oldCnt + 1)
+
 }
 // Key is the lowerBoundExcl
 case class NumRangeHisto(binMap : TreeMap[BigDecimal, NumRangeHistoBin]) {
@@ -44,6 +45,17 @@ case class NumRangeHisto(binMap : TreeMap[BigDecimal, NumRangeHistoBin]) {
 		val sampleBD = algNum.toBigDecimal(decimalPlaces, RoundingMode.HALF_UP)
 		addSample(sampleBD)
 	}
+
+	def combine(otherNRH : NumRangeHisto) : NumRangeHisto = {
+		// If the bin boundaries match up perfectly, then the combination is easy.
+		// That is the expected pattern in simplest use cases (where the binning was determined by the same source).
+		// In principle we could also combine histograms that do not have perfectly matching bins, but the utility is
+		// questionable.
+		???
+	}
+	def combineIfBinsMatch(otherNRH : NumRangeHisto) : Option[NumRangeHisto] = {
+		???
+	}
 }
 
 trait TriHistoStreamMaker {
@@ -54,7 +66,7 @@ trait TriHistoStreamMaker {
 
 	def foldToOneHistoResult(strm: Stream[IO, OurTriGenRslt]) : Stream[IO, NumRangeHisto] = {
 		val winStrm: Stream[IO, TriShapeXactish] = strm.through(myPipeOps.onlyWins)
-
+		// val parWinStrm = winStrm.parEvalMap()
 		val emptyHisto = mkEmptyHisto
 		val streamOfOneHistoRslt: Stream[IO, NumRangeHisto] = winStrm.fold(emptyHisto)((prevHisto, nxtTri) => {
 			val nxtAreaAlg: Algebraic = nxtTri.area

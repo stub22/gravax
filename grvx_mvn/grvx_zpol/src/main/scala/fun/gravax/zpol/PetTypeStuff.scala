@@ -8,7 +8,8 @@ private trait PetTypeStuff
 // Later found this:
 // https://stackoverflow.com/questions/59813323/advantages-of-f-bounded-polymorphism-over-typeclass-for-return-current-type-prob
 trait Pet { selfP =>
-	type OutPet <: Pet	// Alternative to F-Bound (or is it alternative *form* of F-Bound?), without param type.  (Also no typeclass!)
+	type OutPet <: Pet	// "
+	type OtherOP = selfP.type
 	def renameOP(nNm : String) : OutPet		// This can be useful.  Requires subtypes to bind OutPet appropriately.
 	def renameSlf(nNm : String) : selfP.type	// To construct a matching value, we need to use an explicit cast
 	def getName : String
@@ -118,6 +119,8 @@ case class Truck(truckName : String) extends Vehicle { selfT =>
 		goodTruck.asInstanceOf[selfT.type]
 	}
 }
+
+
 abstract class BadCar extends Vehicle { selfC =>
 
 	def mkBadCarAtRuntime(nm : String) : selfC.type = {
