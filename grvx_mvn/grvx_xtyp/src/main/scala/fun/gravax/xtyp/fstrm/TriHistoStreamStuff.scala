@@ -22,6 +22,13 @@ case class NumRangeHistoBin(lowerBoundExcl : BigDecimal, upperBoundIncl : BigDec
 	def oldCnt = count
 	def incr = copy(count = oldCnt + 1)
 
+	def combineWithMatchedBin(otherBin : NumRangeHistoBin) = {
+		assert(otherBin.lowerBoundExcl == lowerBoundExcl)
+		assert(otherBin.upperBoundIncl == upperBoundIncl)
+		val sum = count + otherBin.count
+		copy(count = sum)
+	}
+
 }
 // Key is the lowerBoundExcl
 case class NumRangeHisto(binMap : TreeMap[BigDecimal, NumRangeHistoBin]) {
@@ -55,6 +62,15 @@ case class NumRangeHisto(binMap : TreeMap[BigDecimal, NumRangeHistoBin]) {
 	}
 	def combineIfBinsMatch(otherNRH : NumRangeHisto) : Option[NumRangeHisto] = {
 		???
+	}
+	def combineAssumingBinsMatch(otherNRH : NumRangeHisto): NumRangeHisto = {
+		val sumBinMap: TreeMap[BigDecimal, NumRangeHistoBin] = binMap.map(binPair => {
+			val (binKey, binDat) = binPair
+			val otherBinDat = otherNRH.binMap.getOrElse(binKey, {throw new Exception(s"Bins don't match at key: ${binKey}")})
+			val summedBin = binDat.combineWithMatchedBin(otherBinDat)
+			(binKey, summedBin)
+		})
+		new NumRangeHisto(sumBinMap)
 	}
 }
 

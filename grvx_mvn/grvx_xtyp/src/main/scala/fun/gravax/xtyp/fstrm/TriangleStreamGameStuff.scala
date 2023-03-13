@@ -234,7 +234,16 @@ trait MakesGameFeatures {
 				timed.flatMap(dur => oneHistoRslt)
 			})
 			val joined: Stream[IO, NumRangeHisto] = multipleFoldingStreams.parJoinUnbounded
-			val multiHistoGrabJob: IO[List[NumRangeHisto]] = joined.compile.toList
+			// We can either output all the histos, or condense them into one.
+			// Either way, the formal return type is Stream[IO, NumRangeHisto]
+			val flg_condenseHistos = true
+			val streamToRun : Stream[IO, NumRangeHisto] = if (flg_condenseHistos) {
+				val jd = joined.debugChunks()
+				jd.reduce((histo1, histo2) => histo1.combineAssumingBinsMatch(histo2))
+			} else joined
+
+			// The output list will either have one condensed histo, or numStrms separate histos.
+			val multiHistoGrabJob: IO[List[NumRangeHisto]] = streamToRun.compile.toList
 			val multiHistoDumpJob = multiHistoGrabJob.flatMap(lst => IO.println(s"${dbgHead} got histo-list: " + lst.mkString("\n")))
 			multiHistoDumpJob
 		})
