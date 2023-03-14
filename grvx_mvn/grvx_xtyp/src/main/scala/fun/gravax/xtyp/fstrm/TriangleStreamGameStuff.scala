@@ -24,8 +24,10 @@ object RunTriStreamGame extends IOApp {
 		val manyJob = ourMGF.mkJobThatPrintsManyTris(200)
 		val parJob = ourMGF.mkJobForParallelTris
 		val oneHistJob = ourMGF.mkJobForWinnerHisto
-		val multiHistJob = ourMGF.mkParJobForWinnerHistos(48)
-		helloJob.productR(triJob).productR(manyJob).productR(parJob).productR(oneHistJob).productR(multiHistJob).as(ExitCode.Success)
+		val multiHistJob = ourMGF.mkParJobForWinnerHistos(18)
+		val totalHistJob = ourMGF.mkParJobForTotalHistos(12)
+		val histJobs = oneHistJob.productR(multiHistJob).productR(totalHistJob)
+		helloJob.productR(triJob).productR(manyJob).productR(parJob).productR(histJobs).as(ExitCode.Success)
 	}
 	// (IO(println("started")) >> IO.never).onCancel(IO(println("canceled")))
 
@@ -224,15 +226,18 @@ trait MakesGameFeatures {
 	}
 	def mkParJobForWinnerHistos(numStrms : Int) : IO[Unit] = {
 		val triEithStrmJob = mkJobProducingStreamOfTriEithers(300)
-		val dbgHead = "jobForWinnerHisto"
+		val dbgHead = "parJobForWinnerHistos"
 		val hsm = new TriHistoStreamMaker {}
 
 		val hpj: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			// Here we use the strm (program/data-generator) a total of numStrms times.
 			val multipleFoldingStreams: Stream[Pure, Stream[IO, NumRangeHisto]] = Stream.range(0, numStrms).map(n => {
-				val oneHistoRslt: Stream[IO, NumRangeHisto] = strm.through(hsm.foldToOneHistoResult) // , hsm.scanToPartialHistoResults)
+				val oneHistoRslt: Stream[IO, NumRangeHisto] = strm.through(hsm.foldToOneHistoResult)
 				val timed = myUtilStrms.timedStream(s"PAR-FOLD-TO-HISTO_${n}")
 				timed.flatMap(dur => oneHistoRslt)
 			})
+			// Run each of the numStrms gen+filter+fold jobs in parallel, as compute resources become available.
+			// Each of the numStrms histogram results will be a single result in the joined stream, in no particular order.
 			val joined: Stream[IO, NumRangeHisto] = multipleFoldingStreams.parJoinUnbounded
 			// We can either output all the histos, or condense them into one.
 			// Either way, the formal return type is Stream[IO, NumRangeHisto]
@@ -244,10 +249,45 @@ trait MakesGameFeatures {
 
 			// The output list will either have one condensed histo, or numStrms separate histos.
 			val multiHistoGrabJob: IO[List[NumRangeHisto]] = streamToRun.compile.toList
-			val multiHistoDumpJob = multiHistoGrabJob.flatMap(lst => IO.println(s"${dbgHead} got histo-list: " + lst.mkString("\n")))
+			val multiHistoDumpJob = multiHistoGrabJob.flatMap(lst => {
+				val totalSamples = lst.foldLeft(0)((prevSum, nxtHisto) => {
+					prevSum + nxtHisto.totalSampleCount
+				})
+				IO.println(s"${dbgHead} got totalSampleCount=${totalSamples} for histo-list: " + lst.mkString("\n"))
+			})
 			multiHistoDumpJob
 		})
 		hpj
+	}
+	def mkParJobForTotalHistos(numStrms : Int) : IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(300)
+		val dbgHead = "parJobForTotalHistos"
+		val hsm = new TriHistoStreamMaker {}
+
+		val thpj: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			// Here we use the strm (program/data-generator) a total of numStrms times.
+			val multipleFoldingStreams: Stream[Pure, Stream[IO, HistoForFailureOrNumRange]] = Stream.range(0, numStrms).map(n => {
+				val oneHistoRslt: Stream[IO, HistoForFailureOrNumRange] = strm.through(hsm.foldToOneTotalResult)
+				val timed = myUtilStrms.timedStream(s"PAR-TOTAL-HISTO_${n}")
+				timed.flatMap(dur => oneHistoRslt)
+			})
+			val joined: Stream[IO, HistoForFailureOrNumRange] = multipleFoldingStreams.parJoinUnbounded
+			val flg_condenseHistos = true
+			val streamToRun: Stream[IO, HistoForFailureOrNumRange] = if (flg_condenseHistos) {
+				val jd = joined.debugChunks()
+				jd.reduce((histo1, histo2) => histo1.combine(histo2))
+			} else joined
+			// The output list will either have one condensed histo, or numStrms separate histos.
+			val multiHistoGrabJob: IO[List[HistoForFailureOrNumRange]] = streamToRun.compile.toList
+			val multiHistoDumpJob = multiHistoGrabJob.flatMap(lst => {
+				val totalSamples = lst.foldLeft(0)((prevSum, nxtHisto) => {
+					prevSum + nxtHisto.totalSampleCount
+				})
+				IO.println(s"${dbgHead} got totalSampleCount=${totalSamples} for histo-list: " + lst.mkString("\n"))
+			})
+			multiHistoDumpJob
+		})
+		thpj
 	}
 	def printIoDur(heading: String)(ioTimedOutPair : (FiniteDuration, _)) : Unit = {
 		println(s"${heading} got duration via IO.timed: ${ioTimedOutPair._1}")

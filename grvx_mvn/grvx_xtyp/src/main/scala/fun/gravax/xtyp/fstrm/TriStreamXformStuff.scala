@@ -12,6 +12,9 @@ private trait TriStreamXformStuff
 trait TriStrmPipeOps {
 	type OurTriErr = String // FIXME:  This should come from MakesTSX or...
 
+	def countAndPrintTriFailuresButEmitNothing(inStrmEith: Stream[IO, Either[OurTriErr, TriShapeXactish]]): Stream[IO, Nothing] = {
+		countTriFailures(inStrmEith).debug(logger = txt => {println(s"countAndPrintTriFailuresButEmitNothing debug: ${txt}")}).drain
+	}
 	def countTriFailures(inStrmEith: Stream[IO, Either[OurTriErr, TriShapeXactish]]): Stream[IO, Int] = {
 		onlyFailures(inStrmEith).fold(0)((prevCnt, nxtErr) => prevCnt + 1)
 	}
