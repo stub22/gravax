@@ -1,7 +1,8 @@
 # gravax
-interactive physics modeling tool, supported by formal reasoning, grounded in authored axioms
+Scratchpad Scala project containing mathematical computing experiments
 
-Features:
-  * Javascript UI based on http://axiomagic.fun includes plots, grids, trees, menus, drag-and-drop
-  * Formal term grounding, as discussed at https://gitlab.com/stub22/open-sci-proof
-  * Example model for galactic rotation analysis: https://gitlab.com/stub22/open-sci-cosmo/-/blob/master/osc_model_2019/osc_model_terms.md
+* Streams of randomly generated data, e.g. triangles, with randomness isolated into effects
+* Histograms (fed from streams) coded using immutable data structures
+  * Monoidally combinable, allowing for parallel construction
+* Code experiments using Typelevel libraries:  FS-2, Cats-Effect, Spire
+  
