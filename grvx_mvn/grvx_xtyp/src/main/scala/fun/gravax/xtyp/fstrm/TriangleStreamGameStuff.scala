@@ -6,6 +6,7 @@ import cats.effect.{ExitCode, IO, IOApp}
 import fs2.timeseries.TimeStamped
 import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape, TriShapeXactish}
 import fs2.{Pipe, Pure, Stream}
+import fun.gravax.xtyp.histo.NumRangeHisto
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
@@ -25,7 +26,8 @@ object RunTriStreamGame extends IOApp {
 		val parJob = ourMGF.mkJobForParallelTris
 		val oneHistJob = ourMGF.mkJobForWinnerHisto
 		val multiHistJob = ourMGF.mkParJobForWinnerHistos(18)
-		val totalHistJob = ourMGF.mkParJobForTotalHistos(12)
+		val totalHistJob = ourMGF.mkParJobForTotalHistos(400,
+			288)
 		val histJobs = oneHistJob.productR(multiHistJob).productR(totalHistJob)
 		helloJob.productR(triJob).productR(manyJob).productR(parJob).productR(histJobs).as(ExitCode.Success)
 	}
@@ -225,7 +227,7 @@ trait MakesGameFeatures {
 		hpj
 	}
 	def mkParJobForWinnerHistos(numStrms : Int) : IO[Unit] = {
-		val triEithStrmJob = mkJobProducingStreamOfTriEithers(300)
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(400)
 		val dbgHead = "parJobForWinnerHistos"
 		val hsm = new TriHistoStreamMaker {}
 
@@ -259,8 +261,8 @@ trait MakesGameFeatures {
 		})
 		hpj
 	}
-	def mkParJobForTotalHistos(numStrms : Int) : IO[Unit] = {
-		val triEithStrmJob = mkJobProducingStreamOfTriEithers(300)
+	def mkParJobForTotalHistos(maxPerim : Int, numStrms : Int) : IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(maxPerim)
 		val dbgHead = "parJobForTotalHistos"
 		val hsm = new TriHistoStreamMaker {}
 
