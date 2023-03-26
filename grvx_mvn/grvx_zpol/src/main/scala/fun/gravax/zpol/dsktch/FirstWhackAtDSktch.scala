@@ -36,6 +36,7 @@ trait QuantileSketchReader[T] {
 	def getQuantiles(fRanks : Array[Double]): OutArrT
 	def getQuantiles(evenlySpaced : Int): OutArrT
 
+	def getSummaryTxt(sketchSummary: Boolean, dataDetail: Boolean) : String
 }
 trait QuantileSketchReaderHasMut[T] extends QuantileSketchReader[T] {
 
@@ -121,6 +122,7 @@ A value of 3 will return the min, the median and the max value, etc.
  */
 	override def getQuantiles(evenlySpaced : Int): OutArrT = getMutSketch.getQuantiles(evenlySpaced)
 
+	override def getSummaryTxt(sketchSummary: Boolean, dataDetail: Boolean) : String = getMutSketch.toString(sketchSummary, dataDetail)
 }
 
 trait QuantileSketchWriter[T] {
@@ -174,18 +176,15 @@ class QntlSktchWrtrImplHeavy[T](val mutSktch : ItemsSketch[T]) extends QuantileS
 	}
 }
 trait HeavySktchMkr {
+	//  K must be >= 2 and <= 32768 and a power of 2
 	def mkEmptyQSW[T](numBins : Int, compr : Comparator[_ >: T]) : QuantileSketchWriter[T] = EmptyQSW(numBins, compr)
-}
 
-trait MakeSomeQuantSktchs {
-	def go : Unit = {
-		val hsm = new HeavySktchMkr {}
-		val binCnt = 8
-		// TODO: Consider different syntax forms for defining Comparator in Scala
+	def mkEmptyQSW_BD(numBins : Int) : QuantileSketchWriter[BigDecimal] = {
+		// TODO: Consider different Scala syntax forms for defining Comparator
 		val bdComp = new Comparator[BigDecimal] {
 			override def compare(o1: BigDecimal, o2: BigDecimal): Int = o1.compare(o2)
 		}
-		def qswBD = hsm.mkEmptyQSW(8, bdComp)
-
+		mkEmptyQSW[BigDecimal](numBins, bdComp)
 	}
 }
+

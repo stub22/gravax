@@ -15,17 +15,24 @@ object RunDSktchZstrmDemo extends ZIOAppDefault {
 	def run = myAppLogic
 
 	val myAppLogic: ZIO[Any, IOException, Unit] = {
+		val demoFeatures = new ZStrmDemoFeatures {}
 		for {
 			_	<- ZIO.log("RunDSktchZstrmDemo BEGIN")
-			zs  <- sumPositiveInts(1000)
+			zs  <- demoFeatures.sumPositiveInts(1000)
 			_	<- ZIO.log(s"Sum result: ${zs}")
-			dn <- dumNum
+			dn <- demoFeatures.dumNum
 			_	<- ZIO.log(s"Dumb rando: ${dn}")
-			adn <- avgDumNum
+			adn <- demoFeatures.avgDumNum
 			_	<- ZIO.log(s"Average dumNum = ${adn}")
+			sumTxt <- demoFeatures.summarizeStreamInSketch
+			_ 	<- ZIO.log(s"Summarized stream as: ${sumTxt}")
 		} yield ()
 	}
 
+
+
+}
+trait ZStrmDemoFeatures {
 	def sumPositiveInts(posInt : Int) : UIO[Int] = {
 		val rangeToSum = 1 to posInt
 		val stream: ZStream[Any, Nothing, Int] = ZStream.fromIterable(rangeToSum)
@@ -62,7 +69,37 @@ object RunDSktchZstrmDemo extends ZIOAppDefault {
 		val shortAvg = shortStrm.run(avgSink)
 		shortAvg
 	}
-
+	def summarizeStreamInSketch: UIO[String] = {
+		val hsm = new HeavySktchMkr {}
+		val emptyQSW = hsm.mkEmptyQSW_BD(16)
+		val accumSink = ZSink.foldLeft[BigDecimal, QuantileSketchWriter[BigDecimal]](emptyQSW)((prevQSW, nxtBD) => {
+			val nxtQSW = prevQSW.addItem(nxtBD)
+			nxtQSW
+		})
+		val strm: ZStream[Any, Nothing, BigDecimal] = ZStream.repeatZIO(dumNum)
+		val shortStrm = strm.take(500)
+		val sketchUIO: UIO[QuantileSketchWriter[BigDecimal]] = shortStrm.run(accumSink)
+		val summaryUIO: UIO[String] = sketchUIO.map(endQSW => {
+			val qsr = endQSW.getSketchReader
+			val summTxt = qsr.getSummaryTxt(true, true)
+			val qArr: qsr.OutArrT = qsr.getQuantiles(12)
+			val quantTxt = qArr.toList.toString
+			val minV = qsr.getMinValue
+			val maxV = qsr.getMaxValue
+			val width = maxV.-(minV)
+			val binCnt = 12
+			val incr = width./(binCnt)
+			val binIdxs = 1 to binCnt - 1
+			val splits: Array[BigDecimal] = binIdxs.toSeq.map(idx => incr.*(idx).+(minV)).toArray
+			val pmf: Array[Double] = qsr.getPMF(splits)
+			val pmfSum = pmf.reduce(_ + _)
+			val splitsTxt = splits.toList.toString()
+			val pmfTxt = pmf.toList.toString()
+			val statTxts = List(summTxt, "quants: " + quantTxt, "splits: " + splitsTxt, "pmf: " + pmfTxt, "pmfSum:" + pmfSum)
+			statTxts.mkString("\n")
+		})
+		summaryUIO
+	}
 }
 /*
 https://zio.dev/reference/stream/
