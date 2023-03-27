@@ -24,7 +24,9 @@ object RunDSktchZstrmDemo extends ZIOAppDefault {
 			_	<- ZIO.log(s"Dumb rando: ${dn}")
 			adn <- demoFeatures.avgDumNum
 			_	<- ZIO.log(s"Average dumNum = ${adn}")
-			sumTxt <- demoFeatures.summarizeStreamInSketch
+			padn <- demoFeatures.parAvgDumNum
+			_	<- ZIO.log(s"Par-Average dumNum = ${padn}")
+			sumTxt <- demoFeatures.summarizeStreamInSketch(256, 1000 * 1000)
 			_ 	<- ZIO.log(s"Summarized stream as: ${sumTxt}")
 		} yield ()
 	}
@@ -57,46 +59,59 @@ trait ZStrmDemoFeatures {
 		val mathCtx = new MathContext(8, RoundingMode.HALF_UP)
 		gaussianBD(ZRandom.RandomLive, mathCtx, mean, dev)
 	}
+	val myZeroAccumPair : (Int, BigDecimal) = (0, BigDecimal("0.0"))
+	lazy val myAccumSink: ZSink[Any, Nothing, BigDecimal, Nothing, (Int, BigDecimal)] = {
+
+		// foldLeft[In, S](z: => S)(f: (S, In) => S)
+		val accumSink = ZSink.foldLeft[BigDecimal, (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtBD) => {
+			(prevStPair._1 + 1, prevStPair._2.+(nxtBD))
+		})
+		accumSink
+	}
+	lazy val myAvgSink = myAccumSink.map(pair => {pair._2./(pair._1)})
+
 	def avgDumNum : UIO[BigDecimal] = {
 		val strm: ZStream[Any, Nothing, BigDecimal] = ZStream.repeatZIO(dumNum)
 		val shortStrm = strm.take(500)
-		val zeroPair : (Int, BigDecimal) = (0, BigDecimal("0.0"))
-		// foldLeft[In, S](z: => S)(f: (S, In) => S)
-		val accumSink = ZSink.foldLeft[BigDecimal, (Int, BigDecimal)](zeroPair)((prevStPair, nxtBD) => {
-			(prevStPair._1 + 1, prevStPair._2.+(nxtBD))
-		})
-		val avgSink = accumSink.map(pair => {pair._2./(pair._1)})
-		val shortAvg = shortStrm.run(avgSink)
+		val shortAvg = shortStrm.run(myAvgSink)
 		shortAvg
 	}
-	def summarizeStreamInSketch: UIO[String] = {
+	def parAvgDumNum : UIO[BigDecimal] = {
+		val origStrm: ZStream[Any, Nothing, BigDecimal] = ZStream.repeatZIO(dumNum)
+		val strmWithIdx: ZStream[Any, Nothing, (BigDecimal, Long)] = origStrm.zipWithIndex
+		val finiteStrm = strmWithIdx.take(5000)
+		val numGroups = 8
+		// grouped : ZStream.GroupBy[Any, Nothing, Long, (BigDecimal, Long)]
+		val grouped = finiteStrm.groupByKey(pair => pair._2 % numGroups, 16)
+		val mergedResultStrm: ZStream[Any, Nothing, (Int, BigDecimal)] = grouped.apply((key, strm) => {
+			val accumZIO: UIO[(Int, BigDecimal)] = strm.map(_._1).run(myAccumSink)
+			val azs: ZStream[Any, Nothing, (Int, BigDecimal)] = ZStream.fromZIO(accumZIO)
+			azs
+		})
+		val dbgMRS = mergedResultStrm.debug("parAvgDumNum: partial result")
+		val accumCombSink = ZSink.foldLeft[(Int, BigDecimal), (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtAccumPair) => {
+			(prevStPair._1 + nxtAccumPair._1, prevStPair._2.+(nxtAccumPair._2))
+		})
+		val combAvgSink = accumCombSink.map(pair => {pair._2./(pair._1)})
+		val combAvgUIO: UIO[BigDecimal] = dbgMRS.run(combAvgSink)
+		combAvgUIO
+	}
+
+	def summarizeStreamInSketch(numSketchBins : Int, numSamples : Int) : UIO[String] = {
 		val hsm = new HeavySktchMkr {}
-		val emptyQSW = hsm.mkEmptyQSW_BD(16)
+		val emptyQSW = hsm.mkEmptyQSW_BD(numSketchBins)
 		val accumSink = ZSink.foldLeft[BigDecimal, QuantileSketchWriter[BigDecimal]](emptyQSW)((prevQSW, nxtBD) => {
 			val nxtQSW = prevQSW.addItem(nxtBD)
 			nxtQSW
 		})
 		val strm: ZStream[Any, Nothing, BigDecimal] = ZStream.repeatZIO(dumNum)
-		val shortStrm = strm.take(500)
+		val shortStrm = strm.take(numSamples)
 		val sketchUIO: UIO[QuantileSketchWriter[BigDecimal]] = shortStrm.run(accumSink)
 		val summaryUIO: UIO[String] = sketchUIO.map(endQSW => {
 			val qsr = endQSW.getSketchReader
-			val summTxt = qsr.getSummaryTxt(true, true)
-			val qArr: qsr.OutArrT = qsr.getQuantiles(12)
-			val quantTxt = qArr.toList.toString
-			val minV = qsr.getMinValue
-			val maxV = qsr.getMaxValue
-			val width = maxV.-(minV)
-			val binCnt = 12
-			val incr = width./(binCnt)
-			val binIdxs = 1 to binCnt - 1
-			val splits: Array[BigDecimal] = binIdxs.toSeq.map(idx => incr.*(idx).+(minV)).toArray
-			val pmf: Array[Double] = qsr.getPMF(splits)
-			val pmfSum = pmf.reduce(_ + _)
-			val splitsTxt = splits.toList.toString()
-			val pmfTxt = pmf.toList.toString()
-			val statTxts = List(summTxt, "quants: " + quantTxt, "splits: " + splitsTxt, "pmf: " + pmfTxt, "pmfSum:" + pmfSum)
-			statTxts.mkString("\n")
+			val dumper = new SketchDumperForNumeric(qsr)
+			val deetTxt = dumper.getDetailedTxt(12, 13)
+			deetTxt
 		})
 		summaryUIO
 	}

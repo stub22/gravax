@@ -261,6 +261,9 @@ trait MakesGameFeatures {
 		})
 		hpj
 	}
+	// TODO:  Make a version of this that is able to run parallel folds over pieces of a concrete input data stream
+	//  (as if coming from a file).
+	//
 	def mkParJobForTotalHistos(maxPerim : Int, numStrms : Int) : IO[Unit] = {
 		val triEithStrmJob = mkJobProducingStreamOfTriEithers(maxPerim)
 		val dbgHead = "parJobForTotalHistos"
@@ -268,11 +271,13 @@ trait MakesGameFeatures {
 
 		val thpj: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
 			// Here we use the strm (program/data-generator) a total of numStrms times.
+			// Each of those times will produce *DIFFERENT* data.
 			val multipleFoldingStreams: Stream[Pure, Stream[IO, HistoForFailureOrNumRange]] = Stream.range(0, numStrms).map(n => {
 				val oneHistoRslt: Stream[IO, HistoForFailureOrNumRange] = strm.through(hsm.foldToOneTotalResult)
 				val timed = myUtilStrms.timedStream(s"PAR-TOTAL-HISTO_${n}")
 				timed.flatMap(dur => oneHistoRslt)
 			})
+			// .parJoinUnbounded is the magical step!
 			val joined: Stream[IO, HistoForFailureOrNumRange] = multipleFoldingStreams.parJoinUnbounded
 			val flg_condenseHistos = true
 			val streamToRun: Stream[IO, HistoForFailureOrNumRange] = if (flg_condenseHistos) {

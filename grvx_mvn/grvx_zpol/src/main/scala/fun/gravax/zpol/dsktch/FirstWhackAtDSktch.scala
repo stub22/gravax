@@ -37,6 +37,27 @@ trait QuantileSketchReader[T] {
 	def getQuantiles(evenlySpaced : Int): OutArrT
 
 	def getSummaryTxt(sketchSummary: Boolean, dataDetail: Boolean) : String
+
+
+}
+class SketchDumperForNumeric(qsr : QuantileSketchReader[BigDecimal]) {
+	def getDetailedTxt(numQuantiles : Int, numProbBins : Int) : String = {
+		val summTxt = qsr.getSummaryTxt(true, true)
+		val qArr: qsr.OutArrT = qsr.getQuantiles(numQuantiles)
+		val quantTxt = qArr.toList.toString
+		val (minV, maxV) = (qsr.getMinValue, qsr.getMaxValue)
+		val width = maxV.-(minV)
+		val binCnt = numProbBins
+		val incr = width./(binCnt)
+		val binIdxs = 1 to binCnt - 1
+		val splits: Array[BigDecimal] = binIdxs.toSeq.map(idx => incr.*(idx).+(minV)).toArray
+		val pmf: Array[Double] = qsr.getPMF(splits)
+		val pmfSum = pmf.reduce(_ + _)
+		val splitsTxt = splits.toList.toString()
+		val pmfTxt = pmf.toList.toString()
+		val statTxts = List(summTxt, "quants: " + quantTxt, "splits: " + splitsTxt, "pmf: " + pmfTxt, "pmfSum:" + pmfSum)
+		statTxts.mkString("\n")
+	}
 }
 trait QuantileSketchReaderHasMut[T] extends QuantileSketchReader[T] {
 
