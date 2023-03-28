@@ -1,11 +1,12 @@
-package fun.gravax.zpol.dsktch
+package fun.gravax.dsktch.quantile
 
-import zio.stream.{ZSink, ZStream}
+import zio.stream.{UStream, ZSink, ZStream}
 import zio.{UIO, ZIO, ZIOAppDefault}
 import zio.{Random => ZRandom}
 
 import java.io.IOException
 import java.math.{MathContext, RoundingMode}
+import java.util.Comparator
 
 
 private trait SketchZStrmStf
@@ -26,7 +27,7 @@ object RunDSktchZstrmDemo extends ZIOAppDefault {
 			_	<- ZIO.log(s"Average dumNum = ${adn}")
 			padn <- demoFeatures.parAvgDumNum
 			_	<- ZIO.log(s"Par-Average dumNum = ${padn}")
-			sumTxt <- demoFeatures.summarizeStreamInSketch(256, 1000 * 1000)
+			sumTxt <- demoFeatures.summarizeOneStreamInSketch(256, 1000 * 1000)
 			_ 	<- ZIO.log(s"Summarized stream as: ${sumTxt}")
 		} yield ()
 	}
@@ -71,21 +72,22 @@ trait ZStrmDemoFeatures {
 	lazy val myAvgSink = myAccumSink.map(pair => {pair._2./(pair._1)})
 
 	def avgDumNum : UIO[BigDecimal] = {
-		val strm: ZStream[Any, Nothing, BigDecimal] = ZStream.repeatZIO(dumNum)
+		val strm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
 		val shortStrm = strm.take(500)
 		val shortAvg = shortStrm.run(myAvgSink)
 		shortAvg
 	}
 	def parAvgDumNum : UIO[BigDecimal] = {
-		val origStrm: ZStream[Any, Nothing, BigDecimal] = ZStream.repeatZIO(dumNum)
-		val strmWithIdx: ZStream[Any, Nothing, (BigDecimal, Long)] = origStrm.zipWithIndex
+		val origStrm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
+		// Tag each record with a sequence number that we can use later in .groupBy.
+		val strmWithIdx: UStream[(BigDecimal, Long)] = origStrm.zipWithIndex
 		val finiteStrm = strmWithIdx.take(5000)
 		val numGroups = 8
 		// grouped : ZStream.GroupBy[Any, Nothing, Long, (BigDecimal, Long)]
 		val grouped = finiteStrm.groupByKey(pair => pair._2 % numGroups, 16)
-		val mergedResultStrm: ZStream[Any, Nothing, (Int, BigDecimal)] = grouped.apply((key, strm) => {
+		val mergedResultStrm: UStream[(Int, BigDecimal)] = grouped.apply((key, strm) => {
 			val accumZIO: UIO[(Int, BigDecimal)] = strm.map(_._1).run(myAccumSink)
-			val azs: ZStream[Any, Nothing, (Int, BigDecimal)] = ZStream.fromZIO(accumZIO)
+			val azs: UStream[(Int, BigDecimal)] = ZStream.fromZIO(accumZIO)
 			azs
 		})
 		val dbgMRS = mergedResultStrm.debug("parAvgDumNum: partial result")
@@ -97,27 +99,37 @@ trait ZStrmDemoFeatures {
 		combAvgUIO
 	}
 
-	def summarizeStreamInSketch(numSketchBins : Int, numSamples : Int) : UIO[String] = {
-		val hsm = new HeavySktchMkr {}
-		val emptyQSW = hsm.mkEmptyQSW_BD(numSketchBins)
+
+	def summarizeOneStreamInSketch(numSketchBins : Int, numSamples : Int) : UIO[String] = {
+		val emptyQSW = mkEmptyQSW_forBigDec(numSketchBins)
 		val accumSink = ZSink.foldLeft[BigDecimal, QuantileSketchWriter[BigDecimal]](emptyQSW)((prevQSW, nxtBD) => {
 			val nxtQSW = prevQSW.addItem(nxtBD)
 			nxtQSW
 		})
-		val strm: ZStream[Any, Nothing, BigDecimal] = ZStream.repeatZIO(dumNum)
+		val strm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
 		val shortStrm = strm.take(numSamples)
 		val sketchUIO: UIO[QuantileSketchWriter[BigDecimal]] = shortStrm.run(accumSink)
 		val summaryUIO: UIO[String] = sketchUIO.map(endQSW => {
 			val qsr = endQSW.getSketchReader
-			val dumper = new SketchDumperForNumeric(qsr)
+			val dumper = new SketchDumperForBigDecimal(qsr)
 			val deetTxt = dumper.getDetailedTxt(12, 13)
 			deetTxt
 		})
 		summaryUIO
 	}
+
+	def mkEmptyQSW_forBigDec(numBins : Int) : QuantileSketchWriter[BigDecimal] = {
+		val hsm = new QuantileSketchWrapperMaker {}
+		val bdComp = new Comparator[BigDecimal] {
+			override def compare(o1: BigDecimal, o2: BigDecimal): Int = o1.compare(o2)
+		}
+		hsm.mkEmptyWriteWrapper[BigDecimal](numBins, bdComp)
+	}
 }
 /*
 https://zio.dev/reference/stream/
+type Stream[+E, +A] = ZStream[Any, E, A]
+type UStream[+A]    = ZStream[Any, Nothing, A]
 
 Streams and Sinks are duals in category theory. One produces values, and the other one consumes them.
 They are mere images of each other. They both have to exist. A streaming library cannot be complete unless it has
