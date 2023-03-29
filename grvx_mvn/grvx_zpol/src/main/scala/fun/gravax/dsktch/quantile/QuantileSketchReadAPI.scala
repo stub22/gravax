@@ -1,8 +1,10 @@
 package fun.gravax.dsktch.quantile
 
 trait QuantileSketchReader[T] {
-	type InArrT = Array[T with Object]
-	type OutArrT = Array[_ <: T]
+	// Encode the assumption that "Double" is used for rank+fraction numbering.
+	type RealNum = Double
+	// API for accessing schetch result.
+	// All data in+out must be immutable.  This constraint is trivial for scalars, less so for collections.
 
 	// Returns the configured value of K
 	def getK: Int
@@ -17,21 +19,32 @@ trait QuantileSketchReader[T] {
 	def getMinValue: T
 
 	// Returns an approximation to the normalized (fractional) rank of the given value from 0 to 1 inclusive.
-	def getRank(t : T) : Double
+	def getRank(t : T) : RealNum
 
 	// This returns an approximation to the value of the data item that would be preceded by the given fraction of a hypothetical sorted version of the input stream so far.
-	def getQuantile(fraction : Double): T
+	def getQuantile(fraction : RealNum): T
 
 	// Gets the lower bound of the value interval in which the true quantile of the given rank exists with a confidence of at least 99%.
-	def getQuantileLowerBound(fraction : Double): T
+	def getQuantileLowerBound(fraction : RealNum): T
 
 	// Gets the upper bound of the value interval in which the true quantile of the given rank exists with a confidence of at least 99%.
-	def getQuantileUpperBound(fraction : Double): T
+	def getQuantileUpperBound(fraction : RealNum): T
 
 	// Gets the approximate rank error of this sketch normalized as a fraction between zero and one.
 	// pmf: if true, returns the "double-sided" normalized rank error for the getPMF() function.
 	// Otherwise, it is the "single-sided" normalized rank error for all the other queries.
-	def getNormalizedRankError(pmf : Boolean) : Double
+	def getNormalizedRankError(pmf : Boolean) : RealNum
+
+	def getSummaryTxt(flg_includeSketchSummary: Boolean, flg_includeDataDetail: Boolean) : String
+
+	// In Scala 2.13+, Seq means scala.collection.immutable.Seq
+
+	// The methods above use scalar inputs+outputs, and hence are automatically immutable.
+	// The methods below use collections, which we treat more carefully.
+	type InSeqT = Seq[T]
+	type OutSeqT = Seq[T]
+	type InSeqRN = Seq[RealNum]
+	type OutSeqRN = Seq[RealNum]
 
 	/* getPMF     https://datasketches.apache.org/api/java/snapshot/apidocs/org/apache/datasketches/quantiles/ItemsSketch.html
 	public double[] getPMF(T[] splitPoints)
@@ -43,7 +56,7 @@ trait QuantileSketchReader[T] {
 	Returns:
 	an array of m+1 doubles each of which is an approximation to the fraction of the input stream values (the mass) that fall into one of those intervals. The definition of an "interval" is inclusive of the left splitPoint and exclusive of the right splitPoint, with the exception that the last interval will include maximum value.
 	 */
-	def getPMF(splitPoints: InArrT): Array[Double]
+	def getPMF(splitPoints: InSeqT): OutSeqRN
 
 	/* getCDF     https://datasketches.apache.org/api/java/snapshot/apidocs/org/apache/datasketches/quantiles/ItemsSketch.html
 Returns an approximation to the Cumulative Distribution Function (CDF), which is the cumulative analog of the PMF, of the input stream given a set of splitPoints (values).
@@ -51,7 +64,7 @@ The resulting approximations have a probabilistic guarantee that be obtained fro
 If the sketch is empty this returns null.
 The value at array position j of the returned CDF array is the sum of the returned values in positions 0 through j of the returned PMF array.
 	*/
-	def getCDF(splitPoints: InArrT): Array[Double]
+	def getCDF(splitPoints: InSeqT): OutSeqRN
 
 	/*
 	This is a more efficient multiple-query version of getQuantile().
@@ -63,31 +76,29 @@ The value at array position j of the returned CDF array is the sum of the return
 	Returns:
 	array of approximate quantiles of the given fRanks in the same order as in the given fRanks array.
 	 */
-	def getQuantiles(fRanks : Array[Double]): OutArrT
+	def getQuantiles(fRanks : InSeqRN): OutSeqT
 
 	/*
 	evenlySpaced - an integer that specifies the number of evenly spaced fractional ranks.
 	This must be a positive integer greater than 1. A value of 2 will return the min and the max value.
 	A value of 3 will return the min, the median and the max value, etc.
 	*/
-	def getQuantiles(evenlySpaced : Int): OutArrT
-
-	def getSummaryTxt(flg_includeSketchSummary: Boolean, flg_includeDataDetail: Boolean) : String
+	def getQuantiles(evenlySpaced : Int): OutSeqT
 }
 
 
 class SketchDumperForBigDecimal(qsr : QuantileSketchReader[BigDecimal]) {
 	def getDetailedTxt(numQuantiles : Int, numProbBins : Int) : String = {
 		val summTxt = qsr.getSummaryTxt(true, true)
-		val qArr: qsr.OutArrT = qsr.getQuantiles(numQuantiles)
-		val quantTxt = qArr.toList.toString
+		val qSeq: qsr.OutSeqT = qsr.getQuantiles(numQuantiles)
+		val quantTxt = qSeq.toList.toString
 		val (minV, maxV) = (qsr.getMinValue, qsr.getMaxValue)
 		val width = maxV.-(minV)
 		val binCnt = numProbBins
 		val incr = width./(binCnt)
 		val binIdxs = 1 to binCnt - 1
 		val splits: Array[BigDecimal] = binIdxs.toSeq.map(idx => incr.*(idx).+(minV)).toArray
-		val pmf: Array[Double] = qsr.getPMF(splits)
+		val pmf: qsr.OutSeqRN = qsr.getPMF(splits)
 		val pmfSum = pmf.reduce(_ + _)
 		val splitsTxt = splits.toList.toString()
 		val pmfTxt = pmf.toList.toString()

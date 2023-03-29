@@ -1,24 +1,20 @@
-package fun.gravax.dsktch.quantile
+package fun.gravax.zpol
 
 import zio.stream.{UStream, ZSink, ZStream}
-import zio.{UIO, ZIO, ZIOAppDefault}
-import zio.{Random => ZRandom}
+import zio.{UIO, ZIO, ZIOAppDefault, Random => ZRandom}
 
 import java.io.IOException
 import java.math.{MathContext, RoundingMode}
-import java.util.Comparator
 
 
-private trait SketchZStrmStf
-
-object RunDSktchZstrmDemo extends ZIOAppDefault {
+object RunAveragingDemo extends ZIOAppDefault {
 
 	def run = myAppLogic
 
 	val myAppLogic: ZIO[Any, IOException, Unit] = {
-		val demoFeatures = new ZStrmDemoFeatures {}
+		val demoFeatures = new AveragingDemoFeatures {}
 		for {
-			_	<- ZIO.log("RunDSktchZstrmDemo BEGIN")
+			_	<- ZIO.log("RunAveragingDemo BEGIN")
 			zs  <- demoFeatures.sumPositiveInts(1000)
 			_	<- ZIO.log(s"Sum result: ${zs}")
 			dn <- demoFeatures.dumNum
@@ -27,15 +23,13 @@ object RunDSktchZstrmDemo extends ZIOAppDefault {
 			_	<- ZIO.log(s"Average dumNum = ${adn}")
 			padn <- demoFeatures.parAvgDumNum
 			_	<- ZIO.log(s"Par-Average dumNum = ${padn}")
-			sumTxt <- demoFeatures.summarizeOneStreamInSketch(256, 1000 * 1000)
-			_ 	<- ZIO.log(s"Summarized stream as: ${sumTxt}")
 		} yield ()
 	}
 
 
 
 }
-trait ZStrmDemoFeatures {
+trait AveragingDemoFeatures {
 	def sumPositiveInts(posInt : Int) : UIO[Int] = {
 		val rangeToSum = 1 to posInt
 		val stream: ZStream[Any, Nothing, Int] = ZStream.fromIterable(rangeToSum)
@@ -100,31 +94,7 @@ trait ZStrmDemoFeatures {
 	}
 
 
-	def summarizeOneStreamInSketch(numSketchBins : Int, numSamples : Int) : UIO[String] = {
-		val emptyQSW = mkEmptyQSW_forBigDec(numSketchBins)
-		val accumSink = ZSink.foldLeft[BigDecimal, QuantileSketchWriter[BigDecimal]](emptyQSW)((prevQSW, nxtBD) => {
-			val nxtQSW = prevQSW.addItem(nxtBD)
-			nxtQSW
-		})
-		val strm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
-		val shortStrm = strm.take(numSamples)
-		val sketchUIO: UIO[QuantileSketchWriter[BigDecimal]] = shortStrm.run(accumSink)
-		val summaryUIO: UIO[String] = sketchUIO.map(endQSW => {
-			val qsr = endQSW.getSketchReader
-			val dumper = new SketchDumperForBigDecimal(qsr)
-			val deetTxt = dumper.getDetailedTxt(12, 13)
-			deetTxt
-		})
-		summaryUIO
-	}
 
-	def mkEmptyQSW_forBigDec(numBins : Int) : QuantileSketchWriter[BigDecimal] = {
-		val hsm = new QuantileSketchWrapperMaker {}
-		val bdComp = new Comparator[BigDecimal] {
-			override def compare(o1: BigDecimal, o2: BigDecimal): Int = o1.compare(o2)
-		}
-		hsm.mkEmptyWriteWrapper[BigDecimal](numBins, bdComp)
-	}
 }
 /*
 https://zio.dev/reference/stream/

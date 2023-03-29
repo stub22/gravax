@@ -2,7 +2,9 @@ package fun.gravax.dsktch.quantile
 
 import org.apache.datasketches.quantiles.{ItemsSketch, ItemsUnion}
 
-class QuantileSketchWriteWrapper[T](val mutSktch : ItemsSketch[T]) extends QuantileSketchWriter[T] {
+import scala.reflect.ClassTag
+
+class QuantileSketchWriteWrapper[T <: Object : ClassTag](val mutSktch : ItemsSketch[T]) extends QuantileSketchWriter[T] {
 	override def addItem(itm: T): QuantileSketchWriter[T] = {
 		val helpyUnion = ItemsUnion.getInstance(mutSktch)
 		helpyUnion.update(itm)
