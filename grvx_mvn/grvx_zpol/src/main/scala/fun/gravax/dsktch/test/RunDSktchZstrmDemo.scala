@@ -17,7 +17,7 @@ object RunDSktchZstrmDemo extends ZIOAppDefault {
 		val demoFeatures = new DSketchDemoFeatures {}
 		for {
 			_	<- ZIO.log("RunDSktchZstrmDemo BEGIN")
-			sumTxt <- demoFeatures.summarizeOneStreamInSketch(32, 1 * 1000 * 1000)
+			sumTxt <- demoFeatures.summarizeOneStreamInSketch(256, 1 * 1000 * 1000)
 			_ 	<- ZIO.log(s"Summarized stream as: ${sumTxt}")
 		} yield ()
 	}
@@ -30,19 +30,9 @@ trait DSketchDemoFeatures {
 		override def compare(o1: BigDecimal, o2: BigDecimal): Int = o1.compare(o2)
 	}
 	def summarizeOneStreamInSketch(numSketchBins : Int, numSamples : Int) : UIO[String] = {
-
 		val numGenUIO = myNumGenFeat.mkNumberGenUIO("3.5", "9.0", 8)
 		val infiniteSampleStrm: UStream[BigDecimal] = ZStream.repeatZIO(numGenUIO)
 		val finiteSampleStrm = infiniteSampleStrm.take(numSamples)
-/*
-		val emptyQSW = mkEmptyQSW_forBigDec(numSketchBins)
-		val accumSink = ZSink.foldLeft[BigDecimal, QuantileSketchWriter[BigDecimal]](emptyQSW)((prevQSW, nxtBD) => {
-			val nxtQSW = prevQSW.addItem(nxtBD)
-			nxtQSW
-		})
-		val sketchMakerUIO: UIO[QuantileSketchWriter[BigDecimal]] = finiteSampleStrm.run(accumSink)
-		val sketchReaderUIO: UIO[QuantileSketchReader[BigDecimal]] = sketchMakerUIO.map(endQSW => endQSW.getSketchReader)
-*/
 		val sketchReaderUIO = summarizeFiniteStream(finiteSampleStrm, numSketchBins, myBigDecComp)
 		val timedSketchUIO: UIO[(zio.Duration, QuantileSketchReader[BigDecimal])] = sketchReaderUIO.timed
 		val summaryUIO: UIO[String] = timedSketchUIO.map(rsltPair => {
@@ -55,13 +45,22 @@ trait DSketchDemoFeatures {
 	}
 
 	def summarizeFiniteStream[T <: Object : ClassTag](finStrm : UStream[T], numBins : Int, comp : Comparator[T]) :  UIO[QuantileSketchReader[T]] = {
-		val hsm = new QuantileSketchWrapperMaker {}
+		val hsm = new QuantileSketchWrapperMaker {
+			override protected def getFlg_UseHotWriter = false
+			override protected def getFlg_UseBuffWriter = true
+		}
+		// Here we are *directly* making an *instance* that we treat as immutable (when hotWriter is false!), and hence reusable.
+		// If we wanted to *not* reuse the instance (when hotWriter is true!), then we could wrap this creation in an effect.
 		val emptyQSW = hsm.mkEmptyWriteWrapper[T](numBins, comp)
+		// Here we make a ZSink that uses our emptyQSW as a seed value.
+		// This ZSink is reusable, but here we are only using it once.
 		val accumSink = ZSink.foldLeft[T, QuantileSketchWriter[T]](emptyQSW)((prevQSW, nxtItem) => {
 			val nxtQSW = prevQSW.addItem(nxtItem)
 			nxtQSW
 		})
+		// Attach stream and sink to form a single effect
 		val sketchMakerUIO: UIO[QuantileSketchWriter[T]] = finStrm.run(accumSink)
+		// The reader access could be made part of a ZSink
 		val sketchReaderUIO: UIO[QuantileSketchReader[T]] = sketchMakerUIO.map(endQSW => endQSW.getSketchReader)
 		sketchReaderUIO
 	}

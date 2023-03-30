@@ -13,7 +13,9 @@ trait QuantileSketchWriter[T] {
 	def addItems(items : IterableOnce[T]) : QuantileSketchWriter[T]
 
 	// Merge items with another writer to produce a new writer that holds a sketch for all items.
-	def merge(otherQSW : QuantileSketchWriter[T]) : QuantileSketchWriter[T]
+	def mergeIfCompat(otherQSW : QuantileSketchWriter[T]) : Option[QuantileSketchWriter[T]]
+
+	def checkMergeCompat(otherQSW : QuantileSketchWriter[T]) : Boolean
 
 	// Return an immutable sketch reader, based on the same set of items known by this writer.
 	def getSketchReader : QuantileSketchReader[T]
