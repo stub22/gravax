@@ -1,19 +1,26 @@
 package fun.gravax.dsktch.quantile
 
+/***
+ * API for accessing sketch result.
+ * Initial design is based on ItemsSketch from the Apache DataSketches project.
+ * https://datasketches.apache.org/api/java/snapshot/apidocs/org/apache/datasketches/quantiles/ItemsSketch.html
+ * @tparam T
+ *
+ * This reader is able to read a sinigle fixed immutable sketch.
+ * All data passed in+out of this reader's methods should be treated as immutable, by both the impl and the client.
+ */
 trait QuantileSketchReader[T] {
 	// Encode the assumption that "Double" is used for rank+fraction numbering.
 	type RealNum = Double
-	// API for accessing schetch result.
-	// All data in+out must be immutable.  This constraint is trivial for scalars, less so for collections.
 
-	// Returns the configured value of K
+	// Returns the configured value of K (which roughly means:  the number of approximation bins used)
 	def getK: Int
 
-	// Returns the length of the input stream so far.
+	// Returns the length of the input stream used to create this sketch, i.e. the number of samples seen.
 	def getN : Long
 	def isEmpty: Boolean
 
-	// Computes the number of retained entries (samples) in the sketch
+	// Fetch the number of *retained* samples in the sketch.
 	def getRetainedItems: Int
 	def getMaxValue: T
 	def getMinValue: T
@@ -83,14 +90,14 @@ The value at array position j of the returned CDF array is the sum of the return
 	This must be a positive integer greater than 1. A value of 2 will return the min and the max value.
 	A value of 3 will return the min, the median and the max value, etc.
 	*/
-	def getQuantiles(evenlySpaced : Int): OutSeqT
+	def getRegularQuantiles(evenlySpaced : Int): OutSeqT
 }
 
 
 class SketchDumperForBigDecimal(qsr : QuantileSketchReader[BigDecimal]) {
 	def getDetailedTxt(numQuantiles : Int, numProbBins : Int) : String = {
 		val summTxt = qsr.getSummaryTxt(true, true)
-		val qSeq: qsr.OutSeqT = qsr.getQuantiles(numQuantiles)
+		val qSeq: qsr.OutSeqT = qsr.getRegularQuantiles(numQuantiles)
 		val quantTxt = qSeq.toList.toString
 		val (minV, maxV) = (qsr.getMinValue, qsr.getMaxValue)
 		val width = maxV.-(minV)

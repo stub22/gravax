@@ -14,6 +14,7 @@ import scala.reflect.ClassTag
  * Meanwhile the :ClassTag context bound allows us to carry implicit denoting concrete runtime type of T to the array
  * constructors used by getPMF, getCDF.
  */
+// The "<: Object" bound prevents:   "found   : Array[T with Object]   ...   but class Array is invariant in type T."
 
 abstract class QuantileSketchReadWrapper[T <: Object : ClassTag] extends QuantileSketchReader[T] {
 
@@ -46,10 +47,6 @@ abstract class QuantileSketchReadWrapper[T <: Object : ClassTag] extends Quantil
 		fetchWrappedSketch.toString(flg_includeSketchSummary, flg_includeDataDetail)
 	}
 
-	def flg_doCopyIn : Boolean = true
-	def flg_doCopyOut : Boolean = true
-
-	// Appears that ArrayOps.toSeq does NOT make a copy
 	override def getPMF(splitPoints: Seq[T]): Seq[RealNum] = {
 		val inArr : Array[T] = seqTtoArrT(splitPoints)
 		val outArr: Array[RealNum] = getPMF_Arr(inArr)
@@ -61,7 +58,6 @@ abstract class QuantileSketchReadWrapper[T <: Object : ClassTag] extends Quantil
 		val inArr : Array[T] = seqTtoArrT(splitPoints)
 		val outArr: Array[Double] = getCDF_Arr(inArr)
 		val outSeq : OutSeqRN = arrDtoSeqRN(outArr)
-		// val outSeq : OutSeqRN = if (flg_doCopyOut)	ArraySeq.from(outArr) else outArr
 		outSeq
 	}
 
@@ -72,11 +68,27 @@ abstract class QuantileSketchReadWrapper[T <: Object : ClassTag] extends Quantil
 		outSeq
 	}
 
-	override def getQuantiles(evenlySpaced: Int): Seq[T] = {
-		val outArrT  = getQuantiles_Arr(evenlySpaced)
+	override def getRegularQuantiles(evenlySpaced: Int): Seq[T] = {
+		val outArrT  = getRegularQuantiles_Arr(evenlySpaced)
 		val outSeq = arrTtoSeqT(outArrT)
 		outSeq
 	}
+
+	// Below are the impls that delegate to ItemSketch array-oriented methods.
+	// For all these itemSketch methods that return arrays, is there a guarantee that these returned arrays are immutable?
+	protected def getPMF_Arr(splitPoints: Array[T]): Array[Double] = fetchWrappedSketch.getPMF(splitPoints)
+
+	protected def getCDF_Arr(splitPoints: Array[T]): Array[Double] = fetchWrappedSketch.getCDF(splitPoints)
+
+	protected def getQuantiles_Arr(fRanks : Array[Double]): Array[T] = fetchWrappedSketch.getQuantiles(fRanks)
+
+	protected def getRegularQuantiles_Arr(evenlySpaced : Int): Array[T] = fetchWrappedSketch.getQuantiles(evenlySpaced)
+
+	// false => we trust ItemSketch not to modify input/output arrays
+	// true  => make copies just in case
+	// It appears that ArrayOps.toSeq does NOT make a copy.
+	def flg_doCopyIn : Boolean = true
+	def flg_doCopyOut : Boolean = true
 
 	private def seqTtoArrT(seqT: Seq[T]) : Array[T] = {
 		if (flg_doCopyIn)
@@ -84,7 +96,9 @@ abstract class QuantileSketchReadWrapper[T <: Object : ClassTag] extends Quantil
 		else seqT.toArray
 	}
 	private def arrTtoSeqT(arrT: Array[T]) : Seq[T] = {
-		if (flg_doCopyOut)	ArraySeq.from(arrT) else arrT
+		if (flg_doCopyOut)
+			ArraySeq.from(arrT)
+		else arrT
 	}
 	private def seqRNtoArrD(seqRN: Seq[RealNum]) : Array[Double] = {
 		if (flg_doCopyIn)
@@ -92,19 +106,10 @@ abstract class QuantileSketchReadWrapper[T <: Object : ClassTag] extends Quantil
 		else seqRN.toArray
 	}
 	private def arrDtoSeqRN(arrRN: Array[Double]) : Seq[RealNum] = {
-		if (flg_doCopyOut)	ArraySeq.from(arrRN) else arrRN
+		if (flg_doCopyOut)
+			ArraySeq.from(arrRN)
+		else arrRN
 	}
-
-	// With all these methods that return arrays, where is guarantee that these returned arrays are immutable?
-	protected def getPMF_Arr(splitPoints: Array[T]): Array[Double] = fetchWrappedSketch.getPMF(splitPoints)
-
-	//  found   : Array[T] 	// required: Array[T with Object] //Note: T >: T with Object, but class Array is invariant in type T.
-	protected def getCDF_Arr(splitPoints: Array[T]): Array[Double] = fetchWrappedSketch.getCDF(splitPoints)
-
-	//  found   : Array[T with Object]   ...   but class Array is invariant in type T.
-	protected def getQuantiles_Arr(fRanks : Array[Double]): Array[T] = fetchWrappedSketch.getQuantiles(fRanks)
-
-	protected def getQuantiles_Arr(evenlySpaced : Int): Array[T] = fetchWrappedSketch.getQuantiles(evenlySpaced)
 
 }
 

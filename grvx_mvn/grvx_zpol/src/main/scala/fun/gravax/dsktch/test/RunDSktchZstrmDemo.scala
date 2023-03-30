@@ -1,12 +1,13 @@
 package fun.gravax.dsktch.test
 
-import fun.gravax.dsktch.quantile.{QuantileSketchWrapperMaker, QuantileSketchWriter, SketchDumperForBigDecimal}
+import fun.gravax.dsktch.quantile.{QuantileSketchReader, QuantileSketchWrapperMaker, QuantileSketchWriter, SketchDumperForBigDecimal}
 import zio.stream.{UStream, ZSink, ZStream}
 import zio.{UIO, ZIO, ZIOAppDefault, Random => ZRandom}
 
 import java.io.IOException
 import java.math.{MathContext, RoundingMode}
 import java.util.Comparator
+import scala.reflect.ClassTag
 
 object RunDSktchZstrmDemo extends ZIOAppDefault {
 
@@ -16,7 +17,7 @@ object RunDSktchZstrmDemo extends ZIOAppDefault {
 		val demoFeatures = new DSketchDemoFeatures {}
 		for {
 			_	<- ZIO.log("RunDSktchZstrmDemo BEGIN")
-			sumTxt <- demoFeatures.summarizeOneStreamInSketch(256, 1000 * 1000)
+			sumTxt <- demoFeatures.summarizeOneStreamInSketch(32, 1 * 1000 * 1000)
 			_ 	<- ZIO.log(s"Summarized stream as: ${sumTxt}")
 		} yield ()
 	}
@@ -24,40 +25,82 @@ object RunDSktchZstrmDemo extends ZIOAppDefault {
 }
 
 trait DSketchDemoFeatures {
-	val myNumGenFeat = new NumGenFeatures {}
+	private val myNumGenFeat = new NumGenFeatures {}
+	private val myBigDecComp = new Comparator[BigDecimal] {
+		override def compare(o1: BigDecimal, o2: BigDecimal): Int = o1.compare(o2)
+	}
 	def summarizeOneStreamInSketch(numSketchBins : Int, numSamples : Int) : UIO[String] = {
+
+		val numGenUIO = myNumGenFeat.mkNumberGenUIO("3.5", "9.0", 8)
+		val infiniteSampleStrm: UStream[BigDecimal] = ZStream.repeatZIO(numGenUIO)
+		val finiteSampleStrm = infiniteSampleStrm.take(numSamples)
+/*
 		val emptyQSW = mkEmptyQSW_forBigDec(numSketchBins)
 		val accumSink = ZSink.foldLeft[BigDecimal, QuantileSketchWriter[BigDecimal]](emptyQSW)((prevQSW, nxtBD) => {
 			val nxtQSW = prevQSW.addItem(nxtBD)
 			nxtQSW
 		})
-		val numGenUIO = myNumGenFeat.mkNumberGenUIO
-		val infiniteSampleStrm: UStream[BigDecimal] = ZStream.repeatZIO(numGenUIO)
-		val finiteSampleStrm = infiniteSampleStrm.take(numSamples)
-		val sketchUIO: UIO[QuantileSketchWriter[BigDecimal]] = finiteSampleStrm.run(accumSink)
-		val summaryUIO: UIO[String] = sketchUIO.map(endQSW => {
-			val qsr = endQSW.getSketchReader
+		val sketchMakerUIO: UIO[QuantileSketchWriter[BigDecimal]] = finiteSampleStrm.run(accumSink)
+		val sketchReaderUIO: UIO[QuantileSketchReader[BigDecimal]] = sketchMakerUIO.map(endQSW => endQSW.getSketchReader)
+*/
+		val sketchReaderUIO = summarizeFiniteStream(finiteSampleStrm, numSketchBins, myBigDecComp)
+		val timedSketchUIO: UIO[(zio.Duration, QuantileSketchReader[BigDecimal])] = sketchReaderUIO.timed
+		val summaryUIO: UIO[String] = timedSketchUIO.map(rsltPair => {
+			val (dur, qsr) = rsltPair
 			val dumper = new SketchDumperForBigDecimal(qsr)
 			val deetTxt = dumper.getDetailedTxt(12, 13)
-			deetTxt
+			deetTxt + s"\nDURATION=${dur}"
 		})
 		summaryUIO
 	}
 
+	def summarizeFiniteStream[T <: Object : ClassTag](finStrm : UStream[T], numBins : Int, comp : Comparator[T]) :  UIO[QuantileSketchReader[T]] = {
+		val hsm = new QuantileSketchWrapperMaker {}
+		val emptyQSW = hsm.mkEmptyWriteWrapper[T](numBins, comp)
+		val accumSink = ZSink.foldLeft[T, QuantileSketchWriter[T]](emptyQSW)((prevQSW, nxtItem) => {
+			val nxtQSW = prevQSW.addItem(nxtItem)
+			nxtQSW
+		})
+		val sketchMakerUIO: UIO[QuantileSketchWriter[T]] = finStrm.run(accumSink)
+		val sketchReaderUIO: UIO[QuantileSketchReader[T]] = sketchMakerUIO.map(endQSW => endQSW.getSketchReader)
+		sketchReaderUIO
+	}
+
+
+	def summarizeParStreamInSketch(numSketchBins : Int, numSamples : Int) : UIO[String] = {
+		???
+	}
+
 	def mkEmptyQSW_forBigDec(numBins : Int) : QuantileSketchWriter[BigDecimal] = {
 		val hsm = new QuantileSketchWrapperMaker {}
-		val bdComp = new Comparator[BigDecimal] {
-			override def compare(o1: BigDecimal, o2: BigDecimal): Int = o1.compare(o2)
-		}
-		hsm.mkEmptyWriteWrapper[BigDecimal](numBins, bdComp)
+		hsm.mkEmptyWriteWrapper[BigDecimal](numBins, myBigDecComp)
 	}
+
+
+	/*
+		val strmWithIdx: UStream[(BigDecimal, Long)] = origStrm.zipWithIndex
+		val finiteStrm = strmWithIdx.take(5000)
+		val numGroups = 8
+		// grouped : ZStream.GroupBy[Any, Nothing, Long, (BigDecimal, Long)]
+		val grouped = finiteStrm.groupByKey(pair => pair._2 % numGroups, 16)
+		val mergedResultStrm: UStream[(Int, BigDecimal)] = grouped.apply((key, strm) => {
+			val accumZIO: UIO[(Int, BigDecimal)] = strm.map(_._1).run(myAccumSink)
+			val azs: UStream[(Int, BigDecimal)] = ZStream.fromZIO(accumZIO)
+			azs
+		})
+		val dbgMRS = mergedResultStrm.debug("parAvgDumNum: partial result")
+		val accumCombSink = ZSink.foldLeft[(Int, BigDecimal), (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtAccumPair) => {
+			(prevStPair._1 + nxtAccumPair._1, prevStPair._2.+(nxtAccumPair._2))
+		})
+	 */
+
 }
 
 trait NumGenFeatures {
-	def mkNumberGenUIO : UIO[BigDecimal] = {
-		val mean = BigDecimal("-5.0")
-		val dev = BigDecimal("4.5")
-		val mathCtx = new MathContext(8, RoundingMode.HALF_UP)
+	def mkNumberGenUIO(meanNumTxt : String, devNumTxt : String, precision : Int) : UIO[BigDecimal] = {
+		val mean = BigDecimal(meanNumTxt)
+		val dev = BigDecimal(devNumTxt)
+		val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
 		mkGaussianGenUIO(ZRandom.RandomLive, mathCtx, mean, dev)
 	}
 
@@ -113,5 +156,13 @@ quants: List(-27.908162, -10.985244, -9.1116547, -7.7346633, -6.5734001, -5.5090
 splits: List(-24.546313, -21.184463, -17.822614, -14.460765, -11.098915, -7.737066, -4.375217, -1.013368, 2.348482, 5.710331, 9.072180, 12.434030)
 pmf: List(0.0, 0.0, 0.003842, 0.015113, 0.069349, 0.183857, 0.28362, 0.256723, 0.13614, 0.043543, 0.007749, 6.4E-5, 0.0)
 pmfSum:0.9999999999999999" location=fun.gravax.dsktch.test.RunDSktchZstrmDemo.myAppLogic file=RunDSktchZstrmDemo.scala line=20
+
+
+Testing with hielo pinned to "low power" mode, running at 2.3GHZ.
+With copy ON for both ins and outs,
+single threaded 1M samples, K=256 takes 6.9s
+3M samples takes 19.1s
+With K=32 time for 1M drops to 3.99s, 3M to 10.9s
+
 
  */
