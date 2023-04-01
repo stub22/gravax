@@ -17,7 +17,7 @@ object RunDSktchZstrmDemo extends ZIOAppDefault {
 		val demoFeatures = new DSketchDemoFeatures {}
 		for {
 			_	<- ZIO.log("RunDSktchZstrmDemo BEGIN")
-			sumTxt <- demoFeatures.summarizeOneStreamInSketch(256, 1 * 1000 * 1000)
+			sumTxt <- demoFeatures.summarizeOneStreamInSketch(32, 10 * 1000 * 1000, None)
 			_ 	<- ZIO.log(s"Summarized stream as: ${sumTxt}")
 		} yield ()
 	}
@@ -29,29 +29,34 @@ trait DSketchDemoFeatures {
 	private val myBigDecComp = new Comparator[BigDecimal] {
 		override def compare(o1: BigDecimal, o2: BigDecimal): Int = o1.compare(o2)
 	}
-	def summarizeOneStreamInSketch(numSketchBins : Int, numSamples : Int) : UIO[String] = {
+
+	def summarizeOneStreamInSketch(numSketchBins : Int, numSamples : Int, parStreamCnt_opt : Option[Int]) : UIO[String] = {
 		val numGenUIO = myNumGenFeat.mkNumberGenUIO("3.5", "9.0", 8)
 		val infiniteSampleStrm: UStream[BigDecimal] = ZStream.repeatZIO(numGenUIO)
 		val finiteSampleStrm = infiniteSampleStrm.take(numSamples)
-		val sketchReaderUIO = summarizeFiniteStream(finiteSampleStrm, numSketchBins, myBigDecComp)
+		val sketchReaderUIO = parStreamCnt_opt match {
+			case Some(parStrmCnt) => summFiniteStrmPar(finiteSampleStrm, numSketchBins, myBigDecComp, parStrmCnt)
+			case None => summarizeFiniteStream(finiteSampleStrm, numSketchBins, myBigDecComp)
+		}
 		val timedSketchUIO: UIO[(zio.Duration, QuantileSketchReader[BigDecimal])] = sketchReaderUIO.timed
 		val summaryUIO: UIO[String] = timedSketchUIO.map(rsltPair => {
 			val (dur, qsr) = rsltPair
 			val dumper = new SketchDumperForBigDecimal(qsr)
-			val deetTxt = dumper.getDetailedTxt(12, 13)
-			deetTxt + s"\nDURATION=${dur}"
+			val deetTxt = dumper.getDetailedTxt(12, 13, true, false)
+			deetTxt + s"\nK=${numSketchBins}, N=${numSamples}, parSteamCnt=${parStreamCnt_opt}, measuredDuration=${dur}"
 		})
 		summaryUIO
 	}
 
+	val myHSM = new QuantileSketchWrapperMaker {
+		override protected def getFlg_UseHotWriter = false
+		override protected def getFlg_UseBuffWriter = false
+	}
 	def summarizeFiniteStream[T <: Object : ClassTag](finStrm : UStream[T], numBins : Int, comp : Comparator[T]) :  UIO[QuantileSketchReader[T]] = {
-		val hsm = new QuantileSketchWrapperMaker {
-			override protected def getFlg_UseHotWriter = false
-			override protected def getFlg_UseBuffWriter = true
-		}
+
 		// Here we are *directly* making an *instance* that we treat as immutable (when hotWriter is false!), and hence reusable.
 		// If we wanted to *not* reuse the instance (when hotWriter is true!), then we could wrap this creation in an effect.
-		val emptyQSW = hsm.mkEmptyWriteWrapper[T](numBins, comp)
+		val emptyQSW = myHSM.mkEmptyWriteWrapper[T](numBins, comp)
 		// Here we make a ZSink that uses our emptyQSW as a seed value.
 		// This ZSink is reusable, but here we are only using it once.
 		val accumSink = ZSink.foldLeft[T, QuantileSketchWriter[T]](emptyQSW)((prevQSW, nxtItem) => {
@@ -66,8 +71,32 @@ trait DSketchDemoFeatures {
 	}
 
 
-	def summarizeParStreamInSketch(numSketchBins : Int, numSamples : Int) : UIO[String] = {
-		???
+	def summFiniteStrmPar[T <: Object : ClassTag](finStrm : UStream[T], numBins : Int, comp : Comparator[T], parGroups : Int) : UIO[QuantileSketchReader[T]] = {
+		val emptyQSW_eff: UIO[QuantileSketchWriter[T]] = ZIO.succeed { myHSM.mkEmptyWriteWrapper[T](numBins, comp) }
+
+		val strmWithIdx: UStream[(T, Long)] = finStrm.zipWithIndex
+		val grouped: ZStream.GroupBy[Any, Nothing, Long, (T, Long)] = strmWithIdx.groupByKey(pair => pair._2 % parGroups)
+		val readerUIO = emptyQSW_eff.flatMap(emptyQSW => {
+			val accumSink = ZSink.foldLeft[T, QuantileSketchWriter[T]](emptyQSW)((prevQSW, nxtItem) => {
+				val nxtQSW = prevQSW.addItem(nxtItem)
+				nxtQSW
+			})
+			val mergedResultStrm: UStream[QuantileSketchWriter[T]] = grouped.apply((key, strm) => {
+				val accumZIO: UIO[QuantileSketchWriter[T]] = strm.map(_._1).run(accumSink)
+				val azs: UStream[QuantileSketchWriter[T]] = ZStream.fromZIO(accumZIO)
+				azs
+			})
+			val dbgMRS = mergedResultStrm.debug("parAvgDumNum: partial result")
+			// DANGER: Using the emptyQSW again
+			val accumCombSink = ZSink.foldLeft[QuantileSketchWriter[T], QuantileSketchWriter[T]](emptyQSW)((prevCombo, nxtAcc) => {
+				println(s"In accumComboSink-fold-lambda  prevComboClz=${prevCombo.getClass}, nxtAccClz=${nxtAcc.getClass}")
+				prevCombo.mergeIfCompat(nxtAcc).get
+			})
+			val sketchMakerUIO: UIO[QuantileSketchWriter[T]] = dbgMRS.run(accumCombSink)
+			val sketchReaderUIO: UIO[QuantileSketchReader[T]] = sketchMakerUIO.map(endQSW => endQSW.getSketchReader)
+			sketchReaderUIO
+		})
+		readerUIO
 	}
 
 	def mkEmptyQSW_forBigDec(numBins : Int) : QuantileSketchWriter[BigDecimal] = {
@@ -75,23 +104,6 @@ trait DSketchDemoFeatures {
 		hsm.mkEmptyWriteWrapper[BigDecimal](numBins, myBigDecComp)
 	}
 
-
-	/*
-		val strmWithIdx: UStream[(BigDecimal, Long)] = origStrm.zipWithIndex
-		val finiteStrm = strmWithIdx.take(5000)
-		val numGroups = 8
-		// grouped : ZStream.GroupBy[Any, Nothing, Long, (BigDecimal, Long)]
-		val grouped = finiteStrm.groupByKey(pair => pair._2 % numGroups, 16)
-		val mergedResultStrm: UStream[(Int, BigDecimal)] = grouped.apply((key, strm) => {
-			val accumZIO: UIO[(Int, BigDecimal)] = strm.map(_._1).run(myAccumSink)
-			val azs: UStream[(Int, BigDecimal)] = ZStream.fromZIO(accumZIO)
-			azs
-		})
-		val dbgMRS = mergedResultStrm.debug("parAvgDumNum: partial result")
-		val accumCombSink = ZSink.foldLeft[(Int, BigDecimal), (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtAccumPair) => {
-			(prevStPair._1 + nxtAccumPair._1, prevStPair._2.+(nxtAccumPair._2))
-		})
-	 */
 
 }
 

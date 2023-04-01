@@ -70,7 +70,11 @@ class QSWW_Hot[T <: Object : ClassTag](sktch : ItemsSketch[T]) extends QuantileS
 
 class QSWW_Buffered[T <: Object : ClassTag](prevQSW : QuantileSketchWriter[T], pendingItemsRev : List[T], buffLim : Int) extends QuantileSketchWriter[T] {
 	// Allowing this value to be memoized
-	private lazy val myCondensedQSW = prevQSW.addItems(pendingItemsRev.reverse)
+	private lazy val myCondensedQSW = {
+		if (pendingItemsRev.length > 0)
+			prevQSW.addItems(pendingItemsRev.reverse)
+		else prevQSW
+	}
 
 	private def getCondensedQSW = myCondensedQSW
 
@@ -103,7 +107,10 @@ class QSWW_Buffered[T <: Object : ClassTag](prevQSW : QuantileSketchWriter[T], p
 	override def mergeIfCompat(otherQSW: QuantileSketchWriter[T]): Option[QuantileSketchWriter[T]] = {
 		val ourCondQSW = getCondensedQSW
 		otherQSW match {
-			case otherQSWB : QSWW_Buffered[T] => ourCondQSW.mergeIfCompat(otherQSWB.myCondensedQSW)
+			case otherQSWB : QSWW_Buffered[T] => {
+				val innerMergedQSW_opt = ourCondQSW.mergeIfCompat(otherQSWB.myCondensedQSW)
+				innerMergedQSW_opt.map(inner => new QSWW_Buffered(inner, Nil, buffLim))
+			}
 			case _ => None
 		}
 	}

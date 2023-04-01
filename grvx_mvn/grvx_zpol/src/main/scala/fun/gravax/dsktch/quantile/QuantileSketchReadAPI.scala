@@ -95,8 +95,8 @@ The value at array position j of the returned CDF array is the sum of the return
 
 
 class SketchDumperForBigDecimal(qsr : QuantileSketchReader[BigDecimal]) {
-	def getDetailedTxt(numQuantiles : Int, numProbBins : Int) : String = {
-		val summTxt = qsr.getSummaryTxt(true, true)
+	def getDetailedTxt(numQuantiles : Int, numProbBins : Int, flg_SketchInfo : Boolean, flg_dataDetail : Boolean) : String = {
+		val summTxt = qsr.getSummaryTxt(flg_SketchInfo, flg_dataDetail)
 		val qSeq: qsr.OutSeqT = qsr.getRegularQuantiles(numQuantiles)
 		val quantTxt = qSeq.toList.toString
 		val (minV, maxV) = (qsr.getMinValue, qsr.getMaxValue)

@@ -1,7 +1,7 @@
 package fun.gravax.zpol
 
 import zio.stream.{UStream, ZSink, ZStream}
-import zio.{UIO, ZIO, ZIOAppDefault, Random => ZRandom}
+import zio.{Chunk, UIO, ZIO, ZIOAppDefault, Random => ZRandom}
 
 import java.io.IOException
 import java.math.{MathContext, RoundingMode}
@@ -13,16 +13,31 @@ object RunAveragingDemo extends ZIOAppDefault {
 
 	val myAppLogic: ZIO[Any, IOException, Unit] = {
 		val demoFeatures = new AveragingDemoFeatures {}
+		val sizeToCnt = 1 * 1000 * 1000
+		val parGroups = 1
+		val parBufSz = 16 * 16 * 16
 		for {
 			_	<- ZIO.log("RunAveragingDemo BEGIN")
 			zs  <- demoFeatures.sumPositiveInts(1000)
 			_	<- ZIO.log(s"Sum result: ${zs}")
 			dn <- demoFeatures.dumNum
 			_	<- ZIO.log(s"Dumb rando: ${dn}")
-			adn <- demoFeatures.avgDumNum
+			ddn <- demoFeatures.drainDumNums(sizeToCnt)
+			_	<- ZIO.log(s"Drained dumNums = ${ddn}")
+			ddn2 <- demoFeatures.drainDumNums(sizeToCnt)
+			_	<- ZIO.log(s"Drained AGAIN dumNums = ${ddn2}")
+			cdn <- demoFeatures.countDumNums(sizeToCnt)
+			_	<- ZIO.log(s"Counted dumNums = ${cdn}")
+			pcdn <- demoFeatures.parCountDumNums(sizeToCnt, parGroups, parBufSz)
+			_	<- ZIO.log(s"parCounted dumNums = ${pcdn}")
+			adn <- demoFeatures.avgDumNums(sizeToCnt)
 			_	<- ZIO.log(s"Average dumNum = ${adn}")
-			padn <- demoFeatures.parAvgDumNum
+			tdn <- demoFeatures.thickerAvg(sizeToCnt)
+			_	<- ZIO.log(s"Thicker-Average dumNum = ${tdn}")
+			padn <- demoFeatures.parAvgDumNum(sizeToCnt, parGroups, parBufSz )
 			_	<- ZIO.log(s"Par-Average dumNum = ${padn}")
+			pauc <- demoFeatures.parAvgUsingChunks(sizeToCnt, 1024, 8, 16)
+			_	<- ZIO.log(s"Par-Average-Using-Chunks dumNum = ${pauc}")
 		} yield ()
 	}
 
@@ -33,7 +48,7 @@ trait AveragingDemoFeatures {
 	def sumPositiveInts(posInt : Int) : UIO[Int] = {
 		val rangeToSum = 1 to posInt
 		val stream: ZStream[Any, Nothing, Int] = ZStream.fromIterable(rangeToSum)
-		val sink: ZSink[Any, Nothing, Int, Nothing, Int] = ZSink.sum[Int]
+		val sink: ZSink[Any, Nothing, Int, Nothing, 	Int] = ZSink.sum[Int]
 		val sum: ZIO[Any, Nothing, Int] = stream.run(sink)
 		val sumUIO : UIO[Int] = sum
 		sumUIO
@@ -55,7 +70,7 @@ trait AveragingDemoFeatures {
 		gaussianBD(ZRandom.RandomLive, mathCtx, mean, dev)
 	}
 	val myZeroAccumPair : (Int, BigDecimal) = (0, BigDecimal("0.0"))
-	lazy val myAccumSink: ZSink[Any, Nothing, BigDecimal, Nothing, (Int, BigDecimal)] = {
+	val myAccumSink: ZSink[Any, Nothing, BigDecimal, Nothing, (Int, BigDecimal)] = {
 
 		// foldLeft[In, S](z: => S)(f: (S, In) => S)
 		val accumSink = ZSink.foldLeft[BigDecimal, (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtBD) => {
@@ -63,39 +78,159 @@ trait AveragingDemoFeatures {
 		})
 		accumSink
 	}
-	lazy val myAvgSink = myAccumSink.map(pair => {pair._2./(pair._1)})
+	val myAvgSink = myAccumSink.map(pair => {pair._2./(pair._1)})
 
-	def avgDumNum : UIO[BigDecimal] = {
-		val strm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
-		val shortStrm = strm.take(500)
-		val shortAvg = shortStrm.run(myAvgSink)
-		shortAvg
+	val myAccumCombSink = ZSink.foldLeft[(Int, BigDecimal), (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtAccumPair) => {
+		(prevStPair._1 + nxtAccumPair._1, prevStPair._2.+(nxtAccumPair._2))
+	})
+
+	val myCombAvgSink = myAccumCombSink.map(pair => {pair._2./(pair._1)})
+
+	// Notice the difference in type signature in the 4th position.  Here L/Leftover = BigDecimal, while above is Nothing.
+	val mySlowerAccumSink: ZSink[Any, Nothing, BigDecimal, BigDecimal, (Int, BigDecimal)] = {
+		val sleepDur = zio.Duration.fromNanos(1)
+		ZSink.foldLeftZIO[Any, Nothing, BigDecimal, (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtBD) => {
+			// ZIO.sleep(sleepDur) *>
+			ZIO.succeed(prevStPair._1 + 1, prevStPair._2.+(nxtBD))
+		})
 	}
-	def parAvgDumNum : UIO[BigDecimal] = {
+
+	val mySlowerAvgSink = mySlowerAccumSink.map(pair => {pair._2./(pair._1)})
+
+	def drainDumNums(cnt : Int) : UIO[Unit] = {
+		val infiniteStrm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
+		val finiteStrm = infiniteStrm.take(cnt)
+		val drainyUIO: UIO[Unit] = finiteStrm.runDrain
+		val timedCntUIO: UIO[(zio.Duration, Unit)] = drainyUIO.timed
+		val loggedAvgUIO = timedCntUIO.flatMap(pair =>  {
+			val logUIO = ZIO.log(s"drainDumNums(${cnt}) result: ${pair}")
+			logUIO *> ZIO.succeed(pair._2)
+		})
+		loggedAvgUIO
+	}
+
+	def countDumNums(cnt : Int) : UIO[Long] = {
+		val infiniteStrm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
+		val finiteStrm = infiniteStrm.take(cnt)
+		val countUIO: UIO[Long] = finiteStrm.runCount
+		val timedCntUIO: UIO[(zio.Duration, Long)] = countUIO.timed
+		val loggedAvgUIO = timedCntUIO.flatMap(pair =>  {
+			val logUIO = ZIO.log(s"countDumNums(${cnt}) result: ${pair}")
+			logUIO *> ZIO.succeed(pair._2)
+		})
+		loggedAvgUIO
+	}
+	def parCountDumNums(cnt : Int, numGroups : Int, bufSz : Int) : UIO[Long] = {
+		val infiniteStrm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
+		val strmWithIdx: UStream[(BigDecimal, Long)] = infiniteStrm.zipWithIndex
+		val finiteStrm = strmWithIdx.take(cnt)
+		val grouped = finiteStrm.groupByKey(pair => pair._2 % numGroups, bufSz)
+		val mergedResultStrm: UStream[Long] = grouped.apply((key, strm) => ZStream.fromZIO(strm.runCount))
+		val mergedCountUIO: UIO[Long] = mergedResultStrm.runSum
+		val timedCntUIO: UIO[(zio.Duration, Long)] = mergedCountUIO.timed
+		val loggedAvgUIO = timedCntUIO.flatMap(pair =>  {
+			val logUIO = ZIO.log(s"parCountDumNums(${cnt}, ${numGroups}, ${bufSz}) result: ${pair}")
+			logUIO *> ZIO.succeed(pair._2)
+		})
+		loggedAvgUIO
+	}
+	def avgDumNums(cnt : Int) : UIO[BigDecimal] = {
+		val infiniteStrm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
+		val finiteStrm = infiniteStrm.take(cnt)
+		val avgUIO: UIO[BigDecimal] = finiteStrm.run(myAvgSink)
+		val timedAvgUIO: UIO[(zio.Duration, BigDecimal)] = avgUIO.timed
+		val loggedAvgUIO = timedAvgUIO.flatMap(pair =>  {
+			val logUIO = ZIO.log(s"avgDumNums(${cnt}) result: ${pair}")
+			logUIO *> ZIO.succeed(pair._2)
+		})
+		loggedAvgUIO
+	}
+	def thickerAvg(cnt : Int) : UIO[BigDecimal] = {
+		val infiniteStrm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
+		val strmWithIdx: UStream[(BigDecimal, Long)] = infiniteStrm.zipWithIndex
+		val finiteStrm = strmWithIdx.take(cnt).map(_._1)
+		val avgUIO: UIO[BigDecimal] = finiteStrm.run(myAvgSink)
+		val timedAvgUIO: UIO[(zio.Duration, BigDecimal)] = avgUIO.timed
+		val loggedAvgUIO = timedAvgUIO.flatMap(pair =>  {
+			val logUIO = ZIO.log(s"thickerAvg(${cnt}) result: ${pair}")
+			logUIO *> ZIO.succeed(pair._2)
+		})
+		loggedAvgUIO
+	}
+	def parAvgDumNum(cnt : Int, numGroups : Int, bufSz : Int) : UIO[BigDecimal] = {
 		val origStrm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
 		// Tag each record with a sequence number that we can use later in .groupBy.
 		val strmWithIdx: UStream[(BigDecimal, Long)] = origStrm.zipWithIndex
-		val finiteStrm = strmWithIdx.take(5000)
-		val numGroups = 8
+		val finiteStrm = strmWithIdx.take(cnt)
 		// grouped : ZStream.GroupBy[Any, Nothing, Long, (BigDecimal, Long)]
-		val grouped = finiteStrm.groupByKey(pair => pair._2 % numGroups, 16)
+		val grouped = finiteStrm.groupByKey(pair => pair._2 % numGroups, bufSz)
 		val mergedResultStrm: UStream[(Int, BigDecimal)] = grouped.apply((key, strm) => {
 			val accumZIO: UIO[(Int, BigDecimal)] = strm.map(_._1).run(myAccumSink)
-			val azs: UStream[(Int, BigDecimal)] = ZStream.fromZIO(accumZIO)
+			val timedAccumUIO = accumZIO.timed
+			val loggedAccumUIO: UIO[(Int, BigDecimal)] = timedAccumUIO.flatMap(pair =>  {
+				val logUIO = ZIO.log(s"parAvg.local key=${key} result: ${pair}")
+				logUIO *> ZIO.succeed(pair._2)
+			})
+			val azs: UStream[(Int, BigDecimal)] = ZStream.fromZIO(loggedAccumUIO)
 			azs
 		})
 		val dbgMRS = mergedResultStrm.debug("parAvgDumNum: partial result")
-		val accumCombSink = ZSink.foldLeft[(Int, BigDecimal), (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtAccumPair) => {
-			(prevStPair._1 + nxtAccumPair._1, prevStPair._2.+(nxtAccumPair._2))
+		val combAvgUIO: UIO[BigDecimal] = dbgMRS.run(myCombAvgSink)
+		val timedAvgUIO: UIO[(zio.Duration, BigDecimal)] = combAvgUIO.timed
+		val loggedAvgUIO = timedAvgUIO.flatMap(pair =>  {
+			val logUIO = ZIO.log(s"parAvgDumNum(${cnt}, ${numGroups}, ${bufSz}) result: ${pair}")
+			logUIO *> ZIO.succeed(pair._2)
 		})
-		val combAvgSink = accumCombSink.map(pair => {pair._2./(pair._1)})
-		val combAvgUIO: UIO[BigDecimal] = dbgMRS.run(combAvgSink)
-		combAvgUIO
+		loggedAvgUIO
+	}
+	def parAvgUsingChunks(itemCnt : Int, chnkSize : Int, numGroups : Int, bufSz : Int) : UIO[BigDecimal] = {
+		val origStrm: UStream[BigDecimal] = ZStream.repeatZIO(dumNum)
+		val finiteStrm = origStrm.take(itemCnt)
+		val chnkStrm: UStream[Chunk[BigDecimal]] = finiteStrm.grouped(chnkSize)
+		val chnkWithIdx: UStream[(Chunk[BigDecimal], Long)] = chnkStrm.zipWithIndex
+		val chnkGrps = chnkWithIdx.groupByKey(pair => pair._2 % numGroups, bufSz)
+		val mergedResultStrm = chnkGrps.apply((key, strm) => {
+			val localChnks: UStream[Chunk[BigDecimal]] = strm.map(_._1)
+			val localNums: UStream[BigDecimal] = localChnks.flattenChunks
+			val accumZIO: UIO[(Int, BigDecimal)] = localNums.run(myAccumSink)
+			val timedAccumUIO = accumZIO.timed
+			val loggedAccumUIO: UIO[(Int, BigDecimal)] = timedAccumUIO.flatMap(pair =>  {
+				val logUIO = ZIO.log(s"parAvgUsingChunks.local accum key=${key}  result: ${pair}")
+				logUIO *> ZIO.succeed(pair._2)
+			})
+			val azs: UStream[(Int, BigDecimal)] = ZStream.fromZIO(loggedAccumUIO)
+			azs
+		})
+		val dbgMRS = mergedResultStrm.debug("parAvgUsingChunks: partial result")
+		val combAvgUIO: UIO[BigDecimal] = dbgMRS.run(myCombAvgSink)
+		val timedAvgUIO: UIO[(zio.Duration, BigDecimal)] = combAvgUIO.timed
+		val loggedAvgUIO = timedAvgUIO.flatMap(pair =>  {
+			val logUIO = ZIO.log(s"parAvgUsingChunks(itemCnt=${itemCnt}, chnkSize=${chnkSize}, ${numGroups}, ${bufSz}) result: ${pair}")
+			logUIO *> ZIO.succeed(pair._2)
+		})
+		loggedAvgUIO
 	}
 
-
-
 }
+/*
+Most expensive step is RNG.
+Next is the distribute-to-queues stuff going on inside of .groupByKey.
+
+def rechunk(n: => Int)(implicit trace: Trace): ZStream[R, E, A]
+Re-chunks the elements of the stream into chunks of n elements each.
+
+def grouped(chunkSize: => Int)(implicit trace: Trace): ZStream[R, E, Chunk[A]]
+Partitions the stream with specified chunkSize
+
+def groupAdjacentBy[K](f: (A) => K)(implicit trace: Trace): ZStream[R, E, (K, NonEmptyChunk[A])]
+Creates a pipeline that groups on adjacent keys, calculated by function f.
+
+def transduce[R1 <: R, E1 >: E, A1 >: A, Z](sink: => ZSink[R1, E1, A1, A1, Z])(implicit trace: Trace): ZStream[R1, E1, Z]
+Applies the transducer to the stream and emits its outputs.
+
+
+ */
+
 /*
 https://zio.dev/reference/stream/
 type Stream[+E, +A] = ZStream[Any, E, A]
@@ -119,5 +254,7 @@ So UIO is equal to a ZIO that doesn't need any requirement (because it accepts A
 It succeeds with A.
 
 ZIO values of type UIO[A] are considered infallible. Values of this type may produce an A, but will never fail.
+
+
 
  */
