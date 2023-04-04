@@ -1,6 +1,6 @@
 package fun.gravax.zpol
 
-import zio.stream.{UStream, ZSink, ZStream}
+import zio.stream.{Sink, UStream, ZSink, ZStream}
 import zio.{Chunk, UIO, ZIO, ZIOAppDefault, Random => ZRandom}
 
 import java.io.IOException
@@ -14,9 +14,10 @@ object RunAveragingDemo extends ZIOAppDefault {
 	val myAppLogic: ZIO[Any, IOException, Unit] = {
 		val demoFeatures = new AveragingDemoFeatures {}
 		val sizeToCnt = 1 * 1000 * 1000
-		val parGroups = 1
+		val parGroups = 8
 		val parBufSz = 16 * 16 * 16
 		for {
+			_	<- zio.Console.printLine("zio.Console.printLine says Heya")
 			_	<- ZIO.log("RunAveragingDemo BEGIN")
 			zs  <- demoFeatures.sumPositiveInts(1000)
 			_	<- ZIO.log(s"Sum result: ${zs}")
@@ -36,7 +37,7 @@ object RunAveragingDemo extends ZIOAppDefault {
 			_	<- ZIO.log(s"Thicker-Average dumNum = ${tdn}")
 			padn <- demoFeatures.parAvgDumNum(sizeToCnt, parGroups, parBufSz )
 			_	<- ZIO.log(s"Par-Average dumNum = ${padn}")
-			pauc <- demoFeatures.parAvgUsingChunks(sizeToCnt, 1024, 8, 16)
+			pauc <- demoFeatures.parAvgUsingChunks(sizeToCnt, 1024, parGroups, 16)
 			_	<- ZIO.log(s"Par-Average-Using-Chunks dumNum = ${pauc}")
 		} yield ()
 	}
@@ -54,7 +55,7 @@ trait AveragingDemoFeatures {
 		sumUIO
 	}
 
-	def gaussianBD(zrnd : ZRandom, mathCtx : MathContext,  mean : BigDecimal, stdDev : BigDecimal): UIO[BigDecimal] = {
+	def gaussianBD(zrnd : ZRandom, mathCtx : MathContext)(mean : BigDecimal, stdDev : BigDecimal): UIO[BigDecimal] = {
 		val stdNumEff: UIO[Double] = zrnd.nextGaussian
 		stdNumEff.map(num => {
 			// https://blogs.oracle.com/javamagazine/post/four-common-pitfalls-of-the-bigdecimal-class-and-how-to-avoid-them
@@ -67,18 +68,14 @@ trait AveragingDemoFeatures {
 		val mean = BigDecimal("-5.0")
 		val dev = BigDecimal("4.5")
 		val mathCtx = new MathContext(8, RoundingMode.HALF_UP)
-		gaussianBD(ZRandom.RandomLive, mathCtx, mean, dev)
+		gaussianBD(ZRandom.RandomLive, mathCtx)(mean, dev)
 	}
+	type USink[A, +L, +B]= ZSink[Any, Nothing, A, L, B]
 	val myZeroAccumPair : (Int, BigDecimal) = (0, BigDecimal("0.0"))
-	val myAccumSink: ZSink[Any, Nothing, BigDecimal, Nothing, (Int, BigDecimal)] = {
-
-		// foldLeft[In, S](z: => S)(f: (S, In) => S)
-		val accumSink = ZSink.foldLeft[BigDecimal, (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtBD) => {
-			(prevStPair._1 + 1, prevStPair._2.+(nxtBD))
-		})
-		accumSink
-	}
-	val myAvgSink = myAccumSink.map(pair => {pair._2./(pair._1)})
+	val myAccumSink: USink[BigDecimal, Nothing, (Int, BigDecimal)] = // foldLeft[In, S](z: => S)(f: (S, In) => S)
+		ZSink.foldLeft[BigDecimal, (Int, BigDecimal)](myZeroAccumPair)((prevAccumPair, nxtBD) =>
+			(prevAccumPair._1 + 1, prevAccumPair._2.+(nxtBD)))
+	val myAvgSink: USink[BigDecimal, Nothing, BigDecimal] = myAccumSink.map(pair => {pair._2./(pair._1)})
 
 	val myAccumCombSink = ZSink.foldLeft[(Int, BigDecimal), (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtAccumPair) => {
 		(prevStPair._1 + nxtAccumPair._1, prevStPair._2.+(nxtAccumPair._2))
@@ -90,7 +87,8 @@ trait AveragingDemoFeatures {
 	val mySlowerAccumSink: ZSink[Any, Nothing, BigDecimal, BigDecimal, (Int, BigDecimal)] = {
 		val sleepDur = zio.Duration.fromNanos(1)
 		ZSink.foldLeftZIO[Any, Nothing, BigDecimal, (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtBD) => {
-			// ZIO.sleep(sleepDur) *>
+			// Doing any nonzero amount of sleep seems to take > 15 microsec
+			ZIO.sleep(sleepDur) *>
 			ZIO.succeed(prevStPair._1 + 1, prevStPair._2.+(nxtBD))
 		})
 	}
