@@ -8,6 +8,8 @@ import scala.collection.immutable.{Seq => ImmSeq}
 
 private trait DependentListStuff
 
+// TODO:  Contrast with HList (Shapeless for Scala2) and Scala 3 constructs
+
 // ListXyzN could equally well be called VectorXyzN or VecXyzN or SeqXyzN.  But we choose list for alignment
 // (in this spot) with traditional computer science.  We wish to save word "Vector" for spatial meanings.
 // Seq is also a good word but ImmSeq is our inner implementation of List, so we like to isolate that name.

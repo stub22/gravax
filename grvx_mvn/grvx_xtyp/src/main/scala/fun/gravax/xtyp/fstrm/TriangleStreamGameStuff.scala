@@ -3,9 +3,12 @@ package fun.gravax.xtyp.fstrm
 import cats.effect.kernel.Sync
 import cats.FlatMap
 import cats.effect.{ExitCode, IO, IOApp}
+import fs2.timeseries.TimeStamped
 import fun.gravax.xtyp.mathy.tridesc.{MakesTSX, TriShape, TriShapeXactish}
 import fs2.{Pipe, Pure, Stream}
+import fun.gravax.xtyp.histo.NumRangeHisto
 
+import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 
@@ -21,7 +24,12 @@ object RunTriStreamGame extends IOApp {
 		val triJob = ourMGF.mkJobThatPrintsFewTris
 		val manyJob = ourMGF.mkJobThatPrintsManyTris(200)
 		val parJob = ourMGF.mkJobForParallelTris
-		helloJob.productR(triJob).productR(manyJob).productR(parJob).as(ExitCode.Success)
+		val oneHistJob = ourMGF.mkJobForWinnerHisto
+		val multiHistJob = ourMGF.mkParJobForWinnerHistos(18)
+		val totalHistJob = ourMGF.mkParJobForTotalHistos(400,
+			288)
+		val histJobs = oneHistJob.productR(multiHistJob).productR(totalHistJob)
+		helloJob.productR(triJob).productR(manyJob).productR(parJob).productR(histJobs).as(ExitCode.Success)
 	}
 	// (IO(println("started")) >> IO.never).onCancel(IO(println("canceled")))
 
@@ -72,6 +80,7 @@ trait MakesGameFeatures {
 
 	def dbgNow(dbgHead: String, dbgBody: String): Unit = println(dbgHead, dbgBody)
 
+	// CONSIDER:  insert an fs2.Topic to allow different consumers to process the Either results.
 	def mkJobProducingStreamOfTriEithers(maxPerim : Int): IO[Stream[IO, OurTriGenRslt]] = {
 		val dbgHead = "mkJobProducingStreamOfTriEithers"
 
@@ -85,7 +94,13 @@ trait MakesGameFeatures {
 		// FIXME:  From a readability perspective, the wrapping and unwrapping overwhelms the business code.
 		// If we can put the business data transforms into methods of a trait, then invoke them all in
 		// one long functional chain, that may be more readable.
-		val sidesStreamJob: IO[Stream[IO, (Int, Int, Int)]] = makeSidesTupleStreamJob(pairStrmJob)
+		// A scala-idiomatic approach is to use a for-comprehension.
+		// A categorical approach is to use Kleislis to component-ize our xforms.
+		val flg_useParSidegen = false
+		val sidesStreamJob: IO[Stream[IO, (Int, Int, Int)]] = if (flg_useParSidegen)
+			makeParSidesTupleStreamJob(pairStrmJob)
+		else
+			makeSidesTupleStreamJob(pairStrmJob)
 
 		// Hmm we are making these debug jobs now, but we won't use them until a bunch of other useful work
 		// is done (which we might prefer to split into a different method).  Also we note that this job
@@ -106,13 +121,18 @@ trait MakesGameFeatures {
 			val listDumpJob = listJob.flatMap(lst => IO.println(s"Side-Stream-list: ${lst}"))
 			listDumpJob
 		})
-
+		val flg_useParTribuild = false
 		val triEithStrmJob: IO[Stream[IO, OurTriGenRslt]] = sidesStreamJob.map(stupStrm => {
-			stupStrm.evalMap(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
+			if (flg_useParTribuild)
+				stupStrm.parEvalMap(4)(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
+			else
+				stupStrm.evalMap(sidesTup => ourTsMkr.mkXactTriJob(sidesTup))
+
 		})
 		triEithStrmJob
-		// TODO:  Want to insert an fs2.Topic here to allow different consumers to process the Either results.
+
 	}
+
 	def mkJobThatPrintsManyTris(maxPerim : Int): IO[Unit] = {
 		val triEithStrmJob = mkJobProducingStreamOfTriEithers(maxPerim)
 		val dbgHead = "mkJobThatPrintsManyTris"
@@ -159,19 +179,125 @@ trait MakesGameFeatures {
 		// suitable for recursion.
 	}
 	val myPipeOps = new TriStrmPipeOps{}
+	val myUtilStrms = new SomeUtilityStreams {}
 	def mkJobForParallelTris : IO[Unit] = {
-		val triEithStrmJob = mkJobProducingStreamOfTriEithers(200)
-		val dbgHead = "processTrisInParallel"
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(500)
+		val dbgHead = "jobForParallelTris"
 		val x: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			/* broadcastThrough:
+			**Error** Any error raised from the input stream, or from any pipe, will stop the pulling from this stream and from any pipe, and the error will be raised by the resulting stream.
+			**Output**: the result stream collects and emits the outputs emitted from each pipe, mixed in an unknown way, with these guarantees:
+			* 1. each output chunk was emitted by one pipe exactly once.
+			* 2. chunks from each pipe come out of the resulting stream in the same order as they came out of the pipe, and without skipping any chunk.
+			 */
 			val countedTwice: Stream[IO, Int] = strm.broadcastThrough(myPipeOps.countTriFailures, myPipeOps.countTriFailures)
-			val dumpJob = countedTwice.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got parallel err-counts: ${lst}"))
+			val doubleCountJob = countedTwice.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got parallel err-counts: ${lst}"))
+			val timedDoubleCount = doubleCountJob.timed.map(pair => printIoDur("DOUBLE-COUNT")(pair))
 			val goodPipe = myPipeOps.onlyWins _ andThen myPipeOps.accumStats // Stream[IO, Either[myPipeOps.OurTriErr, TriShapeXactish]] => Stream[IO, TriSetStat]
 			val wideOut: Stream[IO, Any] = strm.broadcastThrough(myPipeOps.countTriFailures, goodPipe)
 			val wideJob: IO[Unit] = wideOut.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got parallel wide-out: ${lst}"))
+			val wideJobTimed: IO[(FiniteDuration, Unit)] = wideJob.timed
 
-			dumpJob.both(wideJob).void
+			val wideJobTimeDumped = wideJobTimed.map(pair => printIoDur("WIDE")(pair))
+			val winTimePipe = myPipeOps.onlyWins _ andThen myPipeOps.stampyShapes
+			val stmpd: Stream[IO, TimeStamped[TriShape]] = strm.through(winTimePipe)
+			val stmpdWithIdx: Stream[IO, (TimeStamped[TriShape], Long)] = stmpd.zipWithIndex
+			val subset = stmpdWithIdx.filter(_._2 % 100 == 0)
+			val timed: Stream[IO, FiniteDuration] = myUtilStrms.timedStream("STAMPED+INDEXED+SUBBED")
+			val timedSub: Stream[IO, (TimeStamped[TriShape], Long)] = timed.flatMap(dur => subset)
+			val stmpJob = timedSub.compile.toList.flatMap(lst => IO.println(s"${dbgHead} got stamped+indexed sample out: ${lst}"))
+			val outerWRD = stmpJob.timed.map(pair => printIoDur("STAMPY-OUTER")(pair))
+			val comboJob = timedDoubleCount.both(wideJobTimeDumped).both(outerWRD).timed.map(pair => printIoDur("COMBO")(pair)) //  pair => {println(s"Combo job got duration via IO.timed: ${pair._1}")})
+			comboJob
 		})
 		x
+	}
+	def mkJobForWinnerHisto : IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(300)
+		val dbgHead = "jobForWinnerHisto"
+		val hsm = new TriHistoStreamMaker {}
+
+		val hpj: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			val oneHistoRslt: Stream[IO, NumRangeHisto] = strm.through(hsm.foldToOneHistoResult) // , hsm.scanToPartialHistoResults)
+			val timed =  myUtilStrms.timedStream("FOLD-TO-HISTO")
+			val oneHistoGrabJob: IO[List[NumRangeHisto]] = timed.flatMap(dur => oneHistoRslt).compile.toList
+			val oneHistoDumpJob = oneHistoGrabJob.flatMap(lst => IO.println(s"${dbgHead} got histo-list: ${lst}"))
+			oneHistoDumpJob
+		})
+		hpj
+	}
+	def mkParJobForWinnerHistos(numStrms : Int) : IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(400)
+		val dbgHead = "parJobForWinnerHistos"
+		val hsm = new TriHistoStreamMaker {}
+
+		val hpj: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			// Here we use the strm (program/data-generator) a total of numStrms times.
+			val multipleFoldingStreams: Stream[Pure, Stream[IO, NumRangeHisto]] = Stream.range(0, numStrms).map(n => {
+				val oneHistoRslt: Stream[IO, NumRangeHisto] = strm.through(hsm.foldToOneHistoResult)
+				val timed = myUtilStrms.timedStream(s"PAR-FOLD-TO-HISTO_${n}")
+				timed.flatMap(dur => oneHistoRslt)
+			})
+			// Run each of the numStrms gen+filter+fold jobs in parallel, as compute resources become available.
+			// Each of the numStrms histogram results will be a single result in the joined stream, in no particular order.
+			val joined: Stream[IO, NumRangeHisto] = multipleFoldingStreams.parJoinUnbounded
+			// We can either output all the histos, or condense them into one.
+			// Either way, the formal return type is Stream[IO, NumRangeHisto]
+			val flg_condenseHistos = true
+			val streamToRun : Stream[IO, NumRangeHisto] = if (flg_condenseHistos) {
+				val jd = joined.debugChunks()
+				jd.reduce((histo1, histo2) => histo1.combineAssumingBinsMatch(histo2))
+			} else joined
+
+			// The output list will either have one condensed histo, or numStrms separate histos.
+			val multiHistoGrabJob: IO[List[NumRangeHisto]] = streamToRun.compile.toList
+			val multiHistoDumpJob = multiHistoGrabJob.flatMap(lst => {
+				val totalSamples = lst.foldLeft(0)((prevSum, nxtHisto) => {
+					prevSum + nxtHisto.totalSampleCount
+				})
+				IO.println(s"${dbgHead} got totalSampleCount=${totalSamples} for histo-list: " + lst.mkString("\n"))
+			})
+			multiHistoDumpJob
+		})
+		hpj
+	}
+	// TODO:  Make a version of this that is able to run parallel folds over pieces of a concrete input data stream
+	//  (as if coming from a file).
+	//
+	def mkParJobForTotalHistos(maxPerim : Int, numStrms : Int) : IO[Unit] = {
+		val triEithStrmJob = mkJobProducingStreamOfTriEithers(maxPerim)
+		val dbgHead = "parJobForTotalHistos"
+		val hsm = new TriHistoStreamMaker {}
+
+		val thpj: IO[Unit] = triEithStrmJob.flatMap((strm: Stream[IO, OurTriGenRslt]) => {
+			// Here we use the strm (program/data-generator) a total of numStrms times.
+			// Each of those times will produce *DIFFERENT* data.
+			val multipleFoldingStreams: Stream[Pure, Stream[IO, HistoForFailureOrNumRange]] = Stream.range(0, numStrms).map(n => {
+				val oneHistoRslt: Stream[IO, HistoForFailureOrNumRange] = strm.through(hsm.foldToOneTotalResult)
+				val timed = myUtilStrms.timedStream(s"PAR-TOTAL-HISTO_${n}")
+				timed.flatMap(dur => oneHistoRslt)
+			})
+			// .parJoinUnbounded is the magical step!
+			val joined: Stream[IO, HistoForFailureOrNumRange] = multipleFoldingStreams.parJoinUnbounded
+			val flg_condenseHistos = true
+			val streamToRun: Stream[IO, HistoForFailureOrNumRange] = if (flg_condenseHistos) {
+				val jd = joined.debugChunks()
+				jd.reduce((histo1, histo2) => histo1.combine(histo2))
+			} else joined
+			// The output list will either have one condensed histo, or numStrms separate histos.
+			val multiHistoGrabJob: IO[List[HistoForFailureOrNumRange]] = streamToRun.compile.toList
+			val multiHistoDumpJob = multiHistoGrabJob.flatMap(lst => {
+				val totalSamples = lst.foldLeft(0)((prevSum, nxtHisto) => {
+					prevSum + nxtHisto.totalSampleCount
+				})
+				IO.println(s"${dbgHead} got totalSampleCount=${totalSamples} for histo-list: " + lst.mkString("\n"))
+			})
+			multiHistoDumpJob
+		})
+		thpj
+	}
+	def printIoDur(heading: String)(ioTimedOutPair : (FiniteDuration, _)) : Unit = {
+		println(s"${heading} got duration via IO.timed: ${ioTimedOutPair._1}")
 	}
 
 	def makeSidesTupleStreamJob(pairStreamJob: IO[Stream[Pure, (Int, Int)]]): IO[Stream[IO, (Int, Int, Int)]] = {
@@ -181,6 +307,22 @@ trait MakesGameFeatures {
 		val sidesTupleStreamJob: IO[Stream[IO, (Int, Int, Int)]] = bothPrecursors.map(precPair => {
 			val (pairStrm, rng) = precPair
 			ourTsMkr.makeTriSidesStreamUsingEvalMap(rng, pairStrm.covary[IO])	// uses Stream.PureOps.covary
+		})
+		sidesTupleStreamJob
+	}
+	def makeParSidesTupleStreamJob(pairStreamJob: IO[Stream[Pure, (Int, Int)]]): IO[Stream[IO, (Int, Int, Int)]] = {
+		import cats.effect.std.{Random => CatsRandom}
+		val rngMakerJob: IO[CatsRandom[IO]] = CatsRandom.scalaUtilRandom[IO]
+		val bothPrecursors: IO[(Stream[Pure, (Int, Int)], CatsRandom[IO])] = pairStreamJob.both(rngMakerJob)
+		val sidesTupleStreamJob: IO[Stream[IO, (Int, Int, Int)]] = bothPrecursors.map(precPair => {
+			val (pairStrm, rng) = precPair
+
+			// ourTsMkr.makeTriSidesStreamUsingEvalMap(rng, pairStrm.covary[IO])	// uses Stream.PureOps.covary
+			// Using any of the parEvalMap variants seems to impose an overall performance penalty.
+			// Presumably this indicates that the job is "too small" to benefit.
+			pairStrm.covary[IO].parEvalMapUnbounded(paramPair => {
+				ourTsMkr.makeTriSidesJob(rng, paramPair._1, paramPair._2)
+			})
 		})
 		sidesTupleStreamJob
 	}
