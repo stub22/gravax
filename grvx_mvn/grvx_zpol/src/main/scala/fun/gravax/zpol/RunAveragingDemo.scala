@@ -193,7 +193,7 @@ trait AveragingDemoFeatures {
 			val accumZIO: UIO[(Int, BigDecimal)] = localNums.run(myAccumSink)
 			val timedAccumUIO = accumZIO.timed
 			val loggedAccumUIO: UIO[(Int, BigDecimal)] = timedAccumUIO.flatMap(pair =>  {
-				val logUIO = ZIO.log(s"parAvgUsingChunks.local accum key=${key}  result: ${pair}")
+				val logUIO = ZIO.log(s"parAvgUsingChunks.local parAccumRechunked key=${key}  result: ${pair}")
 				logUIO *> ZIO.succeed(pair._2)
 			})
 			val azs: UStream[(Int, BigDecimal)] = ZStream.fromZIO(loggedAccumUIO)

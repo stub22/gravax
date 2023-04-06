@@ -81,9 +81,11 @@ trait AvgFun {
 // Parallel impl is not invoked here in Scastie, but we can see it compile.
 trait ParAvgFun extends AvgFun {
 	// Separate sink chain is used with parallel chunk-groups impl below (not run in Scastie).
-	val myAccumCombSink = ZSink.foldLeft[(Int, BigDecimal), (Int, BigDecimal)](myZeroAccumPair)((prevStPair, nxtAccumPair) => {
-		(prevStPair._1 + nxtAccumPair._1, prevStPair._2.+(nxtAccumPair._2))
+	// This sink combines pairs holding (count : Int, sum : BigDecimal), by summing each field separately.
+	val myAccumCombSink = ZSink.foldLeft[(Int, BigDecimal), (Int, BigDecimal)](myZeroAccumPair)((prevAccumPair, nxtAccumPair) => {
+		(prevAccumPair._1 + nxtAccumPair._1, prevAccumPair._2.+(nxtAccumPair._2))
 	})
+	// Final-stage sink produces the output average:
 	val myCombAvgSink = myAccumCombSink.map(pair => {pair._2./(pair._1)})
 
 
@@ -96,10 +98,11 @@ trait ParAvgFun extends AvgFun {
 		val mergedResultStrm: UStream[(Int, BigDecimal)] = chnkGrps.apply((key, strm) => {
 			val localChnks: UStream[Chunk[BigDecimal]] = strm.map(_._1)
 			val localNums: UStream[BigDecimal] = localChnks.flattenChunks
+			// Count-and-sum the input numbers.
 			val accumZIO: UIO[(Int, BigDecimal)] = localNums.run(myAccumSink)
 			val timedAccumUIO = accumZIO.timed
 			val loggedAccumUIO: UIO[(Int, BigDecimal)] = timedAccumUIO.flatMap(pair =>  {
-				val logUIO = ZIO.log(s"parAvgUsingChunks.local accum key=${key}  result: ${pair}")
+				val logUIO = ZIO.log(s"parAvgUsingChunks.local parAccumRechunked key=${key}  result: ${pair}")
 				logUIO *> ZIO.succeed(pair._2)
 			})
 			val azs: UStream[(Int, BigDecimal)] = ZStream.fromZIO(loggedAccumUIO)
