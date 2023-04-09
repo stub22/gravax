@@ -27,6 +27,9 @@
         <awssdk.version>2.17.99</awssdk.version>
 
         <arrow.version>6.0.1</arrow.version>
+
+        <jena.version>3.8.0</jena.version>
+
         <!-- Old versions displaced on 2021-12-26
         We are upgrading to scala 2.13 so we can use the updated collections library.
         https://docs.scala-lang.org/overviews/core/collections-migration-213.html
