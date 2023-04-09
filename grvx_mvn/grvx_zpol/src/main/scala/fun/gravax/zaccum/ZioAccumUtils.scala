@@ -20,6 +20,8 @@ trait PureStreamAccumulator {
 	type RsltSink = ZSink[Any, Nothing, PartialResult, Nothing, OutResult]
 	val mySink : RecSink // ZSink[Any, Nothing, InRec, Nothing, PartialResult]
 	// Passing a sink as argument reverses the variance arrows of the type-args to ZSink.
+
+	// TODO: Make a variant that uses whatever existing chunks are in the stream, instead of rechunking to chnkSz.
 	def parallelPartialAccumRechunked(recSinkA : RecSink)(chnkSz : Int, numParFlows : Int, bufSz : Int)(inStrm : UStream[InRec]) : UStream[PartialResult] = {
 		val chnkStrm: UStream[Chunk[InRec]] = inStrm.grouped(chnkSz)
 		val chnkWithIdx: UStream[(Chunk[InRec], Long)] = chnkStrm.zipWithIndex
@@ -61,11 +63,60 @@ trait PureStreamAccumulator {
 		val outRsltUIO = accumOutResult(rsltSinkB)(partialResultStrm)
 		outRsltUIO
 	}
+	// If we have one of these, then we are ready to accumulate any type-compatible stream.
+	type AccumFunc = UStream[InRec] => UIO[OutResult]
+	type AccumFunk = Function1[UStream[InRec], UIO[OutResult]]
+
+	type ParRechunkAccumFunc = (Int, Int, Int) => AccumFunc
+	type ParRechunkAccumFunk = Function3[Int, Int, Int, AccumFunk]
+
+	// Do we like returning Function3-that-returns-Function1?
+	// In this case, yes.
+	def composeSinks(recSinkA : RecSink)(rsltSinkB : RsltSink) : (Int, Int, Int) => AccumFunc = {
+		val lastStage: UStream[PartialResult] => UIO[OutResult] = accumOutResult(rsltSinkB)
+		// This function expects 3 Int parameters, so it cannot be used with Function1  .compose/.andThen.
+		// The syntax here is showing 3 function arguments, NOT a tuple
+		val firstStage: (Int, Int, Int) => UStream[InRec] => UStream[PartialResult] = parallelPartialAccumRechunked(recSinkA)
+
+		// .tupled gives us a Function1 taking a SINGLE tuple of Ints, returning another Function1
+		val firstTupled: ((Int, Int, Int)) => UStream[InRec] => UStream[PartialResult] = firstStage.tupled
+		// Use .uncurried to make that into a Function2 returning a stream
+		val firstMerged: ((Int, Int, Int), UStream[InRec]) => UStream[PartialResult] = Function.uncurried(firstTupled)
+		// Now .tupled again to make a Function1 taking one big tuple in, returning a stream.  Suitable for .andThen!
+		val firstDoubTup: (((Int, Int, Int), UStream[InRec])) => UStream[PartialResult] = firstMerged.tupled
+		// Combine the firstAndLast stages
+		val firstAndLast: (((Int, Int, Int), UStream[InRec])) => UIO[OutResult] = firstDoubTup.andThen(lastStage)
+		val falUntup: ((Int, Int, Int), UStream[InRec]) => UIO[OutResult] = Function.untupled(firstAndLast)
+		val keepOn: ((Int, Int, Int)) => UStream[InRec] => UIO[OutResult] = falUntup.curried
+		val yes: (Int, Int, Int) => UStream[InRec] => UIO[OutResult] = Function.untupled(keepOn)
+
+
+		val oneLineNested = Function.untupled((Function.untupled(Function.uncurried(firstTupled).tupled.andThen(lastStage)).curried))
+		val olnTyped: (Int, Int, Int) => UStream[InRec] => UIO[OutResult] = oneLineNested
+		val olnFNotation : Function3[Int, Int, Int, Function1[UStream[InRec], UIO[OutResult]]] = olnTyped
+
+		val anotherWay : ((Int, Int, Int)) => UStream[InRec] => UIO[OutResult] = paramTriple => {
+			firstTupled(paramTriple).andThen(lastStage)
+		}
+
+
+		yes
+
+
+		// val x = lastStage(firstStage _) //  lastStage.compose(firstTupled)
+	}
 	def hmm(recSinkA : RecSink) = {
 		val h: RecSink => (Int, Int, Int) => UStream[InRec] => UStream[PartialResult] = (parallelPartialAccumRechunked _)
 		val g: (Int, Int, Int) => UStream[InRec] => UStream[PartialResult] = h(recSinkA)
-		val x: Int => Int => Int => UStream[InRec] => UStream[PartialResult] = g.curried
+		val f: Int => Int => Int => UStream[InRec] => UStream[PartialResult] = g.curried
+
+		val u: Int => Int => UStream[InRec] => UStream[PartialResult] = f(32)
+		val v = f(64)(6)
+		val z: Int => UStream[InRec] => UStream[PartialResult] = v
+
 	}
+
+
 	// contravariant type InRec occurs in invariant position in type zio.stream.ZSink[Any,Nothing,InRec,Nothing,PartialResult] of type RecSink
 	// def eatSink(snk : RecSink) : Unit
 
