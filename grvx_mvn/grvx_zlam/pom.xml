@@ -32,6 +32,12 @@
         </dependency>
 
         <dependency>
+            <groupId>dev.zio</groupId>
+            <artifactId>zio-lambda_2.13</artifactId>
+            <version>1.0.2</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_2.13</artifactId>
             <version>${scalatest.lib.version}</version>
