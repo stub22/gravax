@@ -30,7 +30,11 @@
 			<artifactId>zio-streams_2.13</artifactId>
 			<version>2.0.9</version>
 		</dependency>
-
+		<dependency>
+			<groupId>dev.zio</groupId>
+			<artifactId>zio_2.13</artifactId>
+			<version>2.0.9</version>
+		</dependency>
 		<dependency>
 			<groupId>org.apache.datasketches</groupId>
 			<artifactId>datasketches-java</artifactId>

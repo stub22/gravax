@@ -63,6 +63,7 @@
         <module>grvx_dflow</module>
         <module>grvx_xtyp</module>
         <module>grvx_zpol</module>
+        <module>grvx_zlam</module>
     </modules>
 
     <build>
