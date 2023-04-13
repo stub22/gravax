@@ -131,6 +131,7 @@
 
             <!-- Without minimizeJar, the output .jar is about 33MB, with Jena the largest piece and awssdk also significant.
                 Using minimizeJar knocks it down to about 27MB.  -->
+            <!--
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -155,6 +156,7 @@
                     </execution>
                 </executions>
             </plugin>
+            -->
         </plugins>
 
     </build>

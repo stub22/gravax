@@ -53,7 +53,8 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
         </dependency>
-
+        -->
+        <!-- We need these until the zio-lambda "as layer" gets sorted out -->
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-lambda-java-core</artifactId>
@@ -69,7 +70,7 @@
             <artifactId>aws-lambda-java-log4j2</artifactId>
             <version>1.5.1</version>
         </dependency>
-        -->
+
     </dependencies>
 
     <repositories>
