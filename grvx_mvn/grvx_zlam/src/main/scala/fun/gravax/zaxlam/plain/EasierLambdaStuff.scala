@@ -5,14 +5,35 @@ import java.util.{Map => JMap}
 private trait EasierLambdaStuff
 
 
-class HelloZaxlam() extends RequestHandler[JMap[String,String], String] {
-
-	override def handleRequest(inMap: JMap[String, String], context: Context): String = {
-		val lamLog: LambdaLogger = context.getLogger
-		lamLog.log(s"HelloZaxlam.handleRequest got inMap: ${inMap}")
-		val envJMap: JMap[String, String] = System.getenv()
-		lamLog.log(s"HelloZaxlam.handleRequest got envJMap: ${inMap}")
-		println("HelloZaxlam.handleRequest is printing to console")
-		"HELLO_ZAXLAM_RESULT_v006"
+trait HandlerMon {
+	def dumpCtx(lamLog: LambdaLogger, ctx: Context) : Unit = {
+		lamLog.log(s"HandlerMon.dumpCtx got ctx: ${ctx}")
 	}
+	def dumpEnv(lamLog: LambdaLogger) : Unit = {
+		val envJMap: JMap[String, String] = System.getenv()
+		lamLog.log(s"HandlerMon.dumpEnv got envJMap: ${envJMap}")
+	}
+}
+trait AxLamHandler[In,Out] extends RequestHandler[In,Out] {
+	val myMon = new HandlerMon{}
+
+	protected def handleRq(in : In, ctx: Context): Out
+	override def handleRequest(in : In, context: Context): Out = {
+		val lamLog: LambdaLogger = context.getLogger
+		myMon.dumpEnv(lamLog)
+		println("HelloZaxlam.handleRequest is printing to console?!")
+		myMon.dumpCtx(lamLog, context)
+		lamLog.log(s"AxLamHandler.handleRequest is naively dumping input: ${in}")
+		val out = handleRq(in, context)
+		lamLog.log(s"AxLamHandler.handleRequest is naively dumping output: ${out}")
+		out
+	}
+
+}
+class HelloZaxlam() extends AxLamHandler[JMap[String,String], String] {
+	override protected def handleRq(in: JMap[String, String], ctx: Context): String = "HELLO_ZAXLAM_RESULT_v007"
+}
+
+class HowdyZaxlam() extends AxLamHandler[String, String] {
+	override protected def handleRq(in: String, ctx: Context): String = "HowdyZaxlam_result_v007"
 }
