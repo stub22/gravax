@@ -10,6 +10,7 @@ import zio.dynamodb.DynamoDBExecutor
 
 import java.net.URI
 
+// Adapted from https://github.com/zio/zio-dynamodb/blob/series/2.x/examples/src/main/scala/zio/dynamodb/examples/dynamodblocal/DynamoDB.scala
 object LocalDynamoDB {
   val awsConfig = ZLayer.succeed(
     config.CommonAwsConfig(

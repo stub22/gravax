@@ -6,6 +6,8 @@ import zio.schema.{DeriveSchema, Schema}
 
 import java.time.Instant
 
+// Adapted from https://github.com/zio/zio-dynamodb/blob/series/2.x/examples/src/main/scala/zio/dynamodb/examples/model/Student.scala
+
 @enumOfCaseObjects
 sealed trait Payment
 
@@ -70,7 +72,9 @@ object Student {
   ) =
     ProjectionExpression.accessors[Student]
 
-  def primaryKey(email: String, subject: String): PrimaryKey = PrimaryKey("email" -> email, "subject" -> subject)
+  val FLDNM_EMAIL = "email"
+  val FLDNM_SUBJECT = "subject"
+  def primaryKey(email: String, subject: String): PrimaryKey = PrimaryKey(FLDNM_EMAIL -> email, FLDNM_SUBJECT -> subject)
 
   val enrolDate  = Instant.parse("2021-03-20T01:39:33Z")
   val enrolDate2 = Instant.parse("2022-03-20T01:39:33Z")
