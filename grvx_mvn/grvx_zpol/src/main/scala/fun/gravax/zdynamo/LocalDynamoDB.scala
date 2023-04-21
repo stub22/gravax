@@ -2,11 +2,11 @@ package fun.gravax.zdynamo
 
 import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials, StaticCredentialsProvider}
 import software.amazon.awssdk.regions.Region
-import zio.ZLayer
+import zio.{TaskLayer, ZLayer}
 import zio.aws.core.config
 import zio.aws.dynamodb.DynamoDb
 import zio.aws.{dynamodb, netty}
-import zio.dynamodb.DynamoDBExecutor
+import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 
 import java.net.URI
 
@@ -27,5 +27,7 @@ object LocalDynamoDB {
         builder.endpointOverride(URI.create("http://localhost:8000")).region(Region.US_EAST_1)
     }
 
-  val layer = dynamoDbLayer >>> DynamoDBExecutor.live
+  // implicit final class ZLayerProvideSomeOps[RIn, E, ROut](self : zio.ZLayer[RIn, E, ROut]) extends scala.AnyVal
+  // def >>>[E1 >: E, ROut2](that : => zio.ZLayer[ROut, E1, ROut2])(implicit trace : zio.Trace) : zio.ZLayer[RIn, E1, ROut2]
+  val layer : TaskLayer[ZDynDBExec] = dynamoDbLayer >>> ZDynDBExec.live
 }

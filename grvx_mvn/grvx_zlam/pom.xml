@@ -54,7 +54,7 @@
             <artifactId>s3</artifactId>
         </dependency>
         -->
-        <!-- We need these until the zio-lambda "as layer" gets sorted out -->
+        <!-- We need these for SERVER side until the zio-lambda "as layer" gets sorted out -->
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-lambda-java-core</artifactId>
@@ -71,6 +71,17 @@
             <version>1.5.1</version>
         </dependency>
 
+        <!-- Temporarily including CLIENT side deps here -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>lambda</artifactId>
+            <version>${awssdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20230227</version>
+        </dependency>
     </dependencies>
 
     <repositories>
