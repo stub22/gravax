@@ -41,7 +41,7 @@ class HowdyZaxlam() extends AxLamHandler[String, String] {
 }
 
 class DeeperZaxlam() extends AxLamHandler[JMap[String,InboundDat], JMap[String,ZaxResultObj]] {
-	override protected def handleRq(in: JMap[String,Object], ctx: Context): JMap[String,ZaxResultObj] = {
+	override protected def handleRq(in: JMap[String,InboundDat], ctx: Context): JMap[String,ZaxResultObj] = {
 		val rslt01 = DeeperResult("jeellaeu", 37)
 		val rslt02 = DeeperResult("scoober", 14)
 		val outSMap = Map[String, ZaxResultObj]("firstOne" -> rslt01, "nextOne" -> rslt02)
