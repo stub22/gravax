@@ -16,7 +16,7 @@ trait BigRecStoreApi {
 
 	val brs = List(br01, br02)
 
-	val folderNm = "prqt_nest_ex"
+	val folderNm = "tmpdat/prqt_nest_ex"
 	val fileNm01 = "pne_01.parquet"
 	val folderPathToUse = Path(folderNm)
 

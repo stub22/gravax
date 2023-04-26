@@ -8,14 +8,14 @@ import scala.util.Random
 // HADOOP_HOME=D:\_dmnt\axio_gclnz\axio_ide_03\adaxmvn\axmgc_dmo_bgdt\hdp_win_292
 object RunMinPrqtEx extends App {
 
-	val flg_doWrites = false
+	val flg_doWrites = true
 
 	case class Data(id: Int, text: String)
 
 	val count = 100
 	val data01  = (1 to count).map(i => Data(id = i, text = "one_" + Random.nextString(4)))
 	val data02  = (1 to count).map(i => Data(id = i, text = "two_" + Random.nextString(4)))
-	val folderNm = "prqt_min_ex"
+	val folderNm = "tmpdat/prqt_min_ex"
 	val fileNm01 = "mpe_01.parquet"
 	val fileNm02 = "mpe_02.parquet"
 	//  Relative path in absolute URI: file:C:%5CUsers%5Cstub%5CAppData%5CLocal%5CTemp%5Cmin_prqt_ex2907342757329609633
