@@ -40,6 +40,32 @@
 			<artifactId>datasketches-java</artifactId>
 			<version>3.2.0</version>
 		</dependency>
+
+		<!-- Deps for Parquet, originally copied from axmgc.demo.bgdt, which also pulls in web.pond
+		 Orig expected hadoop-client at v2.9.2+
+		 -->
+
+		<dependency>
+			<groupId>com.github.mjakubowski84</groupId>
+			<artifactId>parquet4s-core_${scalver.suffix}</artifactId>
+
+			<version>${parquet4s.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.hadoop</groupId>
+			<artifactId>hadoop-client</artifactId>
+			<version>${hadoop.client.version}</version>
+		</dependency>
+
+
+<!--
+		<dependency>
+			<groupId>org.apache.hadoop</groupId>
+			<artifactId>hadoop-aws</artifactId>
+			<version>${hadoop.client.version}</version>
+		</dependency>
+-->
 	</dependencies>
 
 	<repositories>
