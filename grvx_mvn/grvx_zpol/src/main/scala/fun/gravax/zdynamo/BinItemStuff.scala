@@ -1,7 +1,8 @@
 package fun.gravax.zdynamo
 
 import zio.dynamodb.{AttributeValue, DynamoDBError, Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
-import zio.{dynamodb => ZDyn}
+import zio.{Chunk, dynamodb => ZDyn}
+
 import scala.collection.immutable.{Map => SMap}
 
 private trait BinItemStuff
@@ -78,5 +79,63 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 		comboItem
 	}
 	def fillBinSortKey(partBinItem : Item) : Item = fillSortKey(partBinItem, KEYNM_SORT_BIN, FLDSEQ_SORT_BIN, "#")
+}
 
+
+trait DummyItemMaker extends KnowsBinItem {
+
+	protected val myFBI : FromBinItem = new FromBinItem {}
+	protected val myTBI : ToBinItem = new ToBinItem{
+		override protected val myFromItem: FromItem = myFBI
+	}
+
+	val scen01 = "scen_01"
+	val sort_AA = "20230423#20230421"
+	val sort_BB = "20230423#20230421#bbb"
+	val googSym = "GOOG"
+	val msftSym = "MSFT"
+	def mkBigItem = {
+		val bigItem: Item = Item(
+			FLDNM_SCEN	-> scen01,
+			KEYNM_SORT_BIN -> sort_AA,
+			"id"          -> 0,
+			"bin"       -> Chunk.fromArray("abC".getBytes),
+			"binSet"    -> Set(Chunk.fromArray("aBc".getBytes)),
+			"boolean"   -> true,
+			"list"      -> List(1, 2, 3, 7, 8),
+			"map"       -> SMap(
+				"a" -> true,
+				"b" -> false,
+				"c" -> true
+			),
+			"num"       -> 5,
+			"numSet"    -> Set(4, 3, 2, 1),
+			"null"      -> null,
+			"string"    -> "string",
+			"stringSet" -> Set("a", "b", "c")
+		)
+		bigItem
+	}
+	def mkBinItem = {
+		// Looking via Workbench, we see that inside collection fields, dynamo often stores pairs of {type, txtVal},
+		// where type is one of "N", "BOOL"...
+		val partialBinItem : Item = Item(
+			FLDNM_SCEN	-> scen01,
+			FLDNM_TIME_OBS ->	"20221117_21:30",
+			FLDNM_TIME_PRED -> "20231117_21:30",
+			FLDNM_TIME_CALC -> "20221118_14:22",
+			FLDNM_BINSEQ -> "001",
+			FLDNM_PARENT_BINSEQ -> "-1",
+			FLDNM_BIN_FLAVOR -> BFLV_ANN_RET_MEAN,  // Should this point directly to the value-map field?
+			FLDNM_BIN_REL_WEIGHT -> BigDecimal("0.222"),
+			FLDNM_BIN_ABS_WEIGHT -> BigDecimal("0.101"),
+			FLDNM_BIN_MASS -> BigDecimal("255"),
+			FLDNM_ANN_RET_MEAN	-> SMap(
+				msftSym -> BigDecimal("0.117"),
+				googSym -> BigDecimal("0.093")
+			)
+		)
+		val fullBinItem = myTBI.fillBinSortKey(partialBinItem)
+		fullBinItem
+	}
 }
