@@ -4,12 +4,13 @@ private trait DistroCalcStuff
 
 
 trait HoldingOptimizer extends NameScopeHmm {
-	type	AssetID = KeySym
+	type	AssetID = EntryKey
 	type 	MultiAssetAnnRetDist = VecDistrib
-	type	AnnRet = BigDecimal
-	type	AssetRet = (AssetID, AnnRet) // Same as RowEntry
+	type	AnnRet = EntryMean
+	type 	AnnRetVar = EntryVar
+	type	AssetRet = StatEntry //  (AssetID, AnnRet, AnnRetVar) // Same as StatEntry
 	type	HoldWt = (AssetID, BigDecimal)
-	type 	AnnRetVar = BigDecimal
+
 	type	AnnRetDist
 
 	type	SharpeRatio = BigDecimal
@@ -19,7 +20,7 @@ trait HoldingOptimizer extends NameScopeHmm {
 	// Could use gradient descent or another method.
 	// Client could pass in a Seq[AssetID] in order to control ordering in the output.
 	def optimizeSharpe(availAssets : Set[AssetID], maRetDist : MultiAssetAnnRetDist) : OptimResult = {
-		val availAssetSeq = availAssets.toSeq
+		val availAssetSeq = availAssets.toIndexedSeq
 		// Expected portfolio return will be dot-product of our portfolio asset weights with these mean asset returns.
 		// This is a purely linear calculation, with a single number as result.
 		val rootDBD = maRetDist.projectRootBin(availAssetSeq)
@@ -47,14 +48,17 @@ trait HoldingOptimizer extends NameScopeHmm {
 		???
 	}
 
+
+	def calcVariance(meanRet : AnnRet, assetWeights : Seq[HoldWt], binDats : Seq[DBinDat])
+
 	// TODO:  Make this expression differentiable in the asset weights, so that we can use gradient descent.
 	def estimVariance(meanRet : AnnRet, assetWeights : Seq[HoldWt], binDats : Seq[DBinDat]) : AnnRetVar = {
 		val weightedSquaredDevs : Seq[AnnRetVar] = binDats.map(binDat => {
-			val binRow: Row = binDat._3
+			val binRow: StatRow = binDat._3
 			val binARs : Seq[AssetRet] = binRow
 			val estimRetForBin = calcReturnAtVec(assetWeights, binARs)
 			val estimDiff = estimRetForBin - meanRet
-			val estimDiffSq = estimDiff.*(estimDiff) // This is where the estimation goes a little wobbly.
+			val estimDiffSq = estimDiff.pow(2)  // This is where the estimation goes a little wobbly.
 			// ...because integral of squared diff (over the whole bin) is not the same as square of mean diff of the bin.
 			// For example, if the bin contains very-large-diff outliers they will be under-represented in this variance.
 			// Maybe if variance is >= 1 this estim turns out to be a lower bound, but if var < 1 it's an upper bound?

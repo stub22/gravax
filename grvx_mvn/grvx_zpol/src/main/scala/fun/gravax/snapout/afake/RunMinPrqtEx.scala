@@ -39,3 +39,8 @@ object RunMinPrqtEx extends App {
 	}
 	brsa.doRead
 }
+
+// parquet4s happens to pull in Shapeless
+// import shapeless.ops.nat.LT.<
+// Shapeless magic looks kinda like this...
+// type LowerThan10[V <: Int] = V < 10
