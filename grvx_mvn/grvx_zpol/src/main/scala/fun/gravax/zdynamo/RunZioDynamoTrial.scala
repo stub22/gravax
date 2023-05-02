@@ -26,6 +26,8 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 			_ <- bstore.putOneDummyBinItem
 			_ <- bstore.readThatDummyBinYo
 			secPK <- bstore.putSecondDBI
+			rrslt <- bstore.readBinData(secPK)
+			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 			_ <- bstore.maybeDeleteBinTable
 		} yield ()
 	}

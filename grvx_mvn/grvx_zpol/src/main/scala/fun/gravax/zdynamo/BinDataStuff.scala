@@ -13,8 +13,6 @@ trait NameScopeHmm {
 	// Building up data-types this way (vs. by traits) is ... extensional and sorta constructivist / algebraic.
 	type EntryKey = String
 	type EntryValue = BigDecimal
-	type Probability = BigDecimal // between 0.0 and 1.0
-	type ProbDensity = BigDecimal // Positive value, representing probability density per unit volume.
 
 	type EntryMean = BigDecimal
 	type EntryVar = BigDecimal	// Often this is marginal variance
@@ -54,16 +52,16 @@ trait BinData extends NameScopeHmm {
 
 }
 
-case class BinTimeData(obsTime : String, predTime : String, calcTime : String)
+case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
 case class BinSeqInfo(binSeq : String, parentBinSeq : String)
 case class BinMassInfo(binMass : BigDecimal, relWt : BigDecimal, absWt : BigDecimal)
 
 // Seems we cannot use abstract types (of our self-type, or inherited) in constructor parameters.
 // If we make an outer trait scope then those names are available, or we can refer to members of an object.
-case class BinMeat(binFlavor : String, meatMap : BinTypes.StatMap)
+case class BinMeatInfo(binFlavor : String, meatMap : BinTypes.StatMap)
 
 
-case class EzBinData(scenID : String, timeDat : BinTimeData, seqDat : BinSeqInfo, massDat : BinMassInfo, meat : BinMeat) extends BinData {
+case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinSeqInfo, massDat : BinMassInfo, meat : BinMeatInfo) extends BinData {
 	override def getScenarioID: String = scenID
 	override def getObsTime: String = timeDat.obsTime
 	override def getPredTime: String = timeDat.predTime
@@ -129,13 +127,6 @@ case class BinNode(myDat : BinData, parent_opt : Option[BinNode], kids : Iterabl
 }
 
 
-trait ToBinData {
-	def pullTimeData(itm : Item) : BinTimeData = {
-		// If field is missing, we throw?  Or should we return option/either?
-		???
-	}
-
-}
 trait GenBinData {
 
 	def mkRandMeatMap(meatKeys : Seq[String], min : BigDecimal, max : BigDecimal) // Use normal distrib?
