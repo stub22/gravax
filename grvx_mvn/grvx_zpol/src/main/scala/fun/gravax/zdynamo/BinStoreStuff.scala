@@ -7,7 +7,6 @@ import scala.collection.immutable.{Map => SMap}
 
 private trait BinStoreStuff
 
-
 trait BinStoreApi extends KnowsBinItem {
 	val binTblNm = "distro-bin"
 	val (flg_doCreate, flg_doDelete) = (false, false)
@@ -27,19 +26,40 @@ trait BinStoreApi extends KnowsBinItem {
 		ZDynDBQry.deleteTable(binTblNm).execute *> ZIO.log(s"Deleted table ${binTblNm}")
 	}  else ZIO.succeed()
 
-	def putOneBigItem() : RIO[ZDynDBExec, Unit] = {
-		val bigItem = myDIM.mkBigItem
-		val zpi: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(binTblNm, bigItem)
+
+	def putAndLog(tblNm : String, itm : Item) : RIO[ZDynDBExec, Unit] = {
+		val zpi: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(tblNm, itm)
 		val zpiex: ZIO[ZDynDBExec, Throwable, Option[Item]] = zpi.execute
-		zpiex.flatMap(opt_itm_out => ZIO.log(s"s Item-put[big] returned: ${opt_itm_out}"))
+		zpiex.flatMap(opt_itm_out => ZIO.log(s"s Item-put[${tblNm}] returned: ${opt_itm_out}"))
 	}
+
+	def readBinData(binPK : PrimaryKey) : RIO[ZDynDBExec, Option[BinData]] = {
+		val op_itemFetch: RIO[ZDynDBExec,Option[Item]] = ZDynDBQry.getItem(binTblNm, binPK).execute
+		val op_binDatFetch = op_itemFetch.map(opt_itm_out => {
+			opt_itm_out.map(itm => {
+				myFBI.extractBinData(itm)
+			})
+		})
+		op_binDatFetch
+	}
+
+}
+
+trait StoreDummyItems extends BinStoreApi {
+	// unit-testing methods that write+read some items with hardcoded data
 
 	lazy val myDummyBinItem = myDIM.mkDummyBinItem
 	def putOneDummyBinItem() : RIO[ZDynDBExec, Unit] = {
 		putAndLog(binTblNm, myDummyBinItem)
 	}
 
-	def putSecondDBI : RIO[ZDynDBExec, PrimaryKey] = {
+	def putOneMessyItem() : RIO[ZDynDBExec, Unit] = {
+		val bigItem = myDIM.mkMessyItem
+		val zpi: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(binTblNm, bigItem)
+		val zpiex: ZIO[ZDynDBExec, Throwable, Option[Item]] = zpi.execute
+		zpiex.flatMap(opt_itm_out => ZIO.log(s"s Item-put[big] returned: ${opt_itm_out}"))
+	}
+	def putFeatherDBI : RIO[ZDynDBExec, PrimaryKey] = {
 		// Can we easily check the size of the value-map (annRetMeans) in a filter condition?
 		val (scen, binFlav) = ("featherScen", BFLV_ANN_RET_MEAN_VAR)
 		val (timeObs, timePred, timeCalc) = ("20221209_21:30", "20231209_21:30", "20230105_14:18")
@@ -60,20 +80,17 @@ trait BinStoreApi extends KnowsBinItem {
 		putAndLog(binTblNm, fullBI).map(_ => ourPK)
 	}
 
-	def putAndLog(tblNm : String, itm : Item) : RIO[ZDynDBExec, Unit] = {
-		val zpi: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(tblNm, itm)
-		val zpiex: ZIO[ZDynDBExec, Throwable, Option[Item]] = zpi.execute
-		zpiex.flatMap(opt_itm_out => ZIO.log(s"s Item-put[${tblNm}] returned: ${opt_itm_out}"))
-	}
-
 	def readThatDummyBinYo() : RIO[ZDynDBExec, Unit] = {
 		val dummyPK = myFBI.getPKfromFullBinItem(myDummyBinItem)
 		val op: RIO[ZDynDBExec,Option[Item]] = ZDynDBQry.getItem(binTblNm, dummyPK).execute
 		val opLogged = op.flatMap(opt_itm_out => {
 			val rm: Option[Either[DynamoDBError, Item]] = opt_itm_out.map(_.get[Item](FLDNM_BROKED_MEAT_MAP)) // "returns"))
 			val opt_returns = rm.flatMap(_.toOption)
-			// GOOG -> List(Chunk(Number(0.093),Number(0.018)))
+
 			// dobleMap (via logB) is the form that actually works as of 23-05-02.  The others fail in decoding the List.
+			// GOOG -> List(Chunk(Number(0.093),Number(0.018)))
+			// Getting BigDecimal SET
+			// Error getting BigDecimal set value. Expected AttributeValue.Number but found List(Chunk(Number(0.093),Number(0.018)))))
 			val opt_googRet = opt_returns.map(_.get[Iterable[BigDecimal]]("GOOG"))
 			val logA = ZIO.log(s"Item-get[dummy].logA broked-meat-map-item=${rm}, optRet=${opt_returns}, googRet=${opt_googRet} fullRecord=${opt_itm_out}")
 			val dobleMap = opt_itm_out.map(itm => myFBI.fetchOrThrow[SMap[String,SMap[String,BigDecimal]]](itm, FLDNM_DOBLE_MAP))
@@ -88,20 +105,6 @@ trait BinStoreApi extends KnowsBinItem {
 		})
 		opLogged
 	}
-	// Getting BigDecimal SET
-	// Error getting BigDecimal set value. Expected AttributeValue.Number but found List(Chunk(Number(0.093),Number(0.018)))))
-
-
-	def readBinData(binPK : PrimaryKey) : RIO[ZDynDBExec, Option[BinData]] = {
-		val op_itemFetch: RIO[ZDynDBExec,Option[Item]] = ZDynDBQry.getItem(binTblNm, binPK).execute
-		val op_binDatFetch = op_itemFetch.map(opt_itm_out => {
-			opt_itm_out.map(itm => {
-				myFBI.extractBinData(itm)
-			})
-		})
-		op_binDatFetch
-	}
-
 
 }
 

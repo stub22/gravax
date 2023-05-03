@@ -20,12 +20,13 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 
 	private def mkProgram = {
 		val bstore = new BinStoreApi {}
+		val dumStore = new StoreDummyItems {}
 		for {
 			_ <- bstore.maybeCreateBinTable
-			_ <- bstore.putOneBigItem
-			_ <- bstore.putOneDummyBinItem
-			_ <- bstore.readThatDummyBinYo
-			secPK <- bstore.putSecondDBI
+			_ <- dumStore.putOneMessyItem
+			_ <- dumStore.putOneDummyBinItem
+			_ <- dumStore.readThatDummyBinYo
+			secPK <- dumStore.putFeatherDBI
 			rrslt <- bstore.readBinData(secPK)
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 			_ <- bstore.maybeDeleteBinTable

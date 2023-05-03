@@ -98,8 +98,9 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 		// Empirically thru IDE found this apparent way to extract a Map of Lists that is compliant with FromAttributeValue
 		//	val meatMap: SMap[String, Iterable[BigDecimal]] = fetchOrThrow[SMap[String,Iterable[BigDecimal]]](itm, FLDNM_MEAT_MAP)
 		//	println(s"extractMeat got meatMap: ${meatMap}")
-		// BUT it don't quite work - see DummyItemMaker.mkDummyBinItem and BinStoreApi.readThatDummyBinYo
-		// OTOH it works great to extract a Map of Maps in one clean step.
+		// BUT it doesn't quite work. Probly is fixable. See DummyItemMaker.mkDummyBinItem and BinStoreApi.readThatDummyBinYo
+		// OTOH dobleMap
+		// works great to extract a Map of Maps in one clean step.
 		val dobleMap = fetchOrThrow[SMap[String,SMap[String,BigDecimal]]](itm, FLDNM_DOBLE_MAP)
 		println(s"extractDoble.println: reading dobleMap: ${dobleMap}")
 		// Now we just need to interpret the inner-maps.
@@ -180,14 +181,17 @@ trait DummyItemMaker extends KnowsBinItem {
 		override protected val myFromItem: FromItem = myFBI
 	}
 
-	val scen01 = "scen_01"
+	val scn_messy = "messy_01"
+	val scn_dummy = "dummy_01"
 	val sort_AA = "20230423#20230421"
 	val sort_BB = "20230423#20230421#bbb"
 	val googSym = "GOOG"
 	val msftSym = "MSFT"
-	def mkBigItem = {
+
+	def mkMessyItem = {
+		// Copied from ZDynamoDB example code.
 		val bigItem: Item = Item(
-			FLDNM_SCEN	-> scen01,
+			FLDNM_SCEN	-> scn_messy,
 			KEYNM_SORT_BIN -> sort_AA,
 			"id"          -> 0,
 			"bin"       -> Chunk.fromArray("abC".getBytes),
@@ -211,7 +215,7 @@ trait DummyItemMaker extends KnowsBinItem {
 		// Looking via Workbench, we see that inside collection fields, dynamo often stores pairs of {type, txtVal},
 		// where type is one of "N", "BOOL"...
 		val partialBinItem : Item = Item(
-			FLDNM_SCEN	-> scen01,
+			FLDNM_SCEN	-> scn_dummy,
 			FLDNM_TIME_OBS ->	"20221117_21:30",
 			FLDNM_TIME_PRED -> "20231117_21:30",
 			FLDNM_TIME_CALC -> "20221118_14:22",
