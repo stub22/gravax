@@ -150,7 +150,7 @@ trait GenBinData extends KnowsBinItem {
 		val grandkidsPerRootkidCnt = rootKidsCnt - 1
 		// ZStream.iterate is necessarily infinite.
 		// If we want to allow for
-		val pairStrm: UStream[(GenSt, Queue[ParentRec])] = ZStream.iterate[(GenSt, Queue[ParentRec])](initState)(prevSt => {
+		val pairStrm: UStream[GenSt] = ZStream.unfold[(GenSt, Queue[ParentRec]), GenSt](initState)(prevSt => {
 			val (prevGenSt, prevParQ) = prevSt
 			val prevLocIdx = prevGenSt.locIdx
 			val prevLevNum = prevGenSt.levelNum
@@ -159,9 +159,14 @@ trait GenBinData extends KnowsBinItem {
 
 			val (nextGenSt, midParQ) = prevGenSt.parent_opt match {
 				case None => {
-					val (nextPRec, middleParentQ) = prevParQ.dequeue
-					val nextGenSt = GenSt(Some(nextPRec), nextAbsIdx, 1, 2, grandkidsPerRootkidCnt)
-					(nextGenSt, middleParentQ)
+					val prevParOpt = prevParQ.dequeueOption
+					prevParOpt match {
+						case None => (noGenSt, emptyParentQ)
+						case Some((nextPRec, middleParentQ)) => {
+							val nextGenSt = GenSt(Some(nextPRec), nextAbsIdx, 1, 2, grandkidsPerRootkidCnt)
+							(nextGenSt, middleParentQ)
+						}
+					}
 				}
 				case Some(prevParRec) => {
 					// prevParRec is the parent of the last bin emitted.  It should be same as LAST/NEWEST record in prevParQ
@@ -171,6 +176,7 @@ trait GenBinData extends KnowsBinItem {
 						// who all hit the else-clause below, and there copy our values for levNum and maxKid.
 						val prevParOpt = prevParQ.dequeueOption // Get the next parent
 						prevParOpt match {
+							case None => (noGenSt, emptyParentQ)
 							case Some((nextPRec, mParQ)) => {
 								val nxtParNumKids = nextPRec.numKids
 								if (nxtParNumKids > 0) {
@@ -184,7 +190,6 @@ trait GenBinData extends KnowsBinItem {
 									(noGenSt, mParQ)
 								}
 							}
-							case None => (noGenSt, emptyParentQ)
 						}
 					} else {
 						// 2nd and following siblings hit this clause.  We maintain status quo: same parent, etc.
@@ -198,10 +203,9 @@ trait GenBinData extends KnowsBinItem {
 				val ourParRec = ParentRec(nextGenSt.absIdx, chooseNumKidsHere, nextGenSt.levelNum)
 				midParQ.enqueue(ourParRec)
 			} else midParQ
-			(nextGenSt, upParQ)
+			if (nextGenSt == noGenSt) None else Some((nextGenSt, (nextGenSt, upParQ)))
 		})
-		pairStrm.map(gqPair => {
-			val genSt = gqPair._1
+		pairStrm.map(genSt => {
 			val parentNum = genSt.parent_opt.fold(-1)(prec => prec.seqNum)
 			val levelNum = genSt.levelNum
 			val maxKids = genSt.maxKids
