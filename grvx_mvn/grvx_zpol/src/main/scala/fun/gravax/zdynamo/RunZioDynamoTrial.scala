@@ -1,7 +1,9 @@
 package fun.gravax.zdynamo
 
 import zio.dynamodb.{AttributeValue, DynamoDBError, Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
-import zio.{Chunk, Console, RIO, Scope, Task, TaskLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, dynamodb => ZDyn}
+import zio.{Chunk, Console, RIO, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, dynamodb => ZDyn, Random => ZRandom}
+
+import java.math.{MathContext, RoundingMode}
 
 
 object RunZioDynamoTrial extends ZIOAppDefault {
@@ -32,16 +34,28 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 			_ <- bstore.maybeDeleteBinTable
 			_ <- dumpTagInfoStrm
+			_ <- simPyramid
 		} yield ()
 	}
-
+	lazy val gbd = new GenBinData {
+		override val myTBI: ToBinItem = bstore.myTBI
+	}
 	def dumpTagInfoStrm  = {
-		val gbd = new GenBinData {
-			override val myTBI: ToBinItem = bstore.myTBI
-		}
+
 		val ps = gbd.genTagInfoStrm(500, 7).zipWithIndex.take(300)
 		val psOp = ps.debug.runCollect
 		psOp
+	}
+
+	def simPyramid : UIO[Unit] = {
+		val precision = 8
+		val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
+		val massyMeatStrm = gbd.mkMassyMeatStrm(ZRandom.RandomLive,mathCtx)
+		val rootKidsCnt = 7
+		val unusedNumLevels = 10
+		val scenID = "Unused Scened ID"
+		val timeInf = BinTimeInfo("NOPE", "TIMELESS", "NAK")
+		gbd.storeBinPyramid(scenID, timeInf)(massyMeatStrm, rootKidsCnt, unusedNumLevels)
 	}
 }
 

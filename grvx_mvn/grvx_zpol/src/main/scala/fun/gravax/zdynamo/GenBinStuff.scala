@@ -107,20 +107,13 @@ trait GenBinData extends KnowsBinItem {
 	// before we write the first bin to DB.  Otherwise we have to make a second pass to store absWeight.
 	// Believe we have not yet written any app code that uses absolute weight.
 	// 2023-05-03 :  AbsoluteWeight is disabled until further notice.
-	def storeBinPyramid(scenID : String, timeInf : BinTimeInfo)(mmStrm : UStream[(BigDecimal, BinMeatInfo)], fixedKidsPerParent : Int, fixedNumLevels : Int) = {
+	def storeBinPyramid(scenID : String, timeInf : BinTimeInfo)(mmStrm : UStream[(BigDecimal, BinMeatInfo)], rootKidCnt : Int, fixedNumLevels : Int) : UIO[Unit] = {
 		val skelBintem = myTBI.mkBinItemSkel(scenID, timeInf)
 
 		val rootSeqNum = 400
-		val seqInfoStrm = genTagInfoStrm(rootSeqNum, fixedKidsPerParent)
-	//	val binIdxPairStrm
-		// Top level always has one bin
-		val kppBD = BigDecimal(fixedKidsPerParent)
-		val bottomLevelCnt = kppBD.pow(fixedNumLevels - 1)
-		val sibChunks: UStream[Chunk[(BigDecimal, BinMeatInfo)]] = mmStrm.rechunk(fixedKidsPerParent).chunks
-//		val chnksWithTotalMass = sibChunks.map(chnk => chnk.foldLeft())
-		// We build
-		// val wrkBlks = sibChunks.
-		???
+		val seqInfoStrm = genTagInfoStrm(rootSeqNum, rootKidCnt)
+		val zippy: UStream[(BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))] = seqInfoStrm.zip(mmStrm)
+		zippy.debug("DEBUG says we need to store: ").foreach(x => ZIO.log(s"Foreach got: ${x}"))
 	}
 
 	// def nextDigitVec(prevDigitVec : Vector[Int], minDigitIncl : Int, maxDigitIncl : Int) : Vector[Int] = {
@@ -143,22 +136,25 @@ trait GenBinData extends KnowsBinItem {
 		case class GenSt(parent_opt : Option[ParentRec], absIdx : Int, locIdx : Int, levelNum : Int, maxKids : Int) //  parentQ : Queue[ParentRec] )
 		// Root is special and must have
 
-		val initState = (GenSt(None, rootSeqNum, 1, 1, rootKidsCnt), initParentQ)
+		val initGenSt = GenSt(None, rootSeqNum, 1, 1, rootKidsCnt)
+		val initUnfoldState = (initGenSt, initParentQ)
 		val noGenSt = GenSt(None, -100, -200, -300, -400)
 		// The size of each kid-block MAY be chosen dynamically in-stream.
 		// Setting this value here to illustrate computation BEFORE we enter stream context, which is just one way
 		val grandkidsPerRootkidCnt = rootKidsCnt - 1
-		// ZStream.iterate is necessarily infinite.
-		// If we want to allow for
-		val pairStrm: UStream[GenSt] = ZStream.unfold[(GenSt, Queue[ParentRec]), GenSt](initState)(prevSt => {
-			val (prevGenSt, prevParQ) = prevSt
+		// ZStream.iterate is necessarily infinite.  So we are using .unfold, which returns Option[Result, NxtSt].
+		// But note that unFold does not emit the INITIAL state,
+		val genStStrm: UStream[GenSt] = ZStream.unfold[(GenSt, Queue[ParentRec]), GenSt](initUnfoldState)(prevUnfSt => {
+			val (prevGenSt, prevParQ) = prevUnfSt
 			val prevLocIdx = prevGenSt.locIdx
 			val prevLevNum = prevGenSt.levelNum
 			val prevMaxKids = prevGenSt.maxKids
 			val nextAbsIdx = prevGenSt.absIdx + 1
 
+			// FIXME: There are too many cases here
 			val (nextGenSt, midParQ) = prevGenSt.parent_opt match {
 				case None => {
+					// Special
 					val prevParOpt = prevParQ.dequeueOption
 					prevParOpt match {
 						case None => (noGenSt, emptyParentQ)
@@ -203,9 +199,13 @@ trait GenBinData extends KnowsBinItem {
 				val ourParRec = ParentRec(nextGenSt.absIdx, chooseNumKidsHere, nextGenSt.levelNum)
 				midParQ.enqueue(ourParRec)
 			} else midParQ
-			if (nextGenSt == noGenSt) None else Some((nextGenSt, (nextGenSt, upParQ)))
+			val recToEmit = nextGenSt
+			if (nextGenSt == noGenSt) None else Some((recToEmit, (nextGenSt, upParQ)))
 		})
-		pairStrm.map(genSt => {
+		// The above does not emit the first ROOT record/state, so we prepend a one-element stream here.
+		val firstGenStStrm = ZStream(initGenSt)
+		val fullGenStStrm = firstGenStStrm concat genStStrm
+		fullGenStStrm.map(genSt => {
 			val parentNum = genSt.parent_opt.fold(-1)(prec => prec.seqNum)
 			val levelNum = genSt.levelNum
 			val maxKids = genSt.maxKids
@@ -215,6 +215,7 @@ trait GenBinData extends KnowsBinItem {
 			val tagInfo = BinTagInfo(chldTxt, parTxt)
 			(tagInfo, numInfo)
 		})
+	}
 		/* Using an increment-digits-and-carry approach, can do a single pass to generate the levels numbers,
 		but would also need to weave in the parent-number memory.  Could make the posVec entries into tuples,
 		that know (parentNum, ourPosInParentsSiblings)
@@ -242,7 +243,7 @@ trait GenBinData extends KnowsBinItem {
 			}
 		})
 		 */
-	}
+
 
 	/*
 
