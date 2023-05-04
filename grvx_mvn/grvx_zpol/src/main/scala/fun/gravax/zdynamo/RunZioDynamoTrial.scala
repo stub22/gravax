@@ -31,15 +31,15 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 			rrslt <- bstore.readBinData(secPK)
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 			_ <- bstore.maybeDeleteBinTable
-			_ <- dumpPairStrm
+			_ <- dumpTagInfoStrm
 		} yield ()
 	}
 
-	def dumpPairStrm  = {
+	def dumpTagInfoStrm  = {
 		val gbd = new GenBinData {
 			override val myTBI: ToBinItem = bstore.myTBI
 		}
-		val ps = gbd.seqPairStrm(500, 7).zipWithIndex.take(300)
+		val ps = gbd.genTagInfoStrm(500, 7).zipWithIndex.take(300)
 		val psOp = ps.debug.runCollect
 		psOp
 	}

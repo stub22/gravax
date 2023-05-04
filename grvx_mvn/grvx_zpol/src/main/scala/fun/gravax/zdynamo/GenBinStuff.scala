@@ -110,6 +110,8 @@ trait GenBinData extends KnowsBinItem {
 	def storeBinPyramid(scenID : String, timeInf : BinTimeInfo)(mmStrm : UStream[(BigDecimal, BinMeatInfo)], fixedKidsPerParent : Int, fixedNumLevels : Int) = {
 		val skelBintem = myTBI.mkBinItemSkel(scenID, timeInf)
 
+		val rootSeqNum = 400
+		val seqInfoStrm = genTagInfoStrm(rootSeqNum, fixedKidsPerParent)
 	//	val binIdxPairStrm
 		// Top level always has one bin
 		val kppBD = BigDecimal(fixedKidsPerParent)
@@ -121,57 +123,93 @@ trait GenBinData extends KnowsBinItem {
 		???
 	}
 
-	def nextDigitVec(prevDigitVec : Vector[Int], minDigitIncl : Int, maxDigitIncl : Int) : Vector[Int] = {
-		???
-	}
+	// def nextDigitVec(prevDigitVec : Vector[Int], minDigitIncl : Int, maxDigitIncl : Int) : Vector[Int] = {
 
 	// Breadth-first traversal approach using a queue will work, at a reasonable memory cost
 	// def childrenOfPrefix(parentID, digitPrefix, startId, numKids) :
 	// TODO: make number of kids come from a stream, with one entry per LEVEL.  Ooh this is kinda hard to do in one pass.
-	def seqPairStrm(rootSeqNum : Int, fixedKidsPerParent : Int) : UStream[BinSeqInfo] = {
+	def genTagInfoStrm(rootSeqNum : Int, rootKidsCnt : Int) : UStream[(BinTagInfo, BinNumInfo)] = {
 		// We want the largest-granularity entries to appear first
 		// root, child_01...child_N, grandchild_01-01...01-N...N-01..N-N, ggchild_01-01-01...
 		// state = (absIndex, Vector(posInLevel_1, posInLevel_2, ...))
 		// starting abs-position for each level is sum of the lengths of the higher levels.
 		// posWithinSiblings
 
-		case class ParentRec(seqNum : Int, numKids : Int)
+		case class ParentRec(seqNum : Int, numKids : Int, parLevelNum : Int)
 		// val initPosVec = Vector[Int](1)
 		val emptyParentQ = Queue.empty[ParentRec]
-		val initParentQ = emptyParentQ.enqueue(ParentRec(1, fixedKidsPerParent))
+		val initParentQ = emptyParentQ.enqueue(ParentRec(1, rootKidsCnt, 1))
 
-		case class GenSt(parent_opt : Option[ParentRec], absIdx : Int, locIdx : Int) //  parentQ : Queue[ParentRec] )
+		case class GenSt(parent_opt : Option[ParentRec], absIdx : Int, locIdx : Int, levelNum : Int, maxKids : Int) //  parentQ : Queue[ParentRec] )
 		// Root is special and must have
-		val initState = (GenSt(None, rootSeqNum, 1), initParentQ)
+
+		val initState = (GenSt(None, rootSeqNum, 1, 1, rootKidsCnt), initParentQ)
+		val noGenSt = GenSt(None, -100, -200, -300, -400)
+		// The size of each kid-block MAY be chosen dynamically in-stream.
+		// Setting this value here to illustrate computation BEFORE we enter stream context, which is just one way
+		val grandkidsPerRootkidCnt = rootKidsCnt - 1
+		// ZStream.iterate is necessarily infinite.
+		// If we want to allow for
 		val pairStrm: UStream[(GenSt, Queue[ParentRec])] = ZStream.iterate[(GenSt, Queue[ParentRec])](initState)(prevSt => {
 			val (prevGenSt, prevParQ) = prevSt
+			val prevLocIdx = prevGenSt.locIdx
+			val prevLevNum = prevGenSt.levelNum
+			val prevMaxKids = prevGenSt.maxKids
 			val nextAbsIdx = prevGenSt.absIdx + 1
+
 			val (nextGenSt, midParQ) = prevGenSt.parent_opt match {
 				case None => {
 					val (nextPRec, middleParentQ) = prevParQ.dequeue
-					val nextGenSt = GenSt(Some(nextPRec), nextAbsIdx, 1)
+					val nextGenSt = GenSt(Some(nextPRec), nextAbsIdx, 1, 2, grandkidsPerRootkidCnt)
 					(nextGenSt, middleParentQ)
 				}
-				case Some(pRec) => {
-					val prevLocIdx = prevGenSt.locIdx
-					if (prevLocIdx == pRec.numKids) {
-						val (nextPRec, mParQ) = prevParQ.dequeue
-						val nextGenSt = GenSt(Some(nextPRec), nextAbsIdx, 1)
-						(nextGenSt, mParQ)
+				case Some(prevParRec) => {
+					// prevParRec is the parent of the last bin emitted.  It should be same as LAST/NEWEST record in prevParQ
+					if (prevLocIdx >= prevParRec.numKids) {
+						// We are ending the prev sequence of siblings, selecting new parent, which may change level.
+						// This record will be the first kid of its parent, and first among a new set of siblings,
+						// who all hit the else-clause below, and there copy our values for levNum and maxKid.
+						val prevParOpt = prevParQ.dequeueOption // Get the next parent
+						prevParOpt match {
+							case Some((nextPRec, mParQ)) => {
+								val nxtParNumKids = nextPRec.numKids
+								if (nxtParNumKids > 0) {
+									val nxtLevNum = nextPRec.parLevelNum + 1
+									val nxtMaxKids = Math.max(nxtParNumKids - 3, 0)
+									// Here we may CHOOSE our own val for maxKids, and it will propagate thru our siblings.
+									val nextGenSt = GenSt(Some(nextPRec), nextAbsIdx, 1, nxtLevNum, nxtMaxKids)
+									(nextGenSt, mParQ)
+								} else {
+									// Parent says no kids so nothing to do here.
+									(noGenSt, mParQ)
+								}
+							}
+							case None => (noGenSt, emptyParentQ)
+						}
 					} else {
-						(GenSt(Some(pRec), nextAbsIdx, prevLocIdx + 1), prevParQ)
+						// 2nd and following siblings hit this clause.  We maintain status quo: same parent, etc.
+						// Currently we choose to continue with prevMaxKids, but we could vary it here.
+						(GenSt(Some(prevParRec), nextAbsIdx, prevLocIdx + 1, prevLevNum, prevMaxKids), prevParQ)
 					}
 				}
 			}
-			val ourParRec = ParentRec(nextGenSt.absIdx, fixedKidsPerParent)
-			val upParQ = midParQ.enqueue(ourParRec)
+			val chooseNumKidsHere = nextGenSt.maxKids // we could choose a value less than max here
+			val upParQ = if(chooseNumKidsHere > 0) {
+				val ourParRec = ParentRec(nextGenSt.absIdx, chooseNumKidsHere, nextGenSt.levelNum)
+				midParQ.enqueue(ourParRec)
+			} else midParQ
 			(nextGenSt, upParQ)
 		})
 		pairStrm.map(gqPair => {
 			val genSt = gqPair._1
+			val parentNum = genSt.parent_opt.fold(-1)(prec => prec.seqNum)
+			val levelNum = genSt.levelNum
+			val maxKids = genSt.maxKids
+			val numInfo = BinNumInfo(genSt.absIdx, parentNum, maxKids, levelNum, genSt.locIdx)
 			val chldTxt = genSt.absIdx.toString
 			val parTxt = genSt.parent_opt.fold("NO_PARENT")(prec => prec.seqNum.toString)
-			BinSeqInfo(chldTxt, parTxt)
+			val tagInfo = BinTagInfo(chldTxt, parTxt)
+			(tagInfo, numInfo)
 		})
 		/* Using an increment-digits-and-carry approach, can do a single pass to generate the levels numbers,
 		but would also need to weave in the parent-number memory.  Could make the posVec entries into tuples,
@@ -182,13 +220,13 @@ trait GenBinData extends KnowsBinItem {
 			val prevLast = prevPosVec.last
 			if (prevDepth > 1) {
 				// This is easier if we use mutab
-				val nextPosVec = if (prevLast == fixedKidsPerParent) {
-					val unfinishedDigits = prevPosVec.reverse.dropWhile(digit => digit == fixedKidsPerParent).reverse
+				val nextPosVec = if (prevLast == rootKidsCnt) {
+					val unfinishedDigits = prevPosVec.reverse.dropWhile(digit => digit == rootKidsCnt).reverse
 					val incompLen = unfinishedDigits.length
 					val nextDepth = if (incompLen == 1) prevDepth + 1 else prevDepth
 					// val moreDigits = Vector.fill[Int](nextDepth - incompLen)(1)
 
-					val lastUnfDig = unfinishedDigits.last // We know it is < fixedKidsPerParent
+					val lastUnfDig = unfinishedDigits.last // We know it is < rootKidsCnt
 					val incrLead = unfinishedDigits.updated(incompLen - 1, lastUnfDig + 1)
 					val nextVec = incrLead.padTo(nextDepth, 1)
 					nextVec

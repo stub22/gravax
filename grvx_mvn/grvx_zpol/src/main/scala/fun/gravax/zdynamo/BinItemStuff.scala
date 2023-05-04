@@ -77,10 +77,10 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 		timeInfo
 	}
 
-	def extractSeqInfo(itm: Item) : BinSeqInfo = {
+	def extractSeqInfo(itm: Item) : BinTagInfo = {
 		val binSeqNum =  fetchOrThrow[String](itm, FLDNM_BINSEQ)
 		val parentSeqNum =  fetchOrThrow[String](itm, FLDNM_PARENT_BINSEQ)
-		val seqInfo = BinSeqInfo(binSeqNum, parentSeqNum)
+		val seqInfo = BinTagInfo(binSeqNum, parentSeqNum)
 		seqInfo
 	}
 

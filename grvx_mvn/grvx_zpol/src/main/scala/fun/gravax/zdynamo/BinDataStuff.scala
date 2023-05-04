@@ -34,10 +34,10 @@ trait BinData extends NameScopeHmm {
 	def getObsTime : String
 	def getPredTime : String
 	def getCalcTime : String
-	def getBinSeqTxt : String
-	def getBinSeqInt : Int
-	def getParentBinSeqTxt : String
-	def getParentBinSeqInt : Int
+	def getBinTagTxt : String
+	def getBinNumInt : Int
+	def getParentTagTxt : String
+	def getParentNumInt : Int
 	def getBinFlavor : String // TODO: Make enum-ish
 	def getRelWt : BigDecimal
 	// def getAbsWt : BigDecimal
@@ -47,24 +47,30 @@ trait BinData extends NameScopeHmm {
 
 }
 
+
 case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
-case class BinSeqInfo(binSeq : String, parentBinSeq : String)
+case class BinTagInfo(binTag : String, parentTag : String) // levelNum, siblingNum
 case class BinMassInfo(binMass : BigDecimal, relWt : BigDecimal, absWt_opt : Option[BigDecimal] = None)
+
+// TODO: add these index numbers to persistent store?
+//
+case class BinNumInfo(binNum : Int, parentNum : Int, maxKids : Int, levelNum : Int, siblingNum : Int)
+
 
 // Seems we cannot use abstract types (of our self-type, or inherited) in constructor parameters.
 // If we make an outer trait scope then those names are available, or we can refer to members of an object.
 case class BinMeatInfo(binFlavor : String, meatMap : BinTypes.StatMap)
 
 
-case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinSeqInfo, massDat : BinMassInfo, meat : BinMeatInfo) extends BinData {
+case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, massDat : BinMassInfo, meat : BinMeatInfo) extends BinData {
 	override def getScenarioID: String = scenID
 	override def getObsTime: String = timeDat.obsTime
 	override def getPredTime: String = timeDat.predTime
 	override def getCalcTime: String = timeDat.calcTime
-	override def getBinSeqTxt: String = seqDat.binSeq
-	override def getBinSeqInt: Int = ???
-	override def getParentBinSeqTxt: String = seqDat.parentBinSeq
-	override def getParentBinSeqInt: Int = ???
+	override def getBinTagTxt: String = seqDat.binTag
+	override def getBinNumInt: Int = ???
+	override def getParentTagTxt: String = seqDat.parentTag
+	override def getParentNumInt: Int = ???
 	override def getMass: BigDecimal = massDat.binMass
 	override def getRelWt: BigDecimal = massDat.relWt
 	// override def getAbsWt: BigDecimal = massDat.absWt
@@ -98,7 +104,7 @@ case class BinNode(myDat : BinData, parent_opt : Option[BinNode], kids : Iterabl
 
 	def projectToDBD (orderedSyms : IndexedSeq[EntryKey]) : DBinDat = {
 		val projStatRow = projectStatRow(orderedSyms)
-		(myDat.getBinSeqInt, myDat.getRelWt, projStatRow)
+		(myDat.getBinNumInt, myDat.getRelWt, projStatRow)
 	}
 
 	// TODO:  We probably want to force all children to have subtrees of equal queryDepth.
