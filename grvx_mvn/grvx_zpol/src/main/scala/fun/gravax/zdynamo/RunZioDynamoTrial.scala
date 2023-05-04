@@ -18,8 +18,9 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		mkProgram.provide(localDB_layer)
 	}
 
+	lazy val bstore = new BinStoreApi {}
 	private def mkProgram = {
-		val bstore = new BinStoreApi {}
+
 		val dumStore = new StoreDummyItems {}
 		for {
 			_ <- bstore.maybeCreateBinTable
@@ -30,7 +31,17 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 			rrslt <- bstore.readBinData(secPK)
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 			_ <- bstore.maybeDeleteBinTable
+			_ <- dumpPairStrm
 		} yield ()
+	}
+
+	def dumpPairStrm  = {
+		val gbd = new GenBinData {
+			override val myTBI: ToBinItem = bstore.myTBI
+		}
+		val ps = gbd.seqPairStrm(500, 7).zipWithIndex.take(300)
+		val psOp = ps.debug.runCollect
+		psOp
 	}
 }
 

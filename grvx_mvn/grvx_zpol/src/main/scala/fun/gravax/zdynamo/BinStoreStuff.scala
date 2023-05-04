@@ -7,7 +7,7 @@ import scala.collection.immutable.{Map => SMap}
 
 private trait BinStoreStuff
 
-trait BinStoreApi extends KnowsBinItem {
+trait BinStoreApi extends KnowsBinItem { bsa =>
 	val binTblNm = "distro-bin"
 	val (flg_doCreate, flg_doDelete) = (false, false)
 
@@ -64,7 +64,7 @@ trait StoreDummyItems extends BinStoreApi {
 		val (scen, binFlav) = ("featherScen", BFLV_ANN_RET_MEAN_VAR)
 		val (timeObs, timePred, timeCalc) = ("20221209_21:30", "20231209_21:30", "20230105_14:18")
 		val (binSeqNum, parentBinSeqNum)  = ("002", "001")
-		val (binRelWeight, binAbsWeight, binMass) = (BigDecimal("0.32"), BigDecimal("0.0813"), BigDecimal("273"))
+		val (binMass, binRelWeight) = (BigDecimal("273"), BigDecimal("0.241")) //, BigDecimal("0.0813"), )
 
 		val qqqEntry : BinTypes.StatEntry = ("QQQ", BigDecimal("0.0772"), BigDecimal("0.0430"))
 		val spyEntry : BinTypes.StatEntry = ("SPY", BigDecimal("0.0613"), BigDecimal("0.0351"))
@@ -72,7 +72,7 @@ trait StoreDummyItems extends BinStoreApi {
 		val meatInfo = BinMeatInfo(binFlav, meatInfoMap)
 
 		val skelBinItem = myTBI.mkBinItemSkel(scen, timeObs, timePred, timeCalc)
-		val fleshyBI = myTBI.fleshOutBinItem(skelBinItem, binSeqNum, parentBinSeqNum, binRelWeight, binAbsWeight, binMass)
+		val fleshyBI = myTBI.fleshOutBinItem(skelBinItem, binSeqNum, parentBinSeqNum, binMass, binRelWeight) // , binAbsWeight, )
 
 		val meatyBI = myTBI.addMeatToBinItem(fleshyBI, meatInfo)
 		val fullBI = myTBI.fillBinSortKey(meatyBI)

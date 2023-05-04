@@ -87,8 +87,8 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 	def extractMassInfo(itm: Item) : BinMassInfo = {
 		val binMass = fetchOrThrow[BigDecimal](itm, FLDNM_BIN_MASS)
 		val relWt = fetchOrThrow[BigDecimal](itm, FLDNM_BIN_REL_WEIGHT)
-		val absWt = fetchOrThrow[BigDecimal](itm,	FLDNM_BIN_ABS_WEIGHT)
-		val massInfo = BinMassInfo(binMass, relWt, absWt)
+		// val absWt = fetchOrThrow[BigDecimal](itm,	FLDNM_BIN_ABS_WEIGHT)
+		val massInfo = BinMassInfo(binMass, relWt, None) // absWt)
 		massInfo
 	}
 
@@ -122,6 +122,7 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 
 
 trait ToBinItem extends ToItem with KnowsBinItem {
+	def mkBinItemSkel(scen : String, timeInfo : BinTimeInfo) : Item = mkBinItemSkel(scen, timeInfo.obsTime, timeInfo.predTime, timeInfo.calcTime)
 	def mkBinItemSkel(scen : String, timeObs : String, timePred : String, timeCalc : String) : Item = {
 		Item(
 			FLDNM_SCEN 		-> 	scen,
@@ -131,13 +132,14 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 		)
 	}
 	def fleshOutBinItem(binWithSceneAndTimes : Item, binSeqNum : String, parentBinSeqNum : String,
-						binRelWeight : BigDecimal, binAbsWeight : BigDecimal, binMass : BigDecimal): Item = {
+						binMass : BigDecimal, binRelWeight : BigDecimal): Item = {   // binAbsWeight : BigDecimal
 		val addMap = Map[String, AttributeValue](
 			FLDNM_BINSEQ -> AttributeValue(binSeqNum),
 			FLDNM_PARENT_BINSEQ -> AttributeValue(parentBinSeqNum),
-			FLDNM_BIN_REL_WEIGHT -> AttributeValue(binRelWeight),
-			FLDNM_BIN_ABS_WEIGHT -> AttributeValue(binAbsWeight),
-			FLDNM_BIN_MASS -> AttributeValue(binMass)
+			FLDNM_BIN_MASS -> AttributeValue(binMass),
+			FLDNM_BIN_REL_WEIGHT -> AttributeValue(binRelWeight)
+			// FLDNM_BIN_ABS_WEIGHT -> AttributeValue(binAbsWeight),
+
 		)
 		val comboMap = binWithSceneAndTimes.map ++ addMap
 		val comboItem = Item(comboMap)
