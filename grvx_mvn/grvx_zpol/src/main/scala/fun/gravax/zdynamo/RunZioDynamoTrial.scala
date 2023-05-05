@@ -1,7 +1,8 @@
 package fun.gravax.zdynamo
 
 import zio.dynamodb.{AttributeValue, DynamoDBError, Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
-import zio.{Chunk, Console, RIO, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, dynamodb => ZDyn, Random => ZRandom}
+import zio.stream.{UStream, ZStream}
+import zio.{Chunk, Console, RIO, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom, dynamodb => ZDyn}
 
 import java.math.{MathContext, RoundingMode}
 
@@ -32,9 +33,11 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 			secPK <- dumStore.putFeatherDBI
 			rrslt <- bstore.readBinData(secPK)
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
-			_ <- bstore.maybeDeleteBinTable
+
 			_ <- dumpTagInfoStrm
 			_ <- simPyramid
+
+			_ <- bstore.maybeDeleteBinTable
 		} yield ()
 	}
 	lazy val gbd = new GenBinData {
@@ -47,17 +50,22 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		psOp
 	}
 
-	def simPyramid : UIO[Unit] = {
+	def simPyramid : RIO[ZDynDBExec, Option[Item]] = {
 		val precision = 8
 		val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
 		val massyMeatStrm = gbd.mkMassyMeatStrm(ZRandom.RandomLive,mathCtx)
 		val rootKidsCnt = 7
 		val baseBinLevel = 4
-		val scenID = "Unused Scened ID"
+		val scenID = "gaussnoizAAA"
 		val timeInf = BinTimeInfo("NOPE", "TIMELESS", "NAK")
 		val storCmdStream = gbd.genRandBinBaseLevel(bstore.binTblNm, scenID, timeInf)(massyMeatStrm, rootKidsCnt, baseBinLevel)
-		val looped: UIO[Unit] = storCmdStream.foreach(cmdRow => ZIO.log(s"cmdRow: ${cmdRow}"))
-		looped
+		val dumpOnlyZIO: UIO[Unit] = storCmdStream.foreach(cmdRow => ZIO.log(s"cmdRow: ${cmdRow}"))
+		val cmdStream: UStream[RIO[ZDynDBExec, Option[Item]]] = storCmdStream.debug.map(cmdRow => cmdRow._4)
+		// TODO:  Gather result values into a list by flatmapping the cmd
+		val emptyInit : Option[Item] = None
+		val oneBigStorageOp: RIO[ZDynDBExec, Option[Item]] = cmdStream.runFoldZIO(emptyInit)((optItm, cmd) => cmd)
+		oneBigStorageOp
+		// dumpOnlyZIO
 	}
 }
 
