@@ -52,10 +52,12 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
 		val massyMeatStrm = gbd.mkMassyMeatStrm(ZRandom.RandomLive,mathCtx)
 		val rootKidsCnt = 7
-		val unusedNumLevels = 10
+		val baseBinLevel = 4
 		val scenID = "Unused Scened ID"
 		val timeInf = BinTimeInfo("NOPE", "TIMELESS", "NAK")
-		gbd.storeBinPyramid(scenID, timeInf)(massyMeatStrm, rootKidsCnt, unusedNumLevels)
+		val storCmdStream = gbd.genRandBinBaseLevel(bstore.binTblNm, scenID, timeInf)(massyMeatStrm, rootKidsCnt, baseBinLevel)
+		val looped: UIO[Unit] = storCmdStream.foreach(cmdRow => ZIO.log(s"cmdRow: ${cmdRow}"))
+		looped
 	}
 }
 

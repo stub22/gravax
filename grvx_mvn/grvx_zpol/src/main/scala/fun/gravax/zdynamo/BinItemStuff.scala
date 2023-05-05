@@ -21,8 +21,8 @@ trait KnowsBinItem {
 	val FLDNM_TIME_OBS = "time-obs"		// Time of the last observation the prediction is based on, e.g. last price quote.
 	val FLDNM_TIME_CALC = "time-calc"	// Time the prediction was calculated.
 	val FLDNM_TIME_PRED = "time-pred"		// Time of the predicted future observation, e.g. asset return time horizon.
-	val FLDNM_BINSEQ = "bin-seq"
-	val FLDNM_PARENT_BINSEQ = "parent-bin-seq"
+	val FLDNM_BIN_TAG = "bin-tag"
+	val FLDNM_PARENT_TAG = "parent-bin-tag"
 
 	val FLDNM_BIN_REL_WEIGHT = "bin-rel-weight" // What is our mass's fraction of the parent bin mass?
 	val FLDNM_BIN_ABS_WEIGHT = "bin-abs-weight" // What is our mass's fraction of the root bin mass? (optional)
@@ -41,7 +41,7 @@ trait KnowsBinItem {
 	val SUBFLDNM_VAR = "var"
 
 	val KEYNM_SORT_BIN = "sort-key"		// Some string-concat of the above times.  Could be scenario specific!
-	val FLDSEQ_SORT_BIN = List(FLDNM_TIME_OBS, FLDNM_TIME_PRED, FLDNM_TIME_CALC, FLDNM_BINSEQ)
+	val FLDSEQ_SORT_BIN = List(FLDNM_TIME_OBS, FLDNM_TIME_PRED, FLDNM_TIME_CALC, FLDNM_BIN_TAG)
 	val binKeySchm = ZDyn.KeySchema(FLDNM_SCEN, KEYNM_SORT_BIN)  // partition-key, sort-key
 
 	// It seems we only need AttributeDefinitions for attributes that are used in keys ... or indices?
@@ -78,8 +78,8 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 	}
 
 	def extractSeqInfo(itm: Item) : BinTagInfo = {
-		val binSeqNum =  fetchOrThrow[String](itm, FLDNM_BINSEQ)
-		val parentSeqNum =  fetchOrThrow[String](itm, FLDNM_PARENT_BINSEQ)
+		val binSeqNum =  fetchOrThrow[String](itm, FLDNM_BIN_TAG)
+		val parentSeqNum =  fetchOrThrow[String](itm, FLDNM_PARENT_TAG)
 		val seqInfo = BinTagInfo(binSeqNum, parentSeqNum)
 		seqInfo
 	}
@@ -88,7 +88,7 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 		val binMass = fetchOrThrow[BigDecimal](itm, FLDNM_BIN_MASS)
 		val relWt = fetchOrThrow[BigDecimal](itm, FLDNM_BIN_REL_WEIGHT)
 		// val absWt = fetchOrThrow[BigDecimal](itm,	FLDNM_BIN_ABS_WEIGHT)
-		val massInfo = BinMassInfo(binMass, relWt, None) // absWt)
+		val massInfo = BinMassInfo(binMass, Some(relWt), None) // absWt)
 		massInfo
 	}
 
@@ -122,6 +122,8 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 
 
 trait ToBinItem extends ToItem with KnowsBinItem {
+	override type FIType = FromBinItem
+	def getFBI : FromBinItem = myFromItem
 	def mkBinItemSkel(scen : String, timeInfo : BinTimeInfo) : Item = mkBinItemSkel(scen, timeInfo.obsTime, timeInfo.predTime, timeInfo.calcTime)
 	def mkBinItemSkel(scen : String, timeObs : String, timePred : String, timeCalc : String) : Item = {
 		Item(
@@ -131,11 +133,16 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 			FLDNM_TIME_CALC -> 	timeCalc
 		)
 	}
+	def combineMapWithItem(partialItem : Item, addMap : SMap[String, AttributeValue]) : Item = {
+		val comboMap = partialItem.map ++ addMap
+		val comboItem = Item(comboMap)
+		comboItem
+	}
 	def fleshOutBinItem(binWithSceneAndTimes : Item, binSeqNum : String, parentBinSeqNum : String,
 						binMass : BigDecimal, binRelWeight : BigDecimal): Item = {   // binAbsWeight : BigDecimal
-		val addMap = Map[String, AttributeValue](
-			FLDNM_BINSEQ -> AttributeValue(binSeqNum),
-			FLDNM_PARENT_BINSEQ -> AttributeValue(parentBinSeqNum),
+		val addMap = SMap[String, AttributeValue](
+			FLDNM_BIN_TAG -> AttributeValue(binSeqNum),
+			FLDNM_PARENT_TAG -> AttributeValue(parentBinSeqNum),
 			FLDNM_BIN_MASS -> AttributeValue(binMass),
 			FLDNM_BIN_REL_WEIGHT -> AttributeValue(binRelWeight)
 			// FLDNM_BIN_ABS_WEIGHT -> AttributeValue(binAbsWeight),
@@ -149,7 +156,22 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 	// We could encode it as an inner Map (clearer, more robust) or List (more compact in storage, so far is broken)
 	def statEntryToList(stent : BinTypes.StatEntry): List[BigDecimal] = List(stent._2, stent._3)
 	def statEntryToMap(stent : BinTypes.StatEntry): Map[String, BigDecimal] = Map(SUBFLDNM_MEAN -> stent._2, SUBFLDNM_VAR -> stent._3)
-	def addMeatToBinItem(bin : Item, meatInfo : BinMeatInfo) : Item = {
+
+	def addTagsToBinItem(partialBin : Item, tagInfo : BinTagInfo) : Item = {
+		val addMap = SMap[String, AttributeValue](
+			FLDNM_BIN_TAG -> AttributeValue(tagInfo.binTag),
+			FLDNM_PARENT_TAG -> AttributeValue(tagInfo.parentTag)
+		)
+		combineMapWithItem(partialBin, addMap)
+	}
+
+	def addMassToBinItem(partialBin : Item, binMass : BigDecimal) : Item = {
+		val addMap = Map[String, AttributeValue](
+			FLDNM_BIN_MASS -> AttributeValue(binMass))
+		combineMapWithItem(partialBin, addMap)
+	}
+
+	def addMeatToBinItem(partialBin : Item, meatInfo : BinMeatInfo) : Item = {
 		val mmap: BinTypes.StatMap = meatInfo.meatMap
 		val mmWithLists_opt : Option[SMap[BinTypes.EntryKey, List[BigDecimal]]] = if (false) {
 			// {"QQQ":{"L":[{"N":"0.0772"},{"N":"0.0430"}]},"SPY":{"L":[{"N":"0.0613"},{"N":"0.0351"}]}}
@@ -168,9 +190,7 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 		//	FLDNM_MEAT_MAP -> AttributeValue(mmWithLists),
 			FLDNM_DOBLE_MAP -> AttributeValue(mmWithMaps))
 
-		val comboMap = bin.map ++ addMap
-		val comboItem = Item(comboMap)
-		comboItem
+		combineMapWithItem(partialBin, addMap)
 	}
 	def fillBinSortKey(partBinItem : Item) : Item = fillSortKey(partBinItem, KEYNM_SORT_BIN, FLDSEQ_SORT_BIN, "#")
 }
@@ -180,7 +200,7 @@ trait DummyItemMaker extends KnowsBinItem {
 
 	protected val myFBI : FromBinItem = new FromBinItem {}
 	protected val myTBI : ToBinItem = new ToBinItem{
-		override protected val myFromItem: FromItem = myFBI
+		override protected val myFromItem = myFBI
 	}
 
 	val scn_messy = "messy_01"
@@ -221,8 +241,8 @@ trait DummyItemMaker extends KnowsBinItem {
 			FLDNM_TIME_OBS ->	"20221117_21:30",
 			FLDNM_TIME_PRED -> "20231117_21:30",
 			FLDNM_TIME_CALC -> "20221118_14:22",
-			FLDNM_BINSEQ -> "001",
-			FLDNM_PARENT_BINSEQ -> "-1",
+			FLDNM_BIN_TAG -> "001",
+			FLDNM_PARENT_TAG -> "-1",
 			FLDNM_BIN_FLAVOR -> BFLV_ANN_RET_MEAN_VAR,  // Should this point directly to the value-map field?
 			FLDNM_BIN_REL_WEIGHT -> BigDecimal("0.222"),
 			FLDNM_BIN_ABS_WEIGHT -> BigDecimal("0.101"),

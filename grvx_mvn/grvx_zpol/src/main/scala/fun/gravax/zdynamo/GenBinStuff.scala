@@ -1,11 +1,13 @@
 package fun.gravax.zdynamo
 
 
-import zio.{Chunk, UIO, ZIO, Random => ZRandom}
+import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
+import zio.{Chunk, RIO, UIO, ZIO, Random => ZRandom}
 import zio.stream.{UStream, ZStream}
 
 import java.math.{MathContext, RoundingMode}
 import scala.collection.immutable.{Queue, Map => SMap}
+import scala.math.BigDecimal
 
 private trait GenBinStuff
 
@@ -103,18 +105,44 @@ trait GenBinData extends KnowsBinItem {
 		massyMeatStrm
 	}
 
+	type BaseBinSpec = (BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))
+
+
 	// Absolute-weight field is the sticking point.  We need to know the total mass (of the distribution, == sum of all leaf bins)
 	// before we write the first bin to DB.  Otherwise we have to make a second pass to store absWeight.
 	// Believe we have not yet written any app code that uses absolute weight.
 	// 2023-05-03 :  AbsoluteWeight is disabled until further notice.
-	def storeBinPyramid(scenID : String, timeInf : BinTimeInfo)(mmStrm : UStream[(BigDecimal, BinMeatInfo)], rootKidCnt : Int, fixedNumLevels : Int) : UIO[Unit] = {
-		val skelBintem = myTBI.mkBinItemSkel(scenID, timeInf)
+	def genRandBinBaseLevel(tblNm : String, scenID : String, timeInf : BinTimeInfo)(mmStrm : UStream[(BigDecimal, BinMeatInfo)], rootKidCnt : Int, baseLevelNum : Int) : UStream[(BaseBinSpec, Item, PrimaryKey, RIO[ZDynDBExec, Option[Item]])]  = {
+		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
 
 		val rootSeqNum = 400
 		val seqInfoStrm = genTagInfoStrm(rootSeqNum, rootKidCnt)
-		val zippy: UStream[(BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))] = seqInfoStrm.zip(mmStrm)
-		zippy.debug("DEBUG says we need to store: ").foreach(x => ZIO.log(s"Foreach got: ${x}"))
+		val baseLevSeqInfStrm = seqInfoStrm.filter(pair => pair._2.levelNum == baseLevelNum)
+		val zippy: UStream[(BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))] = baseLevSeqInfStrm.zip(mmStrm)
+
+		val binLevelStoreTupStrm: UStream[(BaseBinSpec, Item, PrimaryKey, RIO[ZDynDBExec, Option[Item]])] = zippy.map(row => {
+			val (tagInfo, numInfo, (binMass, binMeat)) = row
+			val baseBinItem = buildBaseBinItem(skelBintem, tagInfo, numInfo, binMass, binMeat)
+			val ourPK: PrimaryKey = myTBI.getFBI.getPKfromFullBinItem(baseBinItem)
+			val putDynQry: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(tblNm, baseBinItem)
+			val putDynZIO: RIO[ZDynDBExec,Option[Item]] = putDynQry.execute
+			(row, baseBinItem, ourPK, putDynZIO)
+		})
+		binLevelStoreTupStrm
+		//	.debug("(DEBUG) preparing to store: ")
+		//  }) //.foreach(x => ZIO.log(s"Foreach got: ${x}"))
 	}
+	def buildBaseBinItem(skelBinItem : Item, tagInfo: BinTagInfo, numInfo: BinNumInfo, binMass : BigDecimal, binMeat : BinMeatInfo) : Item = {
+		val binItemWithTags = myTBI.addTagsToBinItem(skelBinItem, tagInfo)
+		val binItemWithMass = myTBI.addMassToBinItem(binItemWithTags, binMass)
+		val binItemWithMeat = myTBI.addMeatToBinItem(binItemWithMass, binMeat)
+
+		val fullBI = myTBI.fillBinSortKey(binItemWithMeat)
+		fullBI
+	}
+
+
+	// def storeOneBin(scenID : String, timeInf : BinTimeInfo, BinTagInfo, BinNumInfo, BigDecimal, BinMeatInfo)
 
 	// def nextDigitVec(prevDigitVec : Vector[Int], minDigitIncl : Int, maxDigitIncl : Int) : Vector[Int] = {
 

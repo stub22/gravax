@@ -50,7 +50,7 @@ trait BinData extends NameScopeHmm {
 
 case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
 case class BinTagInfo(binTag : String, parentTag : String) // levelNum, siblingNum
-case class BinMassInfo(binMass : BigDecimal, relWt : BigDecimal, absWt_opt : Option[BigDecimal] = None)
+case class BinMassInfo(binMass : BigDecimal, relWt_opt : Option[BigDecimal], absWt_opt : Option[BigDecimal] = None)
 
 // TODO: add these index numbers to persistent store?
 //
@@ -72,7 +72,7 @@ case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo
 	override def getParentTagTxt: String = seqDat.parentTag
 	override def getParentNumInt: Int = ???
 	override def getMass: BigDecimal = massDat.binMass
-	override def getRelWt: BigDecimal = massDat.relWt
+	override def getRelWt: BigDecimal = massDat.relWt_opt.get
 	// override def getAbsWt: BigDecimal = massDat.absWt
 	override def getBinFlavor: String = meat.binFlavor
 	override def getStatMap: StatMap = meat.meatMap

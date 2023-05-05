@@ -12,10 +12,18 @@ trait FromItem {
 			case Right(fVal) => fVal
 		}
 	}
+	def fetchOptional[FVT](itm : Item, fldNm : String)(implicit ev : zio.dynamodb.FromAttributeValue[FVT]) : Option[FVT] = {
+		val fv_eith: Either[Nothing, Option[FVT]] = itm.getOptional[FVT](fldNm)
+		fv_eith match {
+			case Left(nothingHmm) => throw new Exception(s"Got exception fetching optional value at fldNm=${fldNm}. fv_eith=${fv_eith}")
+			case Right(fVal_opt) => fVal_opt
+		}
+	}
 }
 
 trait ToItem {
-	protected val myFromItem : FromItem
+	type FIType <: FromItem
+	protected val myFromItem : FIType
 	// Will throw if any parts of the sort-key are not found in the partItm.
 	def fillSortKey(partItm : Item, fn_sortKey : String, fns_sortKeyParts : Seq[String], separator : String) : Item = {
 		// Assumes that sort-key part-values are all Strings.

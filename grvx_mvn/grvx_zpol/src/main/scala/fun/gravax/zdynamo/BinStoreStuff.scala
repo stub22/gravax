@@ -13,7 +13,7 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 
 	val myFBI = new FromBinItem {}
 	val myTBI = new ToBinItem {
-		override protected val myFromItem: FromItem = myFBI
+		override protected val myFromItem = myFBI
 	}
 	val myDIM = new DummyItemMaker {}
 
@@ -79,6 +79,7 @@ trait StoreDummyItems extends BinStoreApi {
 		val ourPK: PrimaryKey = myFBI.getPKfromFullBinItem(fullBI)
 		putAndLog(binTblNm, fullBI).map(_ => ourPK)
 	}
+
 
 	def readThatDummyBinYo() : RIO[ZDynDBExec, Unit] = {
 		val dummyPK = myFBI.getPKfromFullBinItem(myDummyBinItem)
