@@ -1,7 +1,7 @@
 package fun.gravax.zdynamo
 
-import fun.gravax.zdynamo.RunZioDynamoTrial.gbd
-import zio.dynamodb.{AttributeValue, DynamoDBError, Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
+
+import zio.dynamodb.{ DynamoDBExecutor => ZDynDBExec}
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, Console, RIO, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom, dynamodb => ZDyn}
 
@@ -37,8 +37,6 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 
 			// _ <- dumpTagInfoStrm
-			// _ <- OLDE_simPyramid
-
 			baseRslt <- genBaseSqnc
 
 			_ <- bstore.maybeDeleteBinTable
@@ -47,28 +45,33 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 	lazy val gbd = new GenBinData {
 		override val myTBI: ToBinItem = bstore.myTBI
 	}
+	lazy val gmmd = new GenMeatAndMassData {}
+	lazy val gtnd = new GenTagNumData {}
 
-	def genBaseSqnc: RIO[ZDynDBExec, (gbd.BinTagNumBlock, Chunk[gbd.BaseGenRsltRec])]   = {
+	def genBaseSqnc: RIO[ZDynDBExec, (gtnd.BinTagNumBlock, Chunk[gbd.BaseGenRsltRec])]   = {
 		val rootTagNum = 1200
 		val rootKidsCnt = 7
 		val baseBinLevel = 4
 		val massyMeatStrm = mkMassyMeatStrm
-		val baseGenOp: RIO[ZDynDBExec, (gbd.BinTagNumBlock, Chunk[gbd.BaseGenRsltRec])] = for {
-			bntgnmBlk <- gbd.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
+		val baseGenOp: RIO[ZDynDBExec, (gtnd.BinTagNumBlock, Chunk[gbd.BaseGenRsltRec])] = for {
+			bntgnmBlk <- gtnd.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
 			_ <- ZIO.log(s"genBaseSqnc .genBinTagNumBlock produced: ${bntgnmBlk.describe}")
 			binSpecStrm <- ZIO.succeed(gbd.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
 			binStoreCmdStrm <- ZIO.succeed(mkBaseLevCmds(binSpecStrm))
 			levStoreRslt <- compileBaseLevelStoreOp(binStoreCmdStrm)
-			_ <- ZIO.log(s"Got levStoreRslt: ${levStoreRslt}")
+			_ <- ZIO.log(s"Got levStoreRslt: ${levStoreRslt.toString().substring(0,200)} [TRUNCATED]")
 		} yield(bntgnmBlk, levStoreRslt)
 		baseGenOp
 	}
+
+	def fixRelativeWeights = ???
+	def storeVirtualLevel = ???
 
 
 	def mkMassyMeatStrm = {
 		val precision = 8
 		val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
-		val massyMeatStrm = gbd.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)
+		val massyMeatStrm = gmmd.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)
 		massyMeatStrm
 	}
 	def mkBaseLevCmds(baseBinSpecStrm : UStream[gbd.BaseBinSpec]) : UStream[gbd.BaseBinStoreCmdRow] = {
@@ -76,6 +79,8 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		val timeInf = BinTimeInfo("NOPED", "TIMELESS", "NAKK")
 		gbd.makeBaseBinStoreCmds(bstore.binTblNm, scenID, timeInf)(baseBinSpecStrm)
 	}
+
+	// To process a Stream-of-ZIO we can use mapZIO, or more awkwardly runFoldZIO.
 	def compileBaseLevelStoreOp(storeCmdStrm : UStream[gbd.BaseBinStoreCmdRow]) : RIO[ZDynDBExec, Chunk[gbd.BaseGenRsltRec]] = {
 		val wovenCmdStream: ZStream[ZDynDBExec, Throwable, gbd.BaseGenRsltRec] = storeCmdStrm.mapZIO(cmdRow => {
 			val (binSpec, binItem, binPK, binCmd) = cmdRow
@@ -86,37 +91,14 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		chnky
 	}
 
+	// standalone test runner for just the tagNum generator step
 	def dumpTagInfoStrm  = {
-		val ps = gbd.genTagInfoStrm(500, 7).zipWithIndex.take(300)
+		val ps = gtnd.genTagInfoStrm(500, 7).zipWithIndex.take(300)
 		val psOp = ps.debug.runCollect
 		psOp
 	}
 
-	def OLDE_simPyramid : RIO[ZDynDBExec, Option[Item]] = {
-		val massyMeatStrm = mkMassyMeatStrm
-		val rootKidsCnt = 7
-		val baseBinLevel = 4
-		val scenID = "gaussnoizAAA"
-		val timeInf = BinTimeInfo("NOPE", "TIMELESS", "NAK")
-		val storCmdStream : UStream[gbd.BaseBinStoreCmdRow] = gbd.OLDE_genRandBinBaseLevel(bstore.binTblNm, scenID, timeInf)(massyMeatStrm, rootKidsCnt, baseBinLevel)
-		val dumpOnlyZIO: UIO[Unit] = storCmdStream.foreach(cmdRow => ZIO.log(s"cmdRow: ${cmdRow}"))
-		val cmdStream: UStream[RIO[ZDynDBExec, Option[Item]]] = storCmdStream.debug.map(cmdRow => cmdRow._4)
-		// To process the Stream-of-ZIO we can use mapZIO, or runFoldZIO.  Latter q&d works but result is useless.
-		// Could gather result values into a list by flatmapping the cmd
-		// This experiment worked, but ZStream.mapZIO fits better, gets us back to a regular stream.
-		val emptyInit : Option[Item] = None
-		val oneBigStorageOp: RIO[ZDynDBExec, Option[Item]] = cmdStream.runFoldZIO(emptyInit)((optItm, cmd) => cmd)
-		val zeroBD = BigDecimal("0.0")
-		val emptyMassTally = SMap[String, BigDecimal]()
-		// val recs = enhCmdStrm.runFold(emptyMassTally)((massTally, rsltRow) =>
-		oneBigStorageOp
-		// dumpOnlyZIO
-	}
 }
-
-
-
-
 
 
 
