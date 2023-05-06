@@ -2,7 +2,7 @@ package fun.gravax.zdynamo
 
 
 import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
-import zio.{Chunk, RIO, UIO, ZIO, Random => ZRandom}
+import zio.{Chunk, NonEmptyChunk, RIO, UIO, ZIO, Random => ZRandom}
 import zio.stream.{UStream, ZStream}
 
 import java.math.{MathContext, RoundingMode}
@@ -104,34 +104,103 @@ trait GenBinData extends KnowsBinItem {
 		})
 		massyMeatStrm
 	}
+	type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
 
-	type BaseBinSpec = (BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))
+	// This job should be pure and deterministic, always producing the same (potentially large) result.
+	// (assuming that genTagInfoStrm is pure+deterministic).
+	// We need to capture that whole result as a single output step to ensure consistency of all the parent-tag-links
+	// between bins.
+	def genTagNumChunksForAllLevels(rootSeqNum : Int,  rootKidCnt : Int, maxLevels : Int): UIO[Chunk[(Int, LevelTagNumChnk)]] = {
+		val seqInfoStrm: UStream[(BinTagInfo, BinNumInfo)] = genTagInfoStrm(rootSeqNum, rootKidCnt)
+		val chnksByLevStrm: UStream[(Int, LevelTagNumChnk)] = seqInfoStrm.groupAdjacentBy(infoPair => infoPair._2.levelNum)
+		// runCollect collects ALL items from the input, so we truncate the input first.
+		chnksByLevStrm.take(maxLevels).runCollect
+	}
+	// Reified as a case class because this is a useful boundary from design perspective.
+	// We separate the baseLevel because it is semantically distinct, it is used for independent bin data.
+	// The virtLevels are for derived data.  However these levels are all represented using the same tag-key structures,
+	// so we COULD instead treat all the levels in this BinTagNumBlock as "the same".  In our generative use case,
+	// they are all snapped out of a common stream of nums.  If we were accepting "real" base-bin info, we probably
+	// would get the base-bin data standalone, (perhaps then do some clustering on it), and then build the virtLevels
+	// tree structure in a more incremental fashion.  We want all this code to care as little as possible which
+	// of those scenarios we are in.
+	case class BinTagNumBlock(baseLevel : LevelTagNumChnk, virtLevels : Chunk[(Int, LevelTagNumChnk)]) {
+		def describe : String = {
+			val virtLevelsSizes = virtLevels.map(levPair => (levPair._1, levPair._2.size))
+			s"BinTagNumBlock baseLevel.count=${baseLevel.size}, virtLevels.count=${virtLevels.size}, innerSizes=${virtLevelsSizes}"
+		}
+	}
+	// Pure-data generated based on rules.  These tuples are used as stream records that do not need as much concreteness.
+	// type BaseMassyMeatRow = (BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))
+
+	type BaseBinSpec = (BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo)) // Final agg of pure-data based on gen-rules
+	type BaseBinStoreCmdRow = (BaseBinSpec, Item, PrimaryKey, RIO[ZDynDBExec, Option[Item]])
+	type BaseGenRsltRec = (BaseBinSpec, PrimaryKey, Option[Item])
+
+	// Our resulting op is currently pure and deterministic (no Random nums).
+	// But if someone changed the impl of genTagNumChunksForAllLevels...
+	def genBinTagNumBlock(rootSeqNum : Int,  rootKidCnt : Int, baseLevel : Int): UIO[BinTagNumBlock] = {
+		val taggyLevelChunkOp : UIO[Chunk[(Int, LevelTagNumChnk)]] = genTagNumChunksForAllLevels(rootSeqNum, rootKidCnt, baseLevel)
+
+		val levelTuplesOp = taggyLevelChunkOp.map(outerChnk => {
+			// We know based on how seqInfoStrm works that these inner pairs should happen to be in level-number order.
+			// (Would like that to be conveyed by the type:  Sorted)
+			// However, for more generality we avoid that assumption here.
+			val ochnk: Chunk[(Int, NonEmptyChunk[(BinTagInfo, BinNumInfo)])] = outerChnk
+			val frontPairs: Chunk[(Int, NonEmptyChunk[(BinTagInfo, BinNumInfo)])] = ochnk.filter(kvEnt => kvEnt._1 < baseLevel).sortBy(kvEnt => kvEnt._1)
+			val baseChunk: NonEmptyChunk[(BinTagInfo, BinNumInfo)] = ochnk.filter(kvEnt => kvEnt._1 == baseLevel).head._2
+			(baseChunk, frontPairs)
+		})
+		val bntgnmBlkOp: UIO[BinTagNumBlock] = levelTuplesOp.map(tuple => BinTagNumBlock(tuple._1, tuple._2))
+		bntgnmBlkOp
+	}
+
+	// def genGutsAndStoreCmds(tblNm : String, scenID : String, timeInf : BinTimeInfo)(baseTagNumChunk : NonEmptyChunk[(BinTagInfo, BinNumInfo)]) = {
+	//	val bbsStrm = joinMassyMeatRows(baseTagNumChunk)
+	// }
+
+	// Combine the finite tree structure of the tagNumChnk (known number of records) with the stream of bin data (often random).
+	// Presume that mmStrm.size >= baseTagNumChunk.size.
+	def joinMassyMeatRows(baseTagNumChunk : NonEmptyChunk[(BinTagInfo, BinNumInfo)], mmStrm : UStream[(BigDecimal, BinMeatInfo)]) : UStream[BaseBinSpec] = {
+		val btnStrm = ZStream.fromChunk(baseTagNumChunk)
+		btnStrm.zip(mmStrm)
+	}
 
 
 	// Absolute-weight field is the sticking point.  We need to know the total mass (of the distribution, == sum of all leaf bins)
 	// before we write the first bin to DB.  Otherwise we have to make a second pass to store absWeight.
-	// Believe we have not yet written any app code that uses absolute weight.
+	// We have not yet written any app code that uses absolute weight.
 	// 2023-05-03 :  AbsoluteWeight is disabled until further notice.
-	def genRandBinBaseLevel(tblNm : String, scenID : String, timeInf : BinTimeInfo)(mmStrm : UStream[(BigDecimal, BinMeatInfo)], rootKidCnt : Int, baseLevelNum : Int) : UStream[(BaseBinSpec, Item, PrimaryKey, RIO[ZDynDBExec, Option[Item]])]  = {
-		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
+	def OLDE_genRandBinBaseLevel(tblNm : String, scenID : String, timeInf : BinTimeInfo)(mmStrm : UStream[(BigDecimal, BinMeatInfo)], rootKidCnt : Int, baseLevelNum : Int) : UStream[BaseBinStoreCmdRow]  = {
 
 		val rootSeqNum = 400
-		val seqInfoStrm = genTagInfoStrm(rootSeqNum, rootKidCnt)
+		// This numbering stream contains all levels of our expected structure.  It *could* be nondeterministic,
+		// in which case we can't rely on any ability to run it multiple times (which would give different answers)
+		// for the same scenario.  Rather we must capture all the useful/important parts of stream on the first(/only) run.
+		// Further streaming operations must then be built using those captured results.
+		val seqInfoStrm: UStream[(BinTagInfo, BinNumInfo)] = genTagInfoStrm(rootSeqNum, rootKidCnt)
 		val baseLevSeqInfStrm = seqInfoStrm.filter(pair => pair._2.levelNum == baseLevelNum)
-		val zippy: UStream[(BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))] = baseLevSeqInfStrm.zip(mmStrm)
+		val baseMassyMeatStrm: UStream[BaseBinSpec] = baseLevSeqInfStrm.zip(mmStrm)
+		makeBaseBinStoreCmds(tblNm, scenID, timeInf)(baseMassyMeatStrm)
+	}
 
-		val binLevelStoreTupStrm: UStream[(BaseBinSpec, Item, PrimaryKey, RIO[ZDynDBExec, Option[Item]])] = zippy.map(row => {
-			val (tagInfo, numInfo, (binMass, binMeat)) = row
+	def makeBaseBinStoreCmds(tblNm : String, scenID : String, timeInf : BinTimeInfo)(baseBinSpecStrm : UStream[BaseBinSpec]) : UStream[BaseBinStoreCmdRow] = {
+		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
+		val binLevelStoreTupStrm: UStream[BaseBinStoreCmdRow] = baseBinSpecStrm.map(mmRow => {
+			val (tagInfo, numInfo, (binMass, binMeat)) = mmRow
 			val baseBinItem = buildBaseBinItem(skelBintem, tagInfo, numInfo, binMass, binMeat)
 			val ourPK: PrimaryKey = myTBI.getFBI.getPKfromFullBinItem(baseBinItem)
 			val putDynQry: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(tblNm, baseBinItem)
 			val putDynZIO: RIO[ZDynDBExec,Option[Item]] = putDynQry.execute
-			(row, baseBinItem, ourPK, putDynZIO)
+			(mmRow, baseBinItem, ourPK, putDynZIO)
 		})
 		binLevelStoreTupStrm
 		//	.debug("(DEBUG) preparing to store: ")
 		//  }) //.foreach(x => ZIO.log(s"Foreach got: ${x}"))
 	}
+
+	// numInfo is not used currently.  binMass is passed as bare scalar, since we don't have any rel-weights yet.
+	// Would be OK and more general to pass binMassInfo with None in the relWeight_opt.
 	def buildBaseBinItem(skelBinItem : Item, tagInfo: BinTagInfo, numInfo: BinNumInfo, binMass : BigDecimal, binMeat : BinMeatInfo) : Item = {
 		val binItemWithTags = myTBI.addTagsToBinItem(skelBinItem, tagInfo)
 		val binItemWithMass = myTBI.addMassToBinItem(binItemWithTags, binMass)
@@ -146,7 +215,9 @@ trait GenBinData extends KnowsBinItem {
 
 	// def nextDigitVec(prevDigitVec : Vector[Int], minDigitIncl : Int, maxDigitIncl : Int) : Vector[Int] = {
 
-	// Breadth-first traversal approach using a queue will work, at a reasonable memory cost
+	// Breadth-first traversal approach using a queue will work, at a reasonable memory cost.
+	// This impl is pure and deterministic - no random numbers here.  Result is always the same.
+	// The
 	// def childrenOfPrefix(parentID, digitPrefix, startId, numKids) :
 	// TODO: make number of kids come from a stream, with one entry per LEVEL.  Ooh this is kinda hard to do in one pass.
 	def genTagInfoStrm(rootSeqNum : Int, rootKidsCnt : Int) : UStream[(BinTagInfo, BinNumInfo)] = {
@@ -170,6 +241,7 @@ trait GenBinData extends KnowsBinItem {
 		// The size of each kid-block MAY be chosen dynamically in-stream.
 		// Setting this value here to illustrate computation BEFORE we enter stream context, which is just one way
 		val grandkidsPerRootkidCnt = rootKidsCnt - 1
+		val reproShrinkPerLevel = 3 // subtracted from prev level for ggkids and subsequent
 		// ZStream.iterate is necessarily infinite.  So we are using .unfold, which returns Option[Result, NxtSt].
 		// But note that unFold does not emit the INITIAL state,
 		val genStStrm: UStream[GenSt] = ZStream.unfold[(GenSt, Queue[ParentRec]), GenSt](initUnfoldState)(prevUnfSt => {
@@ -205,7 +277,7 @@ trait GenBinData extends KnowsBinItem {
 								val nxtParNumKids = nextPRec.numKids
 								if (nxtParNumKids > 0) {
 									val nxtLevNum = nextPRec.parLevelNum + 1
-									val nxtMaxKids = Math.max(nxtParNumKids - 3, 0)
+									val nxtMaxKids = Math.max(nxtParNumKids - reproShrinkPerLevel, 0)
 									// Here we may CHOOSE our own val for maxKids, and it will propagate thru our siblings.
 									val nextGenSt = GenSt(Some(nextPRec), nextAbsIdx, 1, nxtLevNum, nxtMaxKids)
 									(nextGenSt, mParQ)
