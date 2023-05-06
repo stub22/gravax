@@ -38,6 +38,7 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 
 			// _ <- dumpTagInfoStrm
 			baseRslt <- genBaseSqnc
+			_ <- ZIO.succeed(computeParentMassesAndFixRelativeWeights(baseRslt._2))
 
 			_ <- bstore.maybeDeleteBinTable
 		} yield ()
@@ -64,7 +65,22 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		baseGenOp
 	}
 
-	def fixRelativeWeights = ???
+	val zeroBD = BigDecimal("0.0")
+	def computeParentMassesAndFixRelativeWeights(baseRsltChnk : Chunk[gbd.BaseGenRsltRec]) = {
+		val emptyParentMassMap = SMap[String,BigDecimal]()
+		val parentMasses: SMap[String, BigDecimal] = baseRsltChnk.foldLeft(emptyParentMassMap)((prevMassMap, nxtBGRR) => {
+			val ptag : String = nxtBGRR._1._1.parentTag
+			val rowMass: BigDecimal = nxtBGRR._1._3._1
+			prevMassMap.updatedWith(ptag)(prevMass_opt => {
+				val updatedTotalMassForParent: BigDecimal = prevMass_opt.fold(rowMass)(_.+(rowMass))
+				Some(updatedTotalMassForParent)
+			})
+		})
+		println(s"Computed parentMassMap: ${parentMasses}")
+		val grandTotalMass = parentMasses.foldLeft(zeroBD)((prevTot, nxtKV) => prevTot.+(nxtKV._2))
+		println(s"Computed grand total mass: ${grandTotalMass}")
+		parentMasses
+	}
 	def storeVirtualLevel = ???
 
 
