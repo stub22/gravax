@@ -77,8 +77,8 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 			})
 		})
 		println(s"Computed parentMassMap: ${parentMasses}")
-		val grandTotalMass = parentMasses.foldLeft(zeroBD)((prevTot, nxtKV) => prevTot.+(nxtKV._2))
-		println(s"Computed grand total mass: ${grandTotalMass}")
+		val massGrndTot = parentMasses.foldLeft(zeroBD)((prevTot, nxtKV) => prevTot.+(nxtKV._2))
+		println(s"Computed grand total mass: ${massGrndTot}")
 		parentMasses
 	}
 	def storeVirtualLevel = ???

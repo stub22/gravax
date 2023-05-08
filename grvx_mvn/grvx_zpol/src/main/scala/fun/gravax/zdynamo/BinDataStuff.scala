@@ -21,7 +21,10 @@ trait NameScopeHmm {
 
 	type DBinMatrix = IndexedSeq[DBinDat]
 
+	// Weighted expected squared value and mean
 	type WtdSqrAndMean = (BigDecimal, BigDecimal)
+
+	type KindaCrazy[X[_]] = List[X[String]]
 
 }
 object BinTypes extends NameScopeHmm
@@ -107,7 +110,7 @@ case class BinNode(myDat : BinData, parent_opt : Option[BinNode], kids : Iterabl
 		(myDat.getBinNumInt, myDat.getRelWt, projStatRow)
 	}
 
-	// TODO:  We probably want to force all children to have subtrees of equal queryDepth.
+	// TODO:  We often (always?) want to force all children to have subtrees of equal queryDepth.
 	def getMaxDepth : Int = ???
 
 	// Collect all bins at the "queryDepth" level (not from any other levels!) into a single matrix, whose weights
@@ -121,6 +124,8 @@ case class BinNode(myDat : BinData, parent_opt : Option[BinNode], kids : Iterabl
 			IndexedSeq(onlyOneBin)
 		} else {
 			val childNodes = kids
+			// Recursively descend until we reach queryDepth.  Only bins from that depth will be aggregated here.
+			// If some subtrees don't go that deep, this answer will be misleading.
 			val bmtrx: Iterable[DBinDat] = childNodes.flatMap(_.projectAndCollectBins(orderedSyms, queryDepth - 1))
 			bmtrx.toIndexedSeq
 		}

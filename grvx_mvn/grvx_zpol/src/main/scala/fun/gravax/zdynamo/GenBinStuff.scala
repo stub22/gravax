@@ -39,7 +39,8 @@ trait GenBinData extends KnowsBinItem {
 		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
 		val binLevelStoreTupStrm: UStream[BaseBinStoreCmdRow] = baseBinSpecStrm.map(mmRow => {
 			val (tagInfo, numInfo, (binMass, binMeat)) = mmRow
-			val baseBinItem = buildBaseBinItem(skelBintem, tagInfo, numInfo, binMass, binMeat)
+			val massInfo = BinMassInfo(binMass, None, None)
+			val baseBinItem = buildBinItem(skelBintem, tagInfo, massInfo, binMeat)
 			val ourPK: PrimaryKey = myTBI.getFBI.getPKfromFullBinItem(baseBinItem)
 			val putDynQry: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(tblNm, baseBinItem)
 			val putDynZIO: RIO[ZDynDBExec,Option[Item]] = putDynQry.execute
@@ -48,11 +49,9 @@ trait GenBinData extends KnowsBinItem {
 		binLevelStoreTupStrm
 	}
 
-	// numInfo is not used currently.  binMass is passed as bare scalar, since we don't have any rel-weights yet.
-	// Would be OK and more general to pass binMassInfo with None in the relWeight_opt.
-	def buildBaseBinItem(skelBinItem : Item, tagInfo: BinTagInfo, numInfo: BinNumInfo, binMass : BigDecimal, binMeat : BinMeatInfo) : Item = {
+	def buildBinItem(skelBinItem : Item, tagInfo: BinTagInfo,  massInfo : BinMassInfo, binMeat : BinMeatInfo) : Item = {
 		val binItemWithTags = myTBI.addTagsToBinItem(skelBinItem, tagInfo)
-		val binItemWithMass = myTBI.addMassToBinItem(binItemWithTags, binMass)
+		val binItemWithMass = myTBI.addMassInfoToBinItem(binItemWithTags, massInfo)
 		val binItemWithMeat = myTBI.addMeatToBinItem(binItemWithMass, binMeat)
 
 		val fullBI = myTBI.fillBinSortKey(binItemWithMeat)

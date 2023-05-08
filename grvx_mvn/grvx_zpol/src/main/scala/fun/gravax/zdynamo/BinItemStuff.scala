@@ -165,7 +165,15 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 		combineMapWithItem(partialBin, addMap)
 	}
 
-	def addMassToBinItem(partialBin : Item, binMass : BigDecimal) : Item = {
+	def addMassInfoToBinItem(partialBin : Item, massInfo : BinMassInfo) : Item = {
+		val massMap = Map[String, AttributeValue](FLDNM_BIN_MASS -> AttributeValue(massInfo.binMass))
+		val relWtMap = massInfo.relWt_opt.fold[Map[String, AttributeValue]](Map())(relWt => Map(FLDNM_BIN_REL_WEIGHT -> AttributeValue(relWt)))
+		val absWtMap = massInfo.absWt_opt.fold[Map[String, AttributeValue]](Map())(absWt => Map(FLDNM_BIN_ABS_WEIGHT -> AttributeValue(absWt)))
+		val addMap :Map[String, AttributeValue] = massMap ++ relWtMap ++ absWtMap
+		combineMapWithItem(partialBin, addMap)
+	}
+
+	private def addMassToBinItem(partialBin : Item, binMass : BigDecimal) : Item = {
 		val addMap = Map[String, AttributeValue](
 			FLDNM_BIN_MASS -> AttributeValue(binMass))
 		combineMapWithItem(partialBin, addMap)

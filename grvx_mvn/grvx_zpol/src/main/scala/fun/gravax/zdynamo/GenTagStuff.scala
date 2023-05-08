@@ -51,6 +51,13 @@ trait GenTagNumData {
 		// runCollect collects ALL items from the input, so we truncate the input first.
 		chnksByLevStrm.take(maxLevels).runCollect
 	}
+	// These params combine with rootKidsCnt to determine the shape of the bin pyramid.
+	val myGrandKidShrinkage = 1
+	val myReproShrinkPerLevel = 3 // subtracted from prev level for ggkids and subsequent
+
+	// TODO:  Add independent calc of the size of the tagInfoStream (for finite cases) and assert equality
+	// between that calc-size and the measured size of this stream.
+	def calcTotalBinsIfFinite(rootKidsCnt : Int) : Option[Int] = ???
 
 	// This numbering stream contains all levels of our expected structure.  It *could* be nondeterministic,
 	// in which case we can't rely on any ability to run it multiple times (which would give different answers)
@@ -59,9 +66,6 @@ trait GenTagNumData {
 
 	// Breadth-first traversal approach using a queue will work, at a reasonable memory cost.
 	// This impl is pure and deterministic - no random numbers here.  Result is always the same.
-	// The
-	// def childrenOfPrefix(parentID, digitPrefix, startId, numKids) :
-	// TODO: make number of kids come from a stream, with one entry per LEVEL.  Ooh this is kinda hard to do in one pass.
 	def genTagInfoStrm(rootSeqNum : Int, rootKidsCnt : Int) : UStream[(BinTagInfo, BinNumInfo)] = {
 		// We want the largest-granularity entries to appear first
 		// root, child_01...child_N, grandchild_01-01...01-N...N-01..N-N, ggchild_01-01-01...
@@ -82,8 +86,8 @@ trait GenTagNumData {
 		val noGenSt = GenSt(None, -100, -200, -300, -400)
 		// The size of each kid-block MAY be chosen dynamically in-stream.
 		// Setting this value here to illustrate computation BEFORE we enter stream context, which is just one way
-		val grandkidsPerRootkidCnt = rootKidsCnt - 1
-		val reproShrinkPerLevel = 3 // subtracted from prev level for ggkids and subsequent
+		val grandkidsPerRootkidCnt = rootKidsCnt - myGrandKidShrinkage
+
 		// ZStream.iterate is necessarily infinite.  So we are using .unfold, which returns Option[Result, NxtSt].
 		// But note that unFold does not emit the INITIAL state,
 		val genStStrm: UStream[GenSt] = ZStream.unfold[(GenSt, Queue[ParentRec]), GenSt](initUnfoldState)(prevUnfSt => {
@@ -119,7 +123,7 @@ trait GenTagNumData {
 								val nxtParNumKids = nextPRec.numKids
 								if (nxtParNumKids > 0) {
 									val nxtLevNum = nextPRec.parLevelNum + 1
-									val nxtMaxKids = Math.max(nxtParNumKids - reproShrinkPerLevel, 0)
+									val nxtMaxKids = Math.max(nxtParNumKids - myReproShrinkPerLevel, 0)
 									// Here we may CHOOSE our own val for maxKids, and it will propagate thru our siblings.
 									val nextGenSt = GenSt(Some(nextPRec), nextAbsIdx, 1, nxtLevNum, nxtMaxKids)
 									(nextGenSt, mParQ)
