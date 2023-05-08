@@ -80,18 +80,18 @@ trait GenMeatAndMassData extends KnowsBinItem {
 	val (myKeyLen, myNumKeys) = (3, 50)
 
 	def mkMassGenOp(zrnd: ZRandom, mathCtx: MathContext): UIO[BigDecimal] = truncGaussBD(zrnd, mathCtx)(massMin, massMax)
-	def addMassToMeatStrm(meatStrm : UStream[BinMeatInfo], massGenOp : UIO[BigDecimal]) : UStream[(BigDecimal, BinMeatInfo)] = {
-		meatStrm.mapZIO(bmi => massGenOp.map(massBD => (massBD, bmi)))
+	def addMassToMeatStrm(meatStrm : UStream[BinMeatInfo], massGenOp : UIO[BigDecimal]) : UStream[(BinMassInfo, BinMeatInfo)] = {
+		meatStrm.mapZIO(bmi => massGenOp.map(massBD => (BinMassInfo(massBD, None, None),bmi)))
 	}
 
 	// The configuration of this stream is sprinkled in the vals, currently Stu counts 8 of em
 	// Each stream tuple is ready to be the genesis of a leaf-bin (with no kiddos)
-	def mkMassyMeatStrm(zrnd: ZRandom, mathCtx: MathContext) : UStream[(BigDecimal, BinMeatInfo)] = {
+	def mkMassyMeatStrm(zrnd: ZRandom, mathCtx: MathContext) : UStream[(BinMassInfo, BinMeatInfo)] = {
 
 		val binFlavor = BFLV_ANN_RET_MEAN_VAR
 		val ekeysOp : UIO[Seq[BinTypes.EntryKey]] = genManyEKeys(zrnd, myKeyLen, myNumKeys)
 		val ekeyStrmOfSeq = ZStream.fromZIO(ekeysOp)
-		val massyMeatStrm : UStream[(BigDecimal, BinMeatInfo)] = ekeyStrmOfSeq.flatMap(keySeq => {
+		val massyMeatStrm : UStream[(BinMassInfo, BinMeatInfo)] = ekeyStrmOfSeq.flatMap(keySeq => {
 			val meatInfoStrm = genMeatInfoStrmFromFixedKeys(zrnd, mathCtx, keySeq, binFlavor)
 			val massOp = mkMassGenOp(zrnd, mathCtx)
 			val massyMeatStrm = addMassToMeatStrm(meatInfoStrm, massOp)

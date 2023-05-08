@@ -17,16 +17,16 @@ trait GenBinData extends KnowsBinItem {
 
 	// Pure-data generated based on rules.  These tuples are used as stream records that do not need as much concreteness.
 	// type BaseMassyMeatRow = (BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))
-	type BaseBinSpec = (BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo)) // Final agg of pure-data based on gen-rules
+	type BaseBinSpec = (BinTagInfo, BinNumInfo, BinMassInfo, BinMeatInfo) // Final agg of pure-data based on gen-rules
 	type BaseBinStoreCmdRow = (BaseBinSpec, Item, PrimaryKey, RIO[ZDynDBExec, Option[Item]])
 	type BaseGenRsltRec = (BaseBinSpec, PrimaryKey, Option[Item])
 
 
 	// Combine the finite tree structure of the tagNumChnk (known number of records) with the stream of bin data (often random).
 	// Presume that mmStrm.size >= baseTagNumChunk.size.
-	def joinMassyMeatRows(baseTagNumChunk : NonEmptyChunk[(BinTagInfo, BinNumInfo)], mmStrm : UStream[(BigDecimal, BinMeatInfo)]) : UStream[BaseBinSpec] = {
+	def joinMassyMeatRows(baseTagNumChunk : NonEmptyChunk[(BinTagInfo, BinNumInfo)], mmStrm : UStream[(BinMassInfo, BinMeatInfo)]) : UStream[BaseBinSpec] = {
 		val btnStrm = ZStream.fromChunk(baseTagNumChunk)
-		btnStrm.zip(mmStrm)
+		btnStrm.zipWith(mmStrm)((tagNumPair, massMeatPair) => (tagNumPair._1, tagNumPair._2, massMeatPair._1, massMeatPair._2))
 	}
 
 	// Absolute-weight field is the sticking point.  We need to know the total mass (of the distribution, == sum of all leaf bins)
@@ -38,8 +38,7 @@ trait GenBinData extends KnowsBinItem {
 	def makeBaseBinStoreCmds(tblNm : String, scenID : String, timeInf : BinTimeInfo)(baseBinSpecStrm : UStream[BaseBinSpec]) : UStream[BaseBinStoreCmdRow] = {
 		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
 		val binLevelStoreTupStrm: UStream[BaseBinStoreCmdRow] = baseBinSpecStrm.map(mmRow => {
-			val (tagInfo, numInfo, (binMass, binMeat)) = mmRow
-			val massInfo = BinMassInfo(binMass, None, None)
+			val (tagInfo, numInfo, massInfo, binMeat) = mmRow
 			val baseBinItem = buildBinItem(skelBintem, tagInfo, massInfo, binMeat)
 			val ourPK: PrimaryKey = myTBI.getFBI.getPKfromFullBinItem(baseBinItem)
 			val putDynQry: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(tblNm, baseBinItem)

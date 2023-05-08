@@ -103,7 +103,6 @@ case class BinNode(myDat : BinData, parent_opt : Option[BinNode], myKids : Itera
 		projectToDBD(orderedSyms)
 	}
 
-
 	def projectToDBD (orderedSyms : IndexedSeq[EntryKey]) : DBinDat = {
 		val projStatRow = projectStatRow(orderedSyms)
 		(myDat.getBinNumInt, myDat.getRelWt, projStatRow)

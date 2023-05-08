@@ -63,6 +63,7 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	val zeroBD = BigDecimal("0.0")
 	val oneBD = BigDecimal("1.0")
 
+	// type StatTriMatrix = IndexedSeq[(StatEntry, WtCovRow)]
 	override def projectEstimCovars(keySyms: IndexedSeq[EntryKey], maxLevels: Int): StatTriMatrix = {
 		// Stored mean and statistics of the root bin
 		// We always get
@@ -76,13 +77,16 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 		} else {
 			val projectedDeepBins: DBinMatrix = rootBN.projectAndCollectBins(keySyms, maxLevels)
 			val entryIdx = 0 to keySyms.size - 1
-			val binIdx = 0 to projectedDeepBins.size - 1
+			val deepBinIdx = 0 to projectedDeepBins.size - 1
 
 			//	val sumOfWeights = ??? - Only needed in final pooling, where it can be derived locally.
 			// sumOfWeights COULD be passed in as an optimization and extra check.
 			// When our rootBin is a complete valid P.D., sumOfWeights should be 1.0
 
-			// OUTER-looping through selected keysyms
+			// OUTER-looping through selected keysyms.
+			// These output what we may visualize as the rows of an upper-triangular covariance matrix.
+			// The StatEntry values provide the *diagonal* of the output matrix (the entry self-variances), and also
+			// the means (which we may visualize as a separate column vector).
 			val outStatsPerKey: IndexedSeq[(StatEntry, WtCovRow)] = entryIdx.map(eidx => {
 				val ekey = keySyms(eidx) // Used in here only for labeling/debugging
 				// We already have stored values for the mean and variance of this entry.
@@ -94,9 +98,12 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 				// But let's calculate them anyway, hoping to get the same answer.
 				// TODO:  Could fold these values in fewer steps, with less copying
 				// INNER-looping:  We iterate over the deep-expanded bin sequence, computing one of these tuples for
-				// each bin found at maxLevels
-				val wtEntStatTups: IndexedSeq[BinEntryMidCalc] = binIdx.map(bidx => {
+				// each bin found at maxLevels. Each output tuple contains stats and one short-row of covars, for one bin.
+				val wtEntStatTups: IndexedSeq[BinEntryMidCalc] = deepBinIdx.map(bidx => {
+					// Recall that projectedDeepBins is a cached array. This step is array.apply(), not a method call.
 					val dbd: (DBinID, DBinWt, StatRow) = projectedDeepBins(bidx)
+					// Do the gritty estimation of variance for focus entry (dbd/eidx) and covariance for short-row
+					// of partner entries.  Those covariances require the global mean for both entries.
 					myBinStatCalcs.setupCovTup(dbd, eidx, keySyms, storedRootMeanVec)
 				})
 				// val totalShortCovRow : WtCovRow = completeShortCovRow()
