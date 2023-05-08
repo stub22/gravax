@@ -36,6 +36,9 @@ trait StatEntryOps extends KnowsDistribTypes {
 	def pooledVariance = ???
 
 	def mkZeroCovRow = ???
+
+	val zeroBD = BigDecimal("0.0")
+	val oneBD = BigDecimal("1.0")
 }
 trait BinStatCalcs extends KnowsDistribTypes {
 	val myStatEntryOps = new StatEntryOps {}

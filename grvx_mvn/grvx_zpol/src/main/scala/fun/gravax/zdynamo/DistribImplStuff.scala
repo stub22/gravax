@@ -60,9 +60,6 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 
 	case class SummedWeightedSquares(sumOfWtSqMns : BigDecimal, sumOfWtVrncs : BigDecimal)
 
-	val zeroBD = BigDecimal("0.0")
-	val oneBD = BigDecimal("1.0")
-
 	// type StatTriMatrix = IndexedSeq[(StatEntry, WtCovRow)]
 	override def projectEstimCovars(keySyms: IndexedSeq[EntryKey], maxLevels: Int): StatTriMatrix = {
 		// Stored mean and statistics of the root bin
@@ -94,9 +91,14 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 				val storedRootEntryVar: EntryVar = storedRootVarVec(eidx)
 
 				// Covar is symmetric, so we only need the covariances with entries having a higher index than eidx.
-				val covPartnerEntIdx: IndexedSeq[Int] = eidx + 1 to keySyms.size - 1
+				val kss = keySyms.size
+				val maxEIDX = kss - 1
+
+				val covPartnerEntIdx: IndexedSeq[Int] = if (eidx < maxEIDX) {
+					eidx + 1 to maxEIDX
+				} else IndexedSeq()
 				// But let's calculate them anyway, hoping to get the same answer.
-				// TODO:  Could fold these values in fewer steps, with less copying
+				// FIXME:  Could fold these values in fewer steps, with less copying
 				// INNER-looping:  We iterate over the deep-expanded bin sequence, computing one of these tuples for
 				// each bin found at maxLevels. Each output tuple contains stats and one short-row of covars, for one bin.
 				val wtEntStatTups: IndexedSeq[BinEntryMidCalc] = deepBinIdx.map(bidx => {
@@ -106,10 +108,15 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 					// of partner entries.  Those covariances require the global mean for both entries.
 					myBinStatCalcs.setupCovTup(dbd, eidx, keySyms, storedRootMeanVec)
 				})
+
 				// val totalShortCovRow : WtCovRow = completeShortCovRow()
-				// Total up the input rows to produce a single row of covariances - all the covariances for entry.
-				val emptyShortRowWtCov : WtCovRow = covPartnerEntIdx.map(cpeidx => (ekey, keySyms(cpeidx), zeroBD))
-				val totalShortCovRow : WtCovRow = myBinStatCalcs.completeShortCovRow(wtEntStatTups, emptyShortRowWtCov)
+				// Total up the input rows to produce a single row of covariances - all the covariances for entry
+				// Hmm, if covPartnerEntIdx is EMPTY, then emptyShortRowWtCov will be empty.
+				val outShortCovRow = if (covPartnerEntIdx.isEmpty) IndexedSeq() else {
+					val emptyShortRowWtCov: WtCovRow = covPartnerEntIdx.map(cpeidx => (ekey, keySyms(cpeidx), myBinStatCalcs.myStatEntryOps.zeroBD))
+					val totalShortCovRow: WtCovRow = myBinStatCalcs.completeShortCovRow(wtEntStatTups, emptyShortRowWtCov)
+					totalShortCovRow
+				}
 
 				val narrowerStatTups: IndexedSeq[BinEntryMidNarr]= wtEntStatTups.map(wideTup => (wideTup._1, wideTup._2))
 
@@ -121,7 +128,7 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 				// val jbd = pooledVar.underlying() // Gets the Java BD
 
 				val outStat: StatEntry = pmav  // (ekey, sumOfWtdMeans, pooledVar)
-				(outStat, totalShortCovRow) // should be same as the stored stat (for this key) in the parent bin.
+				(outStat, outShortCovRow) // should be same as the stored stat (for this key) in the parent bin.
 			})
 
 			val weightedAvgOfBinMeans: Seq[EntryMean] = outStatsPerKey.map(_._1._2)

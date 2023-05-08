@@ -26,6 +26,9 @@ trait NameScopeHmm {
 
 	type KindaCrazy[X[_]] = List[X[String]]
 
+	type BinTag = String
+	type ParentTag = BinTag
+
 }
 object BinTypes extends NameScopeHmm
 
