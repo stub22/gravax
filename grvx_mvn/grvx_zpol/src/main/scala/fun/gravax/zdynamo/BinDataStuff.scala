@@ -59,7 +59,6 @@ case class BinMassInfo(binMass : BigDecimal, relWt_opt : Option[BigDecimal], abs
 //
 case class BinNumInfo(binNum : Int, parentNum : Int, maxKids : Int, levelNum : Int, siblingNum : Int)
 
-
 // Seems we cannot use abstract types (of our self-type, or inherited) in constructor parameters.
 // If we make an outer trait scope then those names are available, or we can refer to members of an object.
 case class BinMeatInfo(binFlavor : String, meatMap : BinTypes.StatMap)
@@ -81,12 +80,12 @@ case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo
 	override def getStatMap: StatMap = meat.meatMap
 }
 
-case class BinNode(myDat : BinData, parent_opt : Option[BinNode], kids : Iterable[BinNode], meatKeyOrder : Ordering[String])  extends VecDistribFragment  {
+case class BinNode(myDat : BinData, parent_opt : Option[BinNode], myKids : Iterable[BinNode], meatKeyOrder : Ordering[String])  extends VecDistribFragment  {
 
 	// Assume meatKeys are same across all bins
 	override def getFullKeySymSet : Set[EntryKey] = myDat.getStatMap.keySet
 
-	// Projects data from the main myDat layer of this BinNode, for given subset of syms.  No info from the kids is used.
+	// Projects data from the main myDat layer of this BinNode, for given subset of syms.  No info from the myKids is used.
 	override def projectStatRow(keySyms: IndexedSeq[EntryKey]): StatRow = {
 		// Will throw on failed lookup
 		val meatMap = myDat.getStatMap
@@ -110,7 +109,7 @@ case class BinNode(myDat : BinData, parent_opt : Option[BinNode], kids : Iterabl
 		(myDat.getBinNumInt, myDat.getRelWt, projStatRow)
 	}
 
-	// TODO:  We often (always?) want to force all children to have subtrees of equal queryDepth.
+	// TODO:  We often (or...always?) want to force all children to have subtrees of equal queryDepth.
 	def getMaxDepth : Int = ???
 
 	// Collect all bins at the "queryDepth" level (not from any other levels!) into a single matrix, whose weights
@@ -119,14 +118,15 @@ case class BinNode(myDat : BinData, parent_opt : Option[BinNode], kids : Iterabl
 	// TODO: Add a stream-oriented version of this algo.
 	def projectAndCollectBins(orderedSyms : IndexedSeq[EntryKey], queryDepth : Int) : DBinMatrix = {
 		// TODO:  Check queryDepth <= maxDepth, else throw
-		if (queryDepth == 0) {
+		if ((queryDepth == 0) || myKids.isEmpty) {
 			val onlyOneBin = projectToDBD(orderedSyms)
 			IndexedSeq(onlyOneBin)
 		} else {
-			val childNodes = kids
-			// Recursively descend until we reach queryDepth.  Only bins from that depth will be aggregated here.
-			// If some subtrees don't go that deep, this answer will be misleading.
-			val bmtrx: Iterable[DBinDat] = childNodes.flatMap(_.projectAndCollectBins(orderedSyms, queryDepth - 1))
+			// Recursively descend until we reach queryDepth.  Only bins from that depth will be aggregated here,
+			// except when subtrees don't extend that far we will get the interim summary bins (the .isEmpty case above)
+			val bmtrx: Iterable[DBinDat] = myKids.flatMap(childNode =>
+				childNode.projectAndCollectBins(orderedSyms, queryDepth - 1)
+			)
 			bmtrx.toIndexedSeq
 		}
 	}

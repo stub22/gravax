@@ -2,45 +2,11 @@ package fun.gravax.zdynamo
 
 private trait DistribImplStuff
 
-
-trait VecDistribFragment extends NameScopeHmm {
-
-	type Probability = BigDecimal // between 0.0 and 1.0
-	type ProbDensity = BigDecimal // Positive value, representing probability density per unit volume.
-
-	type PointEntry = (EntryKey, EntryValue)
-	type PointRow = Seq[PointEntry] // This is a vector in the space identified by the chosen keys.
-
-	type UnwtCov = BigDecimal
-	type UnwtCovPair = (EntryKey, UnwtCov)
-	type UnwtCovRow = IndexedSeq[UnwtCovPair]
-	// type DownsideUCR = IndexedSeq[UnwtCovPair]
-	type WtCov = BigDecimal
-	type WtCovTup = (EntryKey, EntryKey, WtCov)
-	type WtCovRow = IndexedSeq[WtCovTup]
-
-	type StatTriMatrix = IndexedSeq[(StatEntry, WtCovRow)]
-
+trait VecDistribFragment extends KnowsDistribTypes {
 	// We expect Assets (meatKeys) to be identical across all bins
 	def	getFullKeySymSet : Set[EntryKey] // The syms do not have a canonical ordering.  Client may use alphabetic, or...
 	def projectStatRow(keySyms : IndexedSeq[EntryKey]) : StatRow // Often this is available directly from VecDistrib-bin-0
-
 }
-
-trait StatEntryOps extends NameScopeHmm {
-	// Useful when pooling variances across bins.  expectedSquare = mean-squared plus variance
-	def expectedSquare(entry : StatEntry) = entry._2.pow(2) + entry._3
-	def wtdExpSqrAndMean(weight : DBinWt, entry : StatEntry) : WtdSqrAndMean = {
-		val expSqr = expectedSquare(entry)
-		val entMean = entry._2
-		(weight.*(expSqr), weight.*(entMean))
-	}
-	def squareMeans() = ???
-	def pooledVariance = ???
-
-	def mkZeroCovRow = ???
-}
-
 
 // Distribution does not encode any canonical ordering of the Entry dimensions.
 // The ordering choice always comes from the client, via a sequence argument to our methods.
@@ -70,7 +36,6 @@ trait VecDistrib extends VecDistribFragment {
 
 }
 
-
 // Assume meatKeys are same across all bins
 class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	override def getFullKeySymSet: Set[EntryKey] = rootBN.getFullKeySymSet
@@ -81,8 +46,8 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	override def projectRootBin(keySyms: IndexedSeq[EntryKey]): DBinDat = rootBN.projectToDBD(keySyms)
 
 	// 1 level  => only the marginal self-variances stored in the root bin
-	// 2 levels => approximate covariance using local-means (only!) of the root-kids (+ global means) for all the off-diagonal elements.
-	// on-diagonal are computed using pooled-variance formula from marginal-variances (+ local-means + global-means) in the root-kids.
+	// 2 levels => approximate covariance using local-means (only!) of the root-myKids (+ global means) for all the off-diagonal elements.
+	// on-diagonal are computed using pooled-variance formula from marginal-variances (+ local-means + global-means) in the root-myKids.
 	// These latter on-diagonal sums should come out to the same as the root's stored self-variances (and this is where
 	// those values come from in a bottom-up assembly of bins).
 
@@ -91,10 +56,12 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	// We have not yet decided how to incorporate variance-balls into the portfolio composite distro.
 	// Perhaps would need to assume normal distro for each bin.
 
-
-	val statEntryOps = new StatEntryOps {}
+	val myBinStatCalcs = new BinStatCalcs {}
 
 	case class SummedWeightedSquares(sumOfWtSqMns : BigDecimal, sumOfWtVrncs : BigDecimal)
+
+	val zeroBD = BigDecimal("0.0")
+	val oneBD = BigDecimal("1.0")
 
 	override def projectEstimCovars(keySyms: IndexedSeq[EntryKey], maxLevels: Int): StatTriMatrix = {
 		// Stored mean and statistics of the root bin
@@ -111,12 +78,11 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 			val entryIdx = 0 to keySyms.size - 1
 			val binIdx = 0 to projectedDeepBins.size - 1
 
-			val sumOfWeights = ???
-			val zeroBD = BigDecimal("0.0")
-			val oneBD = BigDecimal("1.0")
-			assert(sumOfWeights == oneBD)
+			//	val sumOfWeights = ??? - Only needed in final pooling, where it can be derived locally.
+			// sumOfWeights COULD be passed in as an optimization and extra check.
+			// When our rootBin is a complete valid P.D., sumOfWeights should be 1.0
 
-			// Iterating through the keysyms
+			// OUTER-looping through selected keysyms
 			val outStatsPerKey: IndexedSeq[(StatEntry, WtCovRow)] = entryIdx.map(eidx => {
 				val ekey = keySyms(eidx) // Used in here only for labeling/debugging
 				// We already have stored values for the mean and variance of this entry.
@@ -127,47 +93,20 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 				val covPartnerEntIdx: IndexedSeq[Int] = eidx + 1 to keySyms.size - 1
 				// But let's calculate them anyway, hoping to get the same answer.
 				// TODO:  Could fold these values in fewer steps, with less copying
-				// We compute one of these tuplse for each bin.
-				val wtEntStatTups: IndexedSeq[(DBinWt, StatEntry, UnwtCovRow)] = binIdx.map(bidx => {
+				// INNER-looping:  We iterate over the deep-expanded bin sequence, computing one of these tuples for
+				// each bin found at maxLevels
+				val wtEntStatTups: IndexedSeq[BinEntryMidCalc] = binIdx.map(bidx => {
 					val dbd: (DBinID, DBinWt, StatRow) = projectedDeepBins(bidx)
-					val wt = dbd._2
-					val statRow = dbd._3
-					val localEntry = statRow(eidx)
-					val localMean = localEntry._2
-					// Naive formulation of "Excess" i.e. the deviation of this bin-mean from the global-mean.
-					val localExc = localMean.-(storedRootEntryMean)
-					val covShortRow: UnwtCovRow = covPartnerEntIdx.map(coentIdx => {
-						val coentKey = keySyms(coentIdx)
-						val coRootMean = storedRootMeanVec(coentIdx)
-						val coLocalEntry = statRow(coentIdx)
-						val coLocalMean = coLocalEntry._2
-						val coLocalExc = coLocalMean.-(coRootMean) // This gets computed entry-count times.  Could store in stat entry.
-						val localCovar = localExc.*(coLocalExc) // Covariance estimated for key-pair within this bin
-						(coentKey, localCovar)
-					})
-					(wt, localEntry, covShortRow)
+					myBinStatCalcs.setupCovTup(dbd, eidx, keySyms, storedRootMeanVec)
 				})
 				// val totalShortCovRow : WtCovRow = completeShortCovRow()
 				// Total up the input rows to produce a single row of covariances - all the covariances for entry.
 				val emptyShortRowWtCov : WtCovRow = covPartnerEntIdx.map(cpeidx => (ekey, keySyms(cpeidx), zeroBD))
-				val totalShortCovRow : WtCovRow = completeShortCovRow(wtEntStatTups, emptyShortRowWtCov)
+				val totalShortCovRow : WtCovRow = myBinStatCalcs.completeShortCovRow(wtEntStatTups, emptyShortRowWtCov)
 
-				val narrowerStatTups: IndexedSeq[(DBinWt, StatEntry)]= wtEntStatTups.map(wideTup => (wideTup._1, wideTup._2))
-				/*
-				val wtSquaresAndMeans: Seq[WtdSqrAndMean] = narrowerStatTups.map(wep => statEntryOps.wtdExpSqrAndMean(wep._1, wep._2))
+				val narrowerStatTups: IndexedSeq[BinEntryMidNarr]= wtEntStatTups.map(wideTup => (wideTup._1, wideTup._2))
 
-				val summedPairs: WtdSqrAndMean = wtSquaresAndMeans.reduce((pair1, pair2) => (pair1._1 + pair2._1, pair1._2 + pair2._2))
-				val (sumOfWtdSqrs, sumOfWtdMeans) = summedPairs
-				assert(sumOfWtdMeans == storedRootEntryMean) // Expecting this to fail, then we will go deeper in 'numerology'
-				val squaredMeanCanned = storedRootEntryMean.pow(2)
-				val squaredMeanOrganic = sumOfWtdMeans.pow(2) // == should be same if we use storedMean or sumOfWtdMeans
-				assert(squaredMeanCanned == squaredMeanOrganic)
-				// We expect sumOfWeights to be 1, so this division step can go away
-				val normSqrs = sumOfWtdSqrs./(sumOfWeights)
-				// https://stats.stackexchange.com/questions/43159/how-to-calculate-pooled-variance-of-two-or-more-groups-given-known-group-varianc
-				val pooledVar = normSqrs.-(squaredMeanOrganic) // TA-DA!!!
-				 */
-				val pmav = calcPooledMeanAndVar(narrowerStatTups, storedRootEntryMean)
+				val pmav = myBinStatCalcs.calcPooledMeanAndVar(narrowerStatTups, storedRootEntryMean)
 				assert(pmav._3 == storedRootEntryVar)
 
 				// JDK9+ has sqrt on BigDecimal. From Scala 2.13 we may have to use Spire or access the Java object, or ...
@@ -178,8 +117,7 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 				(outStat, totalShortCovRow) // should be same as the stored stat (for this key) in the parent bin.
 			})
 
-
-			val weightedAvgOfBinMeans: Seq[EntryMean] = ???
+			val weightedAvgOfBinMeans: Seq[EntryMean] = outStatsPerKey.map(_._1._2)
 			assert(weightedAvgOfBinMeans == storedRootMeanVec)
 			outStatsPerKey
 		}
@@ -187,90 +125,7 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	}
 
 
-	/*
-	type StatEntry = (EntryKey, EntryMean, EntryVar)
-
-	type UnwtCov = BigDecimal
-	type UnwtCovPair = (EntryKey, UnwtCov)
-	type UnwtCovRow = IndexedSeq[UnwtCovPair]
-	// type DownsideUCR = IndexedSeq[UnwtCovPair]
-	type WtCov = BigDecimal
-	type WtCovTup = (EntryKey, EntryKey, WtCov)
-	type WtCovRow = IndexedSeq[WtCovTup]
-	 */
-	// type WtCovTup = (EntryKey, EntryKey, WtCov)
-	// wtEntStatTups tells the covariance row for each bins.  We do the weighted sum of those covariance rows.
-	// TODO:  Derive the emptyShortRowWtCov from wtEntStatTups.head
-	def completeShortCovRow(wtEntStatTups: IndexedSeq[(DBinWt, StatEntry, UnwtCovRow)], emptyShortRowWtCov : WtCovRow): WtCovRow = {
-		// Total up the input rows to produce a single row of covariances - all the covariances for entry.
-		// val emptyShortRowWtCov : WtCovRow = covPartnerEntIdx.map(cpeidx => (ekey, keySyms(cpeidx), zeroBD))
-		val totalShortCovRow : WtCovRow = wtEntStatTups.foldLeft(emptyShortRowWtCov)((prevSumRow, wtStatTup) => {
-			val rowWt = wtStatTup._1 // This weight came from the bin corresponding to this row
-			val covShortRow: UnwtCovRow = wtStatTup._3
-	///		val zzz: WtCovRow = prevSumRow
-	///		val mmm = zzz.zip(covShortRow)
-			val comb: IndexedSeq[(WtCovTup, UnwtCovPair)] = prevSumRow.zip(covShortRow)
-			val summedShortRow : WtCovRow = comb.map(comboPair => {
-				val (prevSumTup, nxtInPair) = comboPair
-				val nxtInWeighted = nxtInPair._2.*(rowWt)
-				val nxtSum = prevSumTup._3.+(nxtInWeighted)
-				(prevSumTup._1, prevSumTup._2, nxtSum)
-			})
-			summedShortRow
-		})
-		totalShortCovRow
-	}
-
-	def calcPooledMeanAndVar(narrowerStatTups: IndexedSeq[(DBinWt, StatEntry)], storedRootEntryMean: EntryMean): StatEntry = {
-		// TODO:  Assert prove all entryKeys equal, or factor out.
-		val firstEntryKey : EntryKey = narrowerStatTups.head._2._1
-
-		val sumOfWeights : DBinWt = narrowerStatTups.map(_._1).sum
-		val wtSquaresAndMeans: Seq[WtdSqrAndMean] = narrowerStatTups.map(wep => statEntryOps.wtdExpSqrAndMean(wep._1, wep._2))
-
-		val summedPairs: WtdSqrAndMean = wtSquaresAndMeans.reduce((pair1, pair2) => (pair1._1 + pair2._1, pair1._2 + pair2._2))
-		val (sumOfWtdSqrs, sumOfWtdMeans) = summedPairs
-		assert(sumOfWtdMeans == storedRootEntryMean) // Expecting this to fail, then we will go deeper in 'numerology'
-		val squaredMeanCanned = storedRootEntryMean.pow(2)
-		val squaredMeanOrganic = sumOfWtdMeans.pow(2) // == should be same if we use storedMean or sumOfWtdMeans
-		assert(squaredMeanCanned == squaredMeanOrganic)
-		// We expect sumOfWeights to be 1, so this division step can go away
-		val normSqrs = sumOfWtdSqrs./(sumOfWeights)
-		// https://stats.stackexchange.com/questions/43159/how-to-calculate-pooled-variance-of-two-or-more-groups-given-known-group-varianc
-		val pooledVar = normSqrs.-(squaredMeanOrganic) // TA-DA!!!
-		// assert(pooledVar == storedRootEntryVar)
-		// JDK9+ has sqrt on BigDecimal. From Scala 2.13 we may have to use Spire or access the Java object, or ...
-		// val pooledStdDev = pooledVar.sqrt(mc)
-		// val jbd = pooledVar.underlying() // Gets the Java BD
-		val pooledEntry : StatEntry = (firstEntryKey, sumOfWtdMeans, pooledVar )
-		pooledEntry
-	}
-	/*
-	def dododo = {
-		val wtEntStatTups: IndexedSeq[(DBinWt, StatEntry, UnwtCovRow)] = binIdx.map(bidx => {
-			val dbd: (DBinID, DBinWt, StatRow) = projectedDeepBins(bidx)
-			val wt = dbd._2
-			val statRow = dbd._3
-			val localEntry = statRow(eidx)
-			val localMean = localEntry._2
-			// Naive formulation of "Excess" i.e. the deviation of this bin-mean from the global-mean.
-			val localExc = localMean.-(storedMean)
-			val covShortRow: UnwtCovRow = covPartnerEntIdx.map(coentIdx => {
-				val coentKey = keySyms(coentIdx)
-				val coGlobalMean = storedMeanVec(coentIdx)
-				val coLocalEntry = statRow(coentIdx)
-				val coLocalMean = coLocalEntry._2
-				val coLocalExc = coLocalMean.-(coGlobalMean) // This gets computed entry-count times.  Could store in stat entry.
-				val localCovar = localExc.*(coLocalExc) // Covariance estimated for key-pair within this bin
-				(coentKey, localCovar)
-			})
-			(wt, localEntry, covShortRow)
-		})
-	}
-	 */
-
-
 }
-trait VarianceCalcs {
 
-}
+
+
