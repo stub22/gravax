@@ -39,7 +39,8 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 			// _ <- dumpTagInfoStrm
 			baseRslt <- genBaseSqnc
 			_ <- ZIO.succeed(computeParentMassesAndFixRelativeWeights(baseRslt._2))
-
+			combStat <- ZIO.succeed(computeCombinedMeansAndVars(baseRslt._2, Ordering.String))
+			_ <- ZIO.log(s"Got combined stats: ${combStat}")
 			_ <- bstore.maybeDeleteBinTable
 		} yield ()
 	}
@@ -48,6 +49,7 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 	}
 	lazy val gmmd = new GenMeatAndMassData {}
 	lazy val gtnd = new GenTagNumData {}
+	lazy val myBSCalc = new BinStatCalcs {}
 
 	def genBaseSqnc: RIO[ZDynDBExec, (gtnd.BinTagNumBlock, Chunk[gbd.BaseGenRsltRec])]   = {
 		val rootTagNum = 1200
@@ -80,6 +82,14 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		val massGrndTot = parentMasses.foldLeft(zeroBD)((prevTot, nxtKV) => prevTot.+(nxtKV._2))
 		println(s"Computed grand total mass: ${massGrndTot}")
 		parentMasses
+	}
+	def computeCombinedMeansAndVars(baseRsltChnk : Chunk[gbd.BaseGenRsltRec], meatKeyOrder : Ordering[String]) : BinTypes.StatRow = {
+		val binSpecs = baseRsltChnk.map(_._1)
+		val firstMeat = binSpecs.head._4
+		val keySeq : IndexedSeq[BinTypes.EntryKey] = firstMeat.allKeysSorted(meatKeyOrder)
+		// Using Chunk ATM, but could be some other collection
+		val binDatChunk : Chunk[BinTypes.DBinDat] = binSpecs.map(gbd.binSpecToDBD(_, keySeq))
+		myBSCalc.computeMeansAndVars(binDatChunk)
 	}
 	def storeVirtualLevel = ???
 

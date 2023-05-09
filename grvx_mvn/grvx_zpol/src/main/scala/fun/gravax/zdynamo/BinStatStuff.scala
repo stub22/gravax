@@ -27,7 +27,6 @@ trait BinSummaryCalc extends KnowsDistribTypes  {
 			// We already have stored values for the mean and variance of this entry.
 			val storedRootEntryMean: EntryMean = storedRootMeanVec(eidx)
 
-
 			// Covar is symmetric, so we only need the covariances with entries having a higher index than eidx.
 			val kss = keySyms.size
 			val maxEIDX = kss - 1
@@ -45,12 +44,12 @@ trait BinSummaryCalc extends KnowsDistribTypes  {
 				val dbd: (DBinID, DBinWt, StatRow) = dBinDat
 				// Do the gritty estimation of variance for focus entry (dbd/eidx) and covariance for short-row
 				// of partner entries.  Those covariances require the global mean for both entries.
-				myBinStatCalcs.setupCovTup(dbd, eidx, keySyms, storedRootMeanVec)
+				myBinStatCalcs.beginCovXprod(dbd, eidx, keySyms, storedRootMeanVec)
 			})
 
 			val narrowerStatTups: IndexedSeq[BinEntryMidNarr]= wtEntStatTups.map(wideTup => (wideTup._1, wideTup._2))
 
-			val pmav = myBinStatCalcs.calcPooledMeanAndVar(narrowerStatTups, storedRootEntryMean)
+			val pmav = myBinStatCalcs.calcAggregateMeanAndVar(narrowerStatTups, storedRootEntryMean)
 
 			// JDK9+ has sqrt on BigDecimal. From Scala 2.13 we may have to use Spire or access the Java object, or ...
 			// val pooledStdDev = pooledVar.sqrt(mc)

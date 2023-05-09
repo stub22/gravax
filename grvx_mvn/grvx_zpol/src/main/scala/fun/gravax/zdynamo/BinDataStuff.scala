@@ -10,10 +10,14 @@ trait NameScopeHmm {
 	type EntryValue = BigDecimal
 
 	type EntryMean = BigDecimal
+	type ExpectSquare = BigDecimal
 	type EntryVar = BigDecimal	// Often this is marginal variance
 	type StatEntry = (EntryKey, EntryMean, EntryVar)
 	type StatRow = IndexedSeq[StatEntry]   // For some set of keySyms, in some useful order that is not specified by type.
 	type StatMap = SMap[EntryKey, StatEntry]
+
+	type EntryExpects = (EntryKey, EntryMean, ExpectSquare)
+	type WtExpectsRow = (DBinWt, IndexedSeq[EntryExpects])
 
 	type DBinID = Int
 	type DBinWt = BigDecimal
@@ -51,6 +55,10 @@ trait BinData extends NameScopeHmm {
 
 	def getStatMap : StatMap
 
+	def mkStatRow(keySeq : IndexedSeq[EntryKey]) : StatRow
+
+	def allKeysSorted(meatKeyOrder : Ordering[String]) : IndexedSeq[EntryKey]
+
 }
 
 
@@ -64,7 +72,19 @@ case class BinNumInfo(binNum : Int, parentNum : Int, maxKids : Int, levelNum : I
 
 // Seems we cannot use abstract types (of our self-type, or inherited) in constructor parameters.
 // If we make an outer trait scope then those names are available, or we can refer to members of an object.
-case class BinMeatInfo(binFlavor : String, meatMap : BinTypes.StatMap)
+case class BinMeatInfo(binFlavor : String, meatMap : BinTypes.StatMap) extends KnowsDistribTypes {
+	def mkStatRow(keySeq : IndexedSeq[EntryKey]) : StatRow = {
+		val entrySeq : StatRow = keySeq.map(ksym => {
+			val statAtSym: StatEntry = meatMap.get(ksym).get // This second .get will throw if no value present
+			statAtSym
+		}).toIndexedSeq
+		entrySeq
+	}
+	def allKeysSorted(meatKeyOrder : Ordering[String]) : IndexedSeq[EntryKey] = {
+		val keySet = meatMap.keySet
+		keySet.toSeq.sorted(meatKeyOrder).toIndexedSeq
+	}
+}
 
 
 case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, massDat : BinMassInfo, meat : BinMeatInfo) extends BinData {
@@ -81,29 +101,24 @@ case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo
 	// override def getAbsWt: BigDecimal = massDat.absWt
 	override def getBinFlavor: String = meat.binFlavor
 	override def getStatMap: StatMap = meat.meatMap
+
+	override def mkStatRow(keySeq: IndexedSeq[EntryKey]): StatRow = meat.mkStatRow(keySeq)
+	override def allKeysSorted(meatKeyOrder : Ordering[String]) : IndexedSeq[EntryKey] = meat.allKeysSorted(meatKeyOrder)
 }
 
 case class BinNode(myDat : BinData, parent_opt : Option[BinNode], myKids : Iterable[BinNode], meatKeyOrder : Ordering[String])  extends VecDistribFragment  {
 
 	// Assume meatKeys are same across all bins
-	override def getFullKeySymSet : Set[EntryKey] = myDat.getStatMap.keySet
+	// override def getFullKeySymSet : Set[EntryKey] = myDat.getStatMap.keySet
 
 	// Projects data from the main myDat layer of this BinNode, for given subset of syms.  No info from the myKids is used.
-	override def projectStatRow(keySyms: IndexedSeq[EntryKey]): StatRow = {
-		// Will throw on failed lookup
-		val meatMap = myDat.getStatMap
-		val entrySeq : StatRow = keySyms.map(ksym => {
-			val statAtSym: StatEntry = meatMap.get(ksym).get // This second .get will throw if no value present
-			statAtSym
-		}).toIndexedSeq
-		entrySeq
-	}
+	// Will throw on failed lookup
+	override def projectStatRow(keySyms: IndexedSeq[EntryKey]): StatRow = myDat.mkStatRow(keySyms)
 
 	// Useful?  This just repackages the info from myDat, with the keys in our given ordering.
 	lazy val myFullBinDat : DBinDat = {
-		val allSymsUnsorted = getFullKeySymSet
-		val orderedSyms = allSymsUnsorted.toSeq.sorted(meatKeyOrder).toIndexedSeq
-		projectToDBD(orderedSyms)
+		val keysInOrder = myDat.allKeysSorted(meatKeyOrder)
+		projectToDBD(keysInOrder)
 	}
 
 	def projectToDBD (orderedSyms : IndexedSeq[EntryKey]) : DBinDat = {
@@ -136,6 +151,8 @@ case class BinNode(myDat : BinData, parent_opt : Option[BinNode], myKids : Itera
 
 
 /*
+chk
+
 import java.time.{Instant => JInstant}
 
 case class PredictionTimeInfo(obsTime : JInstant, calcTime : JInstant, endTime : JInstant)

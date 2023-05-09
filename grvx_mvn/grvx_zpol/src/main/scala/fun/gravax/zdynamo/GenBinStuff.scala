@@ -11,7 +11,7 @@ import scala.math.BigDecimal
 
 private trait GenBinStuff
 
-trait GenBinData extends KnowsBinItem {
+trait GenBinData extends KnowsBinItem with KnowsDistribTypes {
 
 	val myTBI : ToBinItem
 
@@ -37,13 +37,13 @@ trait GenBinData extends KnowsBinItem {
 
 	def makeBaseBinStoreCmds(tblNm : String, scenID : String, timeInf : BinTimeInfo)(baseBinSpecStrm : UStream[BaseBinSpec]) : UStream[BaseBinStoreCmdRow] = {
 		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
-		val binLevelStoreTupStrm: UStream[BaseBinStoreCmdRow] = baseBinSpecStrm.map(mmRow => {
-			val (tagInfo, numInfo, massInfo, binMeat) = mmRow
+		val binLevelStoreTupStrm: UStream[BaseBinStoreCmdRow] = baseBinSpecStrm.map(bbSpec => {
+			val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
 			val baseBinItem = buildBinItem(skelBintem, tagInfo, massInfo, binMeat)
 			val ourPK: PrimaryKey = myTBI.getFBI.getPKfromFullBinItem(baseBinItem)
 			val putDynQry: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(tblNm, baseBinItem)
 			val putDynZIO: RIO[ZDynDBExec,Option[Item]] = putDynQry.execute
-			(mmRow, baseBinItem, ourPK, putDynZIO)
+			(bbSpec, baseBinItem, ourPK, putDynZIO)
 		})
 		binLevelStoreTupStrm
 	}
@@ -56,6 +56,12 @@ trait GenBinData extends KnowsBinItem {
 		val fullBI = myTBI.fillBinSortKey(binItemWithMeat)
 		fullBI
 	}
-
+	def binSpecToDBD(bbSpec : BaseBinSpec, keySyms: IndexedSeq[EntryKey]) : DBinDat = {
+		val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
+		val statRow = binMeat.mkStatRow(keySyms)
+		val binIdHmm = -999 // tagInfo.binTag
+		val dbd = (binIdHmm, massInfo.binMass, statRow )
+		dbd
+	}
 
 }

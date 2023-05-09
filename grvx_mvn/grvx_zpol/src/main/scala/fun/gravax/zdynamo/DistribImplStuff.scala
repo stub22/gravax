@@ -4,7 +4,7 @@ private trait DistribImplStuff
 
 trait VecDistribFragment extends KnowsDistribTypes {
 	// We expect Assets (meatKeys) to be identical across all bins
-	def	getFullKeySymSet : Set[EntryKey] // The syms do not have a canonical ordering.  Client may use alphabetic, or...
+	// def	getFullKeySymSet : Set[EntryKey] // The syms do not have a canonical ordering.  Client may use alphabetic, or...
 	def projectStatRow(keySyms : IndexedSeq[EntryKey]) : StatRow // Often this is available directly from VecDistrib-bin-0
 }
 
@@ -38,7 +38,7 @@ trait VecDistrib extends VecDistribFragment {
 
 // Assume meatKeys are same across all bins
 class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
-	override def getFullKeySymSet: Set[EntryKey] = rootBN.getFullKeySymSet
+	// override def getFullKeySymSet: Set[EntryKey] = rootBN.getFullKeySymSet
 
 	override def projectStatRow(keySyms: IndexedSeq[EntryKey]): StatRow = rootBN.projectStatRow(keySyms)
 
@@ -106,21 +106,21 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 					val dbd: (DBinID, DBinWt, StatRow) = projectedDeepBins(bidx)
 					// Do the gritty estimation of variance for focus entry (dbd/eidx) and covariance for short-row
 					// of partner entries.  Those covariances require the global mean for both entries.
-					myBinStatCalcs.setupCovTup(dbd, eidx, keySyms, storedRootMeanVec)
+					myBinStatCalcs.beginCovXprod(dbd, eidx, keySyms, storedRootMeanVec)
 				})
 
-				// val totalShortCovRow : WtCovRow = completeShortCovRow()
+				// val totalShortCovRow : WtCovRow = finishShortCovRow()
 				// Total up the input rows to produce a single row of covariances - all the covariances for entry
 				// Hmm, if covPartnerEntIdx is EMPTY, then emptyShortRowWtCov will be empty.
 				val outShortCovRow = if (covPartnerEntIdx.isEmpty) IndexedSeq() else {
 					val emptyShortRowWtCov: WtCovRow = covPartnerEntIdx.map(cpeidx => (ekey, keySyms(cpeidx), myBinStatCalcs.myStatEntryOps.zeroBD))
-					val totalShortCovRow: WtCovRow = myBinStatCalcs.completeShortCovRow(wtEntStatTups, emptyShortRowWtCov)
+					val totalShortCovRow: WtCovRow = myBinStatCalcs.finishShortCovRow(wtEntStatTups, emptyShortRowWtCov)
 					totalShortCovRow
 				}
 
 				val narrowerStatTups: IndexedSeq[BinEntryMidNarr]= wtEntStatTups.map(wideTup => (wideTup._1, wideTup._2))
 
-				val pmav = myBinStatCalcs.calcPooledMeanAndVar(narrowerStatTups, storedRootEntryMean)
+				val pmav = myBinStatCalcs.calcAggregateMeanAndVar(narrowerStatTups, storedRootEntryMean)
 				assert(pmav._3 == storedRootEntryVar)
 
 				// JDK9+ has sqrt on BigDecimal. From Scala 2.13 we may have to use Spire or access the Java object, or ...
