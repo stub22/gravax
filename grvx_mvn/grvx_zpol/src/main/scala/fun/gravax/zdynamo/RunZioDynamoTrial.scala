@@ -56,8 +56,9 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 			combStat <- ZIO.succeed(myBinSumCalc.combineWeightMeansAndVars(baseRslt._2))
 			_ <- ZIO.log(s"Got combined stats: ${combStat}")
 			parentStats <- myBinSumCalc.combineStatsPerParent(baseRslt._2, baseRslt._1.virtLevels.last._2)
-					// ZIO.succeed(computeStatsForParents(baseRslt._2))
 			_ <- ZIO.log(s"Got parent stats: ${parentStats}")
+			pcomb <-   ZIO.succeed(myBinSumCalc.combineVirtRsltsToWMV(parentStats))
+			_ <- ZIO.log(s"Parents combined: ${pcomb}")
 			_ <- myBinStore.maybeDeleteBinTable
 		} yield ()
 	}
