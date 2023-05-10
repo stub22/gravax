@@ -6,6 +6,11 @@ trait BinSummaryCalc extends KnowsDistribTypes  {
 
 	val myBinStatCalcs = new BinStatCalcs {}
 
+
+	def betterParentStats(binDataMatrix : IndexedSeq[(ParentTag, BinTag, DBinDat)], keySyms: IndexedSeq[EntryKey]): IndexedSeq[(ParentTag, StatRow)] = {
+		???
+	}
+
 	def calcParentStats(keySyms: IndexedSeq[EntryKey], storedRootMeanVec: IndexedSeq[EntryMean],
 				binDataMatrix : IndexedSeq[(ParentTag, BinTag, DBinDat)]): IndexedSeq[(ParentTag, StatRow)] = {
 		// Stored mean and statistics of the root bin

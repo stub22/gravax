@@ -110,7 +110,9 @@ trait BinStatCalcs extends KnowsDistribTypes {
 		// TODO:  Assert prove all entryKeys equal, or factor out.
 		val firstEntryKey : EntryKey = statTupsForOneEntry.head._2._1
 
+		// TODO:  Confirm that Seq[BigDecimal].sum works correctly.
 		val sumOfWeights : DBinWt = statTupsForOneEntry.map(_._1).sum
+
 		val wtSquaresAndMeans: Seq[WtdSqrAndMean] = statTupsForOneEntry.map(wep => myStatEntryOps.wtdExpSqrAndMean(wep._1, wep._2))
 
 		val summedPairs: WtdSqrAndMean = wtSquaresAndMeans.reduce((pair1, pair2) => (pair1._1 + pair2._1, pair1._2 + pair2._2))
@@ -127,8 +129,8 @@ trait BinStatCalcs extends KnowsDistribTypes {
 		// JDK9+ has sqrt on BigDecimal. From Scala 2.13 we may have to use Spire or access the Java object, or ...
 		// val pooledStdDev = pooledVar.sqrt(mc)
 		// val jbd = pooledVar.underlying() // Gets the Java BD
-		val pooledEntry : StatEntry = (firstEntryKey, sumOfWtdMeans, pooledVar )
-		pooledEntry
+		val aggregateEntry : StatEntry = (firstEntryKey, sumOfWtdMeans, pooledVar )
+		aggregateEntry
 	}
 	def beginCovXprod(dbd : DBinDat, eidx : Int, keySyms: IndexedSeq[EntryKey], storedRootMeanVec: IndexedSeq[EntryMean]): BinEntryMidCalc = {
 

@@ -1,7 +1,8 @@
 package fun.gravax.zdynamo
 
 
-import zio.dynamodb.{ DynamoDBExecutor => ZDynDBExec}
+import fun.gravax.zdynamo.RunZioDynamoTrial.gbd
+import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, Console, RIO, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom, dynamodb => ZDyn}
 
@@ -38,9 +39,11 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 
 			// _ <- dumpTagInfoStrm
 			baseRslt <- genBaseSqnc
-			_ <- ZIO.succeed(computeParentMassesAndFixRelativeWeights(baseRslt._2))
-			combStat <- ZIO.succeed(computeCombinedMeansAndVars(baseRslt._2, Ordering.String))
+			_ <- ZIO.succeed(gbd.computeParentMasses(baseRslt._2))
+			combStat <- ZIO.succeed(computeCombinedMeansAndVars(baseRslt._2))
 			_ <- ZIO.log(s"Got combined stats: ${combStat}")
+			parentStats <- ZIO.succeed(computeStatsForParents(baseRslt._2))
+			_ <- ZIO.log(s"Got parent stats: ${parentStats}")
 			_ <- bstore.maybeDeleteBinTable
 		} yield ()
 	}
@@ -49,14 +52,15 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 	}
 	lazy val gmmd = new GenMeatAndMassData {}
 	lazy val gtnd = new GenTagNumData {}
-	lazy val myBSCalc = new BinStatCalcs {}
+	lazy val myBinStatCalc = new BinStatCalcs {}
+	lazy val myBinSumCalc = new BinSummaryCalc {}
 
-	def genBaseSqnc: RIO[ZDynDBExec, (gtnd.BinTagNumBlock, Chunk[gbd.BaseGenRsltRec])]   = {
+	def genBaseSqnc: RIO[ZDynDBExec, (gtnd.BinTagNumBlock, Chunk[gbd.BinStoreRslt])]   = {
 		val rootTagNum = 1200
 		val rootKidsCnt = 7
 		val baseBinLevel = 4
 		val massyMeatStrm = mkMassyMeatStrm
-		val baseGenOp: RIO[ZDynDBExec, (gtnd.BinTagNumBlock, Chunk[gbd.BaseGenRsltRec])] = for {
+		val baseGenOp: RIO[ZDynDBExec, (gtnd.BinTagNumBlock, Chunk[gbd.BinStoreRslt])] = for {
 			bntgnmBlk <- gtnd.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
 			_ <- ZIO.log(s"genBaseSqnc .genBinTagNumBlock produced: ${bntgnmBlk.describe}")
 			binSpecStrm <- ZIO.succeed(gbd.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
@@ -67,30 +71,18 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		baseGenOp
 	}
 
-	val zeroBD = BigDecimal("0.0")
-	def computeParentMassesAndFixRelativeWeights(baseRsltChnk : Chunk[gbd.BaseGenRsltRec]) = {
-		val emptyParentMassMap = SMap[String,BigDecimal]()
-		val parentMasses: SMap[String, BigDecimal] = baseRsltChnk.foldLeft(emptyParentMassMap)((prevMassMap, nxtBGRR) => {
-			val ptag : String = nxtBGRR._1._1.parentTag
-			val rowMass: BigDecimal = nxtBGRR._1._3.binMass
-			prevMassMap.updatedWith(ptag)(prevMass_opt => {
-				val updatedTotalMassForParent: BigDecimal = prevMass_opt.fold(rowMass)(_.+(rowMass))
-				Some(updatedTotalMassForParent)
-			})
-		})
-		println(s"Computed parentMassMap: ${parentMasses}")
-		val massGrndTot = parentMasses.foldLeft(zeroBD)((prevTot, nxtKV) => prevTot.+(nxtKV._2))
-		println(s"Computed grand total mass: ${massGrndTot}")
-		parentMasses
+
+	def computeCombinedMeansAndVars(baseRsltSeq : IndexedSeq[gbd.BinStoreRslt]) : BinTypes.StatRow = {
+		val binDatChunk : IndexedSeq[BinTypes.DBinDat] = gbd.baseGenRsltsToDBinDats(baseRsltSeq)
+		myBinStatCalc.computeMeansAndVars(binDatChunk)
 	}
-	def computeCombinedMeansAndVars(baseRsltChnk : Chunk[gbd.BaseGenRsltRec], meatKeyOrder : Ordering[String]) : BinTypes.StatRow = {
-		val binSpecs = baseRsltChnk.map(_._1)
-		val firstMeat = binSpecs.head._4
-		val keySeq : IndexedSeq[BinTypes.EntryKey] = firstMeat.allKeysSorted(meatKeyOrder)
-		// Using Chunk ATM, but could be some other collection
-		val binDatChunk : Chunk[BinTypes.DBinDat] = binSpecs.map(gbd.binSpecToDBD(_, keySeq))
-		myBSCalc.computeMeansAndVars(binDatChunk)
+
+	def computeStatsForParents(baseRsltSeq : IndexedSeq[gbd.BinStoreRslt]) : IndexedSeq[(gbd.ParentTag, gbd.StatRow)] = {
+		val (taggedDBDs, keySeq) = gbd.baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
+		val parentStats : IndexedSeq[(gbd.ParentTag, gbd.StatRow)] = myBinSumCalc.betterParentStats(taggedDBDs, keySeq)
+		parentStats
 	}
+
 	def storeVirtualLevel = ???
 
 
@@ -100,20 +92,20 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		val massyMeatStrm = gmmd.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)
 		massyMeatStrm
 	}
-	def mkBaseLevCmds(baseBinSpecStrm : UStream[gbd.BaseBinSpec]) : UStream[gbd.BaseBinStoreCmdRow] = {
+	def mkBaseLevCmds(baseBinSpecStrm : UStream[gbd.BinSpec]) : UStream[gbd.BinStoreCmdRow] = {
 		val scenID = "gaussnoizBBB"
 		val timeInf = BinTimeInfo("NOPED", "TIMELESS", "NAKK")
 		gbd.makeBaseBinStoreCmds(bstore.binTblNm, scenID, timeInf)(baseBinSpecStrm)
 	}
 
 	// To process a Stream-of-ZIO we can use mapZIO, or more awkwardly runFoldZIO.
-	def compileBaseLevelStoreOp(storeCmdStrm : UStream[gbd.BaseBinStoreCmdRow]) : RIO[ZDynDBExec, Chunk[gbd.BaseGenRsltRec]] = {
-		val wovenCmdStream: ZStream[ZDynDBExec, Throwable, gbd.BaseGenRsltRec] = storeCmdStrm.mapZIO(cmdRow => {
+	def compileBaseLevelStoreOp(storeCmdStrm : UStream[gbd.BinStoreCmdRow]) : RIO[ZDynDBExec, Chunk[gbd.BinStoreRslt]] = {
+		val wovenCmdStream: ZStream[ZDynDBExec, Throwable, gbd.BinStoreRslt] = storeCmdStrm.mapZIO(cmdRow => {
 			val (binSpec, binItem, binPK, binCmd) = cmdRow
-			val enhCmd: RIO[ZDynDBExec, gbd.BaseGenRsltRec] = binCmd.map(rsltOptItm => (binSpec, binPK, rsltOptItm))
+			val enhCmd: RIO[ZDynDBExec, gbd.BinStoreRslt] = binCmd.map(rsltOptItm => (binSpec, binPK, rsltOptItm))
 			enhCmd
 		})
-		val chnky: RIO[ZDynDBExec, Chunk[gbd.BaseGenRsltRec]] = wovenCmdStream.runCollect
+		val chnky: RIO[ZDynDBExec, Chunk[gbd.BinStoreRslt]] = wovenCmdStream.runCollect
 		chnky
 	}
 
