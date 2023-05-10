@@ -84,12 +84,12 @@ trait StatEntryOps extends KnowsDistribTypes {
 trait BinStatCalcs extends KnowsDistribTypes {
 	val myStatEntryOps = new StatEntryOps {}
 
-	type BinRDat = (DBinWt, StatRow)
-	def computeMeansAndVars(binDats : Iterable[DBinDat]) : StatRow = {
+	// type BinRDat = (DBinWt, StatRow)
+	def aggregateWeightsMeansAndVars(binDats : Iterable[DBinDat]) : (DBinWt, StatRow) = {
 		val weightedExpects : WtExpectsRow = reduceWeightedExpectations(binDats)
 		val (rowWt, eeSeq) = weightedExpects
 		val statRow : StatRow = eeSeq.map(ee => myStatEntryOps.entryFromExpects(ee))
-		statRow
+		(rowWt, statRow)
 	}
 	def reduceWeightedExpectations(binDats : Iterable[DBinDat]) : WtExpectsRow = {
 		val inBinRows: Iterable[WtExpectsRow] = binDats.map(binDat => {

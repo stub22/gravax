@@ -1,16 +1,79 @@
 package fun.gravax.zdynamo
 
+// import fun.gravax.zdynamo.RunZioDynamoTrial.{BinStoreRslt, DBinWt, LevelTagNumChnk, ParentTag, StatRow, combineWeightMeansAndVars, myGenBD, myBinStatCalc, myBinSumCalc}
+import zio.{Chunk, NonEmptyChunk, UIO}
+import zio.stream.{UStream, ZStream}
+
 private trait BinStatStuff
 
-trait BinSummaryCalc extends KnowsDistribTypes  {
+trait BinSummaryCalc extends KnowsGenTypes  {
 
 	val myBinStatCalcs = new BinStatCalcs {}
+	// type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
+	def combineStatsPerParent(storeRsltChnk : Chunk[BinStoreRslt], parentTagNums : LevelTagNumChnk) : UIO[Chunk[(BinTagInfo, DBinWt, StatRow)]] = {
 
-
+		// Results in storeRsltChnk are already sorted by parents, and should be in same order as parents in fullBinTagNumBlk
+		val rsltChnksPerParent: UStream[(ParentTag, NonEmptyChunk[BinStoreRslt])] =
+			ZStream.fromChunk(storeRsltChnk).groupAdjacentBy(rslt => rslt._1._1.parentTag)
+		val chunkOfChunksOp: UIO[Chunk[(ParentTag, NonEmptyChunk[BinStoreRslt])]] = rsltChnksPerParent.runCollect
+		val aggUIO: UIO[Chunk[(BinTagInfo, DBinWt, StatRow)]] = chunkOfChunksOp.map(cofc => {
+			// If all of the parents have at least one child, then parentTagNums and cofc should be same length and in same order.
+			assert(cofc.size == parentTagNums.size)
+			// If inputs are NOT of equal size, the returned chunk will have the length of the shorter chunk.
+			// : Chunk[(BinTagInfo, BinNumInfo, (ParentTag, NonEmptyChunk[BinStoreRslt]))]
+			val combo = parentTagNums.toChunk.zip(cofc)
+			assert(combo.size == parentTagNums.size)
+			// Could make this a stream to
+			// combo.foreach(row =>
+			val aggregateRowChunk: Chunk[(BinTagInfo, DBinWt, StatRow)] = combo.map(row => {
+				val (tagInfo, numInfo, (ptag, rsltChnk)) = row
+				// Ensure that the parent binTags match up as expected.
+				assert(tagInfo.binTag == ptag)
+				val (aggWt, aggStatRow) = combineWeightMeansAndVars(rsltChnk)
+				val outTup = (tagInfo, aggWt, aggStatRow)
+				outTup
+			})
+			aggregateRowChunk
+		})
+		aggUIO
+	}
+	def combineWeightMeansAndVars(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (DBinWt, StatRow) = {
+		val binDatChunk : IndexedSeq[BinTypes.DBinDat] = baseGenRsltsToDBinDats(baseRsltSeq)
+		myBinStatCalcs.aggregateWeightsMeansAndVars(binDatChunk)
+	}
+	private def baseGenRsltsToDBinDats(baseRsltSeq : IndexedSeq[BinStoreRslt]) : IndexedSeq[DBinDat] = {
+		val (taggedDBDs, ekeys) = baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
+		taggedDBDs.map(_._3)
+	}
+	private def baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[BinTypes.EntryKey]) = {
+		val binSpecs = baseRsltSeq.map(_._1)
+		val firstMeat = binSpecs.head._4
+		val meatKeyOrder = Ordering.String
+		val keySeq : IndexedSeq[BinTypes.EntryKey] = firstMeat.allKeysSorted(meatKeyOrder)
+		val binDatSeq : IndexedSeq[(ParentTag, BinTag, DBinDat)] = binSpecs.map(binSpec => {
+			val dbd : DBinDat = binSpecToDBD(binSpec, keySeq)
+			val tagInfo : BinTagInfo = binSpec._1
+			(tagInfo.parentTag, tagInfo.binTag, dbd)
+		})
+		(binDatSeq, keySeq)
+	}
+	private def binSpecToDBD(bbSpec : BinSpec, keySyms: IndexedSeq[EntryKey]) : DBinDat = {
+		val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
+		val statRow = binMeat.mkStatRow(keySyms)
+		val binIdHmm = -999 // tagInfo.binTag
+		val dbd = (binIdHmm, massInfo.binMass, statRow )
+		dbd
+	}
+/*
+	def computeStatsForParents(baseRsltSeq : IndexedSeq[BinStoreRslt]) : IndexedSeq[(ParentTag, StatRow)] = {
+		val (taggedDBDs, keySeq) = gbd.baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
+		val parentStats : IndexedSeq[(ParentTag, StatRow)] = betterParentStats(taggedDBDs, keySeq)
+		parentStats
+	}
 	def betterParentStats(binDataMatrix : IndexedSeq[(ParentTag, BinTag, DBinDat)], keySyms: IndexedSeq[EntryKey]): IndexedSeq[(ParentTag, StatRow)] = {
 		???
 	}
-
+*/
 	def calcParentStats(keySyms: IndexedSeq[EntryKey], storedRootMeanVec: IndexedSeq[EntryMean],
 				binDataMatrix : IndexedSeq[(ParentTag, BinTag, DBinDat)]): IndexedSeq[(ParentTag, StatRow)] = {
 		// Stored mean and statistics of the root bin

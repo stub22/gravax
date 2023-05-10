@@ -1,6 +1,7 @@
 package fun.gravax.zdynamo
 
 
+import fun.gravax.zdynamo.RunZioDynamoTrial.{myGenBD, myGenTN}
 import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
 import zio.{Chunk, NonEmptyChunk, RIO, UIO, ZIO, Random => ZRandom}
 import zio.stream.{UStream, ZStream}
@@ -11,16 +12,21 @@ import scala.math.BigDecimal
 
 private trait GenBinStuff
 
-trait GenBinData extends KnowsBinItem with KnowsDistribTypes {
-
-	val myTBI : ToBinItem
-
+trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes {
 	// Pure-data generated based on rules.  These tuples are used as stream records that do not need as much concreteness.
 	// type BaseMassyMeatRow = (BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))
 	type BinSpec = (BinTagInfo, BinNumInfo, BinMassInfo, BinMeatInfo) // Final agg of pure-data based on gen-rules
 	type BinStoreCmdRow = (BinSpec, Item, PrimaryKey, RIO[ZDynDBExec, Option[Item]])
 	type BinStoreRslt = (BinSpec, PrimaryKey, Option[Item])
+	val zeroBD = BigDecimal("0.0")
 
+	type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
+
+}
+
+trait GenBinData extends KnowsGenTypes {
+
+	val myTBI : ToBinItem
 
 	// Combine the finite tree structure of the tagNumChnk (known number of records) with the stream of bin data (often random).
 	// Presume that mmStrm.size >= baseTagNumChunk.size.
@@ -33,8 +39,6 @@ trait GenBinData extends KnowsBinItem with KnowsDistribTypes {
 	// before we write the first bin to DB.  Otherwise we have to make a second pass to store absWeight.
 	// We have not yet written any app code that uses absolute weight.
 	// 2023-05-03 :  AbsoluteWeight is disabled until further notice.
-
-
 	def makeBaseBinStoreCmds(tblNm : String, scenID : String, timeInf : BinTimeInfo)(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
 		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
 		val binLevelStoreTupStrm: UStream[BinStoreCmdRow] = baseBinSpecStrm.map(bbSpec => {
@@ -56,19 +60,13 @@ trait GenBinData extends KnowsBinItem with KnowsDistribTypes {
 		val fullBI = myTBI.fillBinSortKey(binItemWithMeat)
 		fullBI
 	}
+/*
 
-	def binSpecToDBD(bbSpec : BinSpec, keySyms: IndexedSeq[EntryKey]) : DBinDat = {
-		val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
-		val statRow = binMeat.mkStatRow(keySyms)
-		val binIdHmm = -999 // tagInfo.binTag
-		val dbd = (binIdHmm, massInfo.binMass, statRow )
-		dbd
-	}
-	def baseGenRsltsToDBinDats(baseRsltSeq : IndexedSeq[BinStoreRslt]) : IndexedSeq[DBinDat] = {
-		val (taggedDBDs, ekeys) = baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
+	def OLDE_baseGenRsltsToDBinDats(baseRsltSeq : IndexedSeq[BinStoreRslt]) : IndexedSeq[DBinDat] = {
+		val (taggedDBDs, ekeys) = OLDE_baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
 		taggedDBDs.map(_._3)
 	}
-	def baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[BinTypes.EntryKey]) = {
+	def OLDE_baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[BinTypes.EntryKey]) = {
 		val binSpecs = baseRsltSeq.map(_._1)
 		val firstMeat = binSpecs.head._4
 		val meatKeyOrder = Ordering.String
@@ -80,9 +78,8 @@ trait GenBinData extends KnowsBinItem with KnowsDistribTypes {
 		})
 		(binDatSeq, keySeq)
 	}
-
-	val zeroBD = BigDecimal("0.0")
-	def computeParentMasses(baseRsltChnk : Chunk[BinStoreRslt]): SMap[String, BigDecimal] = {
+*/
+	def OLDE_computeParentMasses(baseRsltChnk : Chunk[BinStoreRslt]): SMap[String, BigDecimal] = {
 		val emptyParentMassMap = SMap[String,BigDecimal]()
 		val parentMasses: SMap[String, BigDecimal] = baseRsltChnk.foldLeft(emptyParentMassMap)((prevMassMap, nxtBGRR) => {
 			val ptag : String = nxtBGRR._1._1.parentTag

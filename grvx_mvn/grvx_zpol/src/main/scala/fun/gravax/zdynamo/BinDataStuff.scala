@@ -1,5 +1,7 @@
 package fun.gravax.zdynamo
 
+import zio.NonEmptyChunk
+
 import scala.collection.immutable.{Map => SMap}
 
 private trait BinDataStuff
@@ -32,6 +34,8 @@ trait NameScopeHmm {
 
 	type BinTag = String
 	type ParentTag = BinTag
+
+
 
 }
 object BinTypes extends NameScopeHmm

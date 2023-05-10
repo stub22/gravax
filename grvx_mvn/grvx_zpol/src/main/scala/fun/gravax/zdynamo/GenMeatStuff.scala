@@ -8,7 +8,7 @@ import scala.collection.immutable.{Queue, Map => SMap}
 
 private trait GenMeatStuff
 
-trait GenMeatAndMassData extends KnowsBinItem {
+trait GenMeatAndMassData extends KnowsGenTypes {
 
 	def gaussianBD(zrnd : ZRandom, mathCtx : MathContext)(mean : BigDecimal, stdDev : BigDecimal): UIO[BigDecimal] = {
 		val stdNumEff: UIO[Double] = zrnd.nextGaussian
@@ -31,7 +31,7 @@ trait GenMeatAndMassData extends KnowsBinItem {
 
 	val (meanMin, meanMax) = (BigDecimal("-1.0"), BigDecimal("1.0"))
 	val (vrMin, vrMax) = (BigDecimal("0.0"), BigDecimal("0.5"))
-	def genRandStatEntry(zrnd : ZRandom, mathCtx : MathContext)(ekey : BinTypes.EntryKey) : UIO[BinTypes.StatEntry] = {
+	def genRandStatEntry(zrnd : ZRandom, mathCtx : MathContext)(ekey : EntryKey) : UIO[StatEntry] = {
 		for {
 			mean <- truncGaussBD(zrnd, mathCtx)(meanMin, meanMax)
 			vr <- truncGaussBD(zrnd, mathCtx)(vrMin, vrMax)
@@ -39,20 +39,20 @@ trait GenMeatAndMassData extends KnowsBinItem {
 	}
 
 
-	def genRandStatMap(zrnd : ZRandom, mathCtx : MathContext)(keys : Iterable[BinTypes.EntryKey]) : UIO[BinTypes.StatMap] = {
-		val kstrm: UStream[BinTypes.EntryKey] = ZStream.fromIterable(keys)
+	def genRandStatMap(zrnd : ZRandom, mathCtx : MathContext)(keys : Iterable[EntryKey]) : UIO[StatMap] = {
+		val kstrm: UStream[EntryKey] = ZStream.fromIterable(keys)
 		// This could be done in fewer lines using ZSink.collectAllToMap
-		val stStrm: UStream[(BinTypes.EntryKey, BinTypes.StatEntry)] = kstrm.flatMap(key => {
+		val stStrm: UStream[(EntryKey, StatEntry)] = kstrm.flatMap(key => {
 			val steOp  = genRandStatEntry(zrnd, mathCtx)(key)
 			val tupOp = steOp.map(statEnt => (statEnt._1, statEnt))
 			ZStream.fromZIO(tupOp)
 		})
 		// val chunkMkrSink = ZSink.collectAll[(BinTypes.EntryKey, BinTypes.StatEntry)]
-		val stChunk_op: UIO[Chunk[(BinTypes.EntryKey, BinTypes.StatEntry)]] = stStrm.runCollect
-		val stMap: UIO[SMap[BinTypes.EntryKey, BinTypes.StatEntry]] = stChunk_op.map(chnk => chnk.toMap)
+		val stChunk_op: UIO[Chunk[(EntryKey, StatEntry)]] = stStrm.runCollect
+		val stMap: UIO[SMap[EntryKey, StatEntry]] = stChunk_op.map(chnk => chnk.toMap)
 		stMap
 	}
-	def genRandEntryKey(zrnd : ZRandom, keyLen : Int) : UIO[BinTypes.EntryKey] = {
+	def genRandEntryKey(zrnd : ZRandom, keyLen : Int) : UIO[EntryKey] = {
 		val (minKeyChr, maxKeyChr) = ('A', 'Z')
 		val oneChrOp: UIO[Char] = zrnd.nextIntBetween(minKeyChr, maxKeyChr + 1).map(_.toChar)
 		val manyChrStrm = ZStream.repeatZIO(oneChrOp)
@@ -62,14 +62,14 @@ trait GenMeatAndMassData extends KnowsBinItem {
 		val esop: UIO[String] = echk.map(chnk => new String(chnk.toArray))
 		esop
 	}
-	def genManyEKeys (zrnd : ZRandom, keyLen : Int, numKeys : Int) : UIO[Seq[BinTypes.EntryKey]] = {
+	def genManyEKeys (zrnd : ZRandom, keyLen : Int, numKeys : Int) : UIO[Seq[EntryKey]] = {
 		val randEkeyOp = genRandEntryKey(zrnd, keyLen)
 		val keyStrm = ZStream.repeatZIO(randEkeyOp)
 		val enoughKeysOp = keyStrm.take(numKeys).runCollect.map(_.toSeq)
 		enoughKeysOp
 	}
 	// Generate a stream of random stat maps, and treat each as the meat-map of a bin.
-	def genMeatInfoStrmFromFixedKeys(zrnd : ZRandom, mathCtx : MathContext, fixedKeys : Seq[BinTypes.EntryKey], fixedFlavor : String): UStream[BinMeatInfo] = {
+	def genMeatInfoStrmFromFixedKeys(zrnd : ZRandom, mathCtx : MathContext, fixedKeys : Seq[EntryKey], fixedFlavor : String): UStream[BinMeatInfo] = {
 		val oneStMpOp = genRandStatMap(zrnd, mathCtx)(fixedKeys)
 		val stMpStrm = ZStream.repeatZIO(oneStMpOp)
 		val miStrm = stMpStrm.map(stMap => BinMeatInfo(fixedFlavor, stMap))

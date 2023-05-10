@@ -7,10 +7,11 @@ import scala.collection.immutable.Queue
 
 private trait GenTagStuff
 
-trait GenTagNumData {
-	type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
 
-	// Reified as a case class because this is a useful boundary from design perspective.
+
+
+trait GenTagNumData extends KnowsGenTypes {
+	// BinTagNumBlock is reified as a case class because this is a useful boundary from design perspective.
 	// We separate the baseLevel because it is semantically distinct, it is used for independent bin data.
 	// The virtLevels are for derived data.  However these levels are all represented using the same tag-key structures,
 	// so we COULD instead treat all the levels in this BinTagNumBlock as "the same".  In our generative use case,
@@ -18,12 +19,14 @@ trait GenTagNumData {
 	// would get the base-bin data standalone, (perhaps then do some clustering on it), and then build the virtLevels
 	// tree structure in a more incremental fashion.  We want all this code to care as little as possible which
 	// of those scenarios we are in.
-	case class BinTagNumBlock(baseLevel : LevelTagNumChnk, virtLevels : Chunk[(Int, LevelTagNumChnk)]) {
+	case class BinTagNumBlock(baseLevel : LevelTagNumChnk, virtLevels : Chunk[(Int, LevelTagNumChnk)]) extends KnowsGenTypes {
 		def describe : String = {
 			val virtLevelsSizes = virtLevels.map(levPair => (levPair._1, levPair._2.size))
 			s"BinTagNumBlock baseLevel.count=${baseLevel.size}, virtLevels.count=${virtLevels.size}, innerSizes=${virtLevelsSizes}"
 		}
 	}
+
+
 	// Our resulting op is currently pure and deterministic (no Random nums).
 	// But if someone changed the impl of genTagNumChunksForAllLevels...
 	def genBinTagNumBlock(rootSeqNum : Int,  rootKidCnt : Int, baseLevel : Int): UIO[BinTagNumBlock] = {

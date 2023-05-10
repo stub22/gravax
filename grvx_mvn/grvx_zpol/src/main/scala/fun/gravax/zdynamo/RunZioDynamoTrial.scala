@@ -1,16 +1,16 @@
 package fun.gravax.zdynamo
 
 
-import fun.gravax.zdynamo.RunZioDynamoTrial.gbd
-import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
+import fun.gravax.zdynamo.RunZioDynamoTrial.{myGenBD, myGenTN}
+import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec}
 import zio.stream.{UStream, ZStream}
-import zio.{Chunk, Console, RIO, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom, dynamodb => ZDyn}
+import zio.{Chunk, Console, NonEmptyChunk, RIO, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom, dynamodb => ZDyn}
 
 import java.math.{MathContext, RoundingMode}
 import scala.collection.immutable.{Map => SMap}
 
 
-object RunZioDynamoTrial extends ZIOAppDefault {
+object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 	override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = mkTask
 
 	def mkTask : Task[Unit] = {
@@ -24,46 +24,53 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 		mkProgram.provide(localDB_layer)
 	}
 
-	lazy val bstore = new BinStoreApi {}
+	lazy val myBinStore = new BinStoreApi {}
+	lazy val myGenBD = new GenBinData {
+		override val myTBI: ToBinItem = myBinStore.myTBI
+	}
+	lazy val myGenMM = new GenMeatAndMassData {}
+	lazy val myGenTN = new GenTagNumData {}
+
+	lazy val myBinSumCalc = new BinSummaryCalc {}
+	// BinTagNumBlock is a case class, which we cannot easily push into our KnowsXyz setup.
+	// That's why this abstract type for BaseRsltPair is here and not in KnowsXyz.
+	type BaseRsltPair = (myGenTN.BinTagNumBlock, Chunk[BinStoreRslt])
+
 	private def mkProgram = {
 
 		val dumStore = new StoreDummyItems {}
 		for {
-			_ <- bstore.maybeCreateBinTable
+			_ <- myBinStore.maybeCreateBinTable
 			_ <- dumStore.putOneMessyItem
 			_ <- dumStore.putOneDummyBinItem
 			_ <- dumStore.readThatDummyBinYo
 			secPK <- dumStore.putFeatherDBI
-			rrslt <- bstore.readBinData(secPK)
+			rrslt <- myBinStore.readBinData(secPK)
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 
 			// _ <- dumpTagInfoStrm
-			baseRslt <- genBaseSqnc
-			_ <- ZIO.succeed(gbd.computeParentMasses(baseRslt._2))
-			combStat <- ZIO.succeed(computeCombinedMeansAndVars(baseRslt._2))
+			baseRslt <- genBaseSqnc // : (myGenTN.BinTagNumBlock, Chunk[myGenBD.BinStoreRslt])
+			// case class BinTagNumBlock(baseLevel : LevelTagNumChnk, virtLevels : Chunk[(Int, LevelTagNumChnk)]) {
+			// type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
+			_ <- ZIO.succeed(myGenBD.OLDE_computeParentMasses(baseRslt._2))
+			combStat <- ZIO.succeed(myBinSumCalc.combineWeightMeansAndVars(baseRslt._2))
 			_ <- ZIO.log(s"Got combined stats: ${combStat}")
-			parentStats <- ZIO.succeed(computeStatsForParents(baseRslt._2))
+			parentStats <- myBinSumCalc.combineStatsPerParent(baseRslt._2, baseRslt._1.virtLevels.last._2)
+					// ZIO.succeed(computeStatsForParents(baseRslt._2))
 			_ <- ZIO.log(s"Got parent stats: ${parentStats}")
-			_ <- bstore.maybeDeleteBinTable
+			_ <- myBinStore.maybeDeleteBinTable
 		} yield ()
 	}
-	lazy val gbd = new GenBinData {
-		override val myTBI: ToBinItem = bstore.myTBI
-	}
-	lazy val gmmd = new GenMeatAndMassData {}
-	lazy val gtnd = new GenTagNumData {}
-	lazy val myBinStatCalc = new BinStatCalcs {}
-	lazy val myBinSumCalc = new BinSummaryCalc {}
 
-	def genBaseSqnc: RIO[ZDynDBExec, (gtnd.BinTagNumBlock, Chunk[gbd.BinStoreRslt])]   = {
+	def genBaseSqnc: RIO[ZDynDBExec, BaseRsltPair]   = {
 		val rootTagNum = 1200
 		val rootKidsCnt = 7
 		val baseBinLevel = 4
 		val massyMeatStrm = mkMassyMeatStrm
-		val baseGenOp: RIO[ZDynDBExec, (gtnd.BinTagNumBlock, Chunk[gbd.BinStoreRslt])] = for {
-			bntgnmBlk <- gtnd.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
+		val baseGenOp: RIO[ZDynDBExec, (myGenTN.BinTagNumBlock, Chunk[BinStoreRslt])] = for {
+			bntgnmBlk <- myGenTN.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
 			_ <- ZIO.log(s"genBaseSqnc .genBinTagNumBlock produced: ${bntgnmBlk.describe}")
-			binSpecStrm <- ZIO.succeed(gbd.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
+			binSpecStrm <- ZIO.succeed(myGenBD.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
 			binStoreCmdStrm <- ZIO.succeed(mkBaseLevCmds(binSpecStrm))
 			levStoreRslt <- compileBaseLevelStoreOp(binStoreCmdStrm)
 			_ <- ZIO.log(s"Got levStoreRslt: ${levStoreRslt.toString().substring(0,200)} [TRUNCATED]")
@@ -72,46 +79,35 @@ object RunZioDynamoTrial extends ZIOAppDefault {
 	}
 
 
-	def computeCombinedMeansAndVars(baseRsltSeq : IndexedSeq[gbd.BinStoreRslt]) : BinTypes.StatRow = {
-		val binDatChunk : IndexedSeq[BinTypes.DBinDat] = gbd.baseGenRsltsToDBinDats(baseRsltSeq)
-		myBinStatCalc.computeMeansAndVars(binDatChunk)
-	}
-
-	def computeStatsForParents(baseRsltSeq : IndexedSeq[gbd.BinStoreRslt]) : IndexedSeq[(gbd.ParentTag, gbd.StatRow)] = {
-		val (taggedDBDs, keySeq) = gbd.baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
-		val parentStats : IndexedSeq[(gbd.ParentTag, gbd.StatRow)] = myBinSumCalc.betterParentStats(taggedDBDs, keySeq)
-		parentStats
-	}
-
 	def storeVirtualLevel = ???
 
 
 	def mkMassyMeatStrm = {
 		val precision = 8
 		val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
-		val massyMeatStrm = gmmd.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)
+		val massyMeatStrm = myGenMM.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)
 		massyMeatStrm
 	}
-	def mkBaseLevCmds(baseBinSpecStrm : UStream[gbd.BinSpec]) : UStream[gbd.BinStoreCmdRow] = {
+	def mkBaseLevCmds(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
 		val scenID = "gaussnoizBBB"
 		val timeInf = BinTimeInfo("NOPED", "TIMELESS", "NAKK")
-		gbd.makeBaseBinStoreCmds(bstore.binTblNm, scenID, timeInf)(baseBinSpecStrm)
+		myGenBD.makeBaseBinStoreCmds(myBinStore.binTblNm, scenID, timeInf)(baseBinSpecStrm)
 	}
 
 	// To process a Stream-of-ZIO we can use mapZIO, or more awkwardly runFoldZIO.
-	def compileBaseLevelStoreOp(storeCmdStrm : UStream[gbd.BinStoreCmdRow]) : RIO[ZDynDBExec, Chunk[gbd.BinStoreRslt]] = {
-		val wovenCmdStream: ZStream[ZDynDBExec, Throwable, gbd.BinStoreRslt] = storeCmdStrm.mapZIO(cmdRow => {
+	def compileBaseLevelStoreOp(storeCmdStrm : UStream[BinStoreCmdRow]) : RIO[ZDynDBExec, Chunk[BinStoreRslt]] = {
+		val wovenCmdStream: ZStream[ZDynDBExec, Throwable, BinStoreRslt] = storeCmdStrm.mapZIO(cmdRow => {
 			val (binSpec, binItem, binPK, binCmd) = cmdRow
-			val enhCmd: RIO[ZDynDBExec, gbd.BinStoreRslt] = binCmd.map(rsltOptItm => (binSpec, binPK, rsltOptItm))
+			val enhCmd: RIO[ZDynDBExec, BinStoreRslt] = binCmd.map(rsltOptItm => (binSpec, binPK, rsltOptItm))
 			enhCmd
 		})
-		val chnky: RIO[ZDynDBExec, Chunk[gbd.BinStoreRslt]] = wovenCmdStream.runCollect
+		val chnky: RIO[ZDynDBExec, Chunk[BinStoreRslt]] = wovenCmdStream.runCollect
 		chnky
 	}
 
 	// standalone test runner for just the tagNum generator step
 	def dumpTagInfoStrm  = {
-		val ps = gtnd.genTagInfoStrm(500, 7).zipWithIndex.take(300)
+		val ps = myGenTN.genTagInfoStrm(500, 7).zipWithIndex.take(300)
 		val psOp = ps.debug.runCollect
 		psOp
 	}
