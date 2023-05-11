@@ -41,27 +41,16 @@ object RunZioDynamoTrial extends ZIOAppDefault with SpecialResultTypes {
 	// That's why this abstract type for BaseRsltPair is here and not in KnowsXyz.
 	// The BinTagNumBlock covers ALL the levels of the bin-tree.
 
-	lazy val ourKeyedCmdMaker = new KeyedCmdMaker {
 
-		override def mkBaseLevCmds(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
-			myGenBD.makeBaseBinStoreCmds(myBinStore.binTblNm, myTestScenID, myTestTimeInf)(baseBinSpecStrm)
-		}
-
-		override def mkAggLevCmds(aggRows : IndexedSeq[myBinSumCalc.VirtRsltRow]) : UStream[BinStoreCmdRow] = {
-			val binSpecStrm: UStream[BinSpec] = myBDX.aggStatsToBinSpecStrm(aggRows, myTestBinFlav)
-			myGenBD.makeBaseBinStoreCmds(myBinStore.binTblNm, myTestScenID, myTestTimeInf)(binSpecStrm)
-		}
-
-	}
+	lazy val justOneROFG = new GenScenarioParams{}
 
 	lazy val myBSTX = new BinStoreTreeForFixedKey {
 		override protected def getGenBD: GenBinData = myGenBD
 
 		override protected def getBinSumCalc: BinSummaryCalc = myBinSumCalc
 
-		override protected def getKeyedCmdMaker: KeyedCmdMaker = ourKeyedCmdMaker
+		override protected def getKeyedCmdMaker: KeyedCmdMaker = justOneROFG.ourKeyedCmdMaker
 	}
-
 
 	private def mkProgram = {
 
@@ -76,7 +65,7 @@ object RunZioDynamoTrial extends ZIOAppDefault with SpecialResultTypes {
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 
 			// _ <- dumpTagInfoStrm
-			baseRslt <- genBaseSqnc // : (myGenTN.BinTagNumBlock, Chunk[myGenBD.BinStoreRslt])
+			baseRslt <- genBaseSqnc(justOneROFG) // : (myGenTN.BinTagNumBlock, Chunk[myGenBD.BinStoreRslt])
 			// All of random data generation is now complete, so it is now OK if we do some operations multiple times:
 			// all deterministic operations that start from baseRslt should get the same answer.
 			// Unused operation.
@@ -88,68 +77,59 @@ object RunZioDynamoTrial extends ZIOAppDefault with SpecialResultTypes {
 			_ <- ZIO.log(s"Got parent stats: ${parentStats}")
 			pcomb <-   ZIO.succeed(myBinSumCalc.combineVirtRsltsToWMV(parentStats))
 			_ <- ZIO.log(s"Parents combined: ${pcomb}")
-			// _ <- aggAndStoreVirtLevels(baseRslt)
+			virtRslt <- genVirtSqnc(baseRslt)
+			_ <- ZIO.log(s"Virt sqnc rslt: ${virtRslt}")
+			// _ <- myBSTX.aggAndStoreVirtLevels(baseRslt)
 			_ <- myBinStore.maybeDeleteBinTable
 		} yield ()
 	}
-	def genBaseSqnc: RIO[ZDynDBExec, BaseRsltPair] = {
+	def genBaseSqnc(rofg : GenScenarioParams): RIO[ZDynDBExec, BaseRsltPair] = {
+		val massyMeatStrm = rofg.mkMassyMeatStrm
+		val keyedCmdMaker: KeyedCmdMaker = rofg.ourKeyedCmdMaker
+		val bsgnOp = rofg.genRootXfrm.genAndStoreBaseLevelOnly(keyedCmdMaker, massyMeatStrm)
+		bsgnOp
+	}
+	def genVirtSqnc(brPair : BaseRsltPair): ZIO[ZDynDBExec, Throwable, Chunk[BinStoreRslt]] = {
+		val levRsltChnkStrm : ZStream[ZDynDBExec, Throwable, Chunk[BinStoreRslt]] = myBSTX.aggAndStoreVirtLevels(brPair)
+		val smootherOutStrm: ZStream[ZDynDBExec, Throwable, BinStoreRslt] = levRsltChnkStrm.flattenChunks
+		val bigFlatOutputOp = smootherOutStrm.debug.runCollect
+		bigFlatOutputOp
+	}
+
+	trait GenScenarioParams {
+		val myTestScenID = "gaussnoizBBB"
+		val myTestTimeInf = BinTimeInfo("NOPED", "TIMELESS", "NAKK")
+		val myTestBinFlav = BFLV_ANN_RET_MEAN_VAR
 		val rootTagNum = 1200
 		val rootKidsCnt = 7
 		val baseBinLevel = 4
+
 		val genRootXfrm = new GenRootXformer(rootTagNum, rootKidsCnt, baseBinLevel) {
 			override protected def getGenBD: GenBinData = myGenBD
 
 			override protected def getGenTN: GenTagNumData = myGenTN
 		}
 
-		val massyMeatStrm = mkMassyMeatStrm
-		val keyedCmdMaker: KeyedCmdMaker = ourKeyedCmdMaker
-		val bsgnOp = genRootXfrm.genAndStoreBaseLevelOnly(keyedCmdMaker, massyMeatStrm)
-		bsgnOp
+		def mkMassyMeatStrm: UStream[(BinMassInfo, BinMeatInfo)] = {
+			val precision = 8
+			val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
+			val massyMeatStrm = myGenMM.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)(myTestBinFlav)
+			massyMeatStrm
+		}
+
+		lazy val ourKeyedCmdMaker = new KeyedCmdMaker {
+
+			override def mkBaseLevCmds(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
+				myGenBD.makeBaseBinStoreCmds(myBinStore.binTblNm, myTestScenID, myTestTimeInf)(baseBinSpecStrm)
+			}
+
+			override def mkAggLevCmds(aggRows : IndexedSeq[myBinSumCalc.VirtRsltRow]) : UStream[BinStoreCmdRow] = {
+				val binSpecStrm: UStream[BinSpec] = myBDX.aggStatsToBinSpecStrm(aggRows, myTestBinFlav)
+				myGenBD.makeBaseBinStoreCmds(myBinStore.binTblNm, myTestScenID, myTestTimeInf)(binSpecStrm)
+			}
+
+		}
 	}
-		/*
-		val baseGenOp: RIO[ZDynDBExec, (myGenTN.BinTagNumBlock, Chunk[BinStoreRslt])] = for {
-			bntgnmBlk <- myGenTN.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
-			_ <- ZIO.log(s"genBaseSqnc .genBinTagNumBlock produced: ${bntgnmBlk.describe}")
-			binSpecStrm <- ZIO.succeed(myGenBD.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
-			binStoreCmdStrm <- ZIO.succeed(ourKeyedCmdMaker.mkBaseLevCmds(binSpecStrm))
-			levStoreRslt <- myGenBD.compileBinLevelStoreOp(binStoreCmdStrm)
-			_ <- ZIO.log(s"Got levStoreRslt: ${levStoreRslt.toString().substring(0,200)} [TRUNCATED]")
-		} yield(bntgnmBlk, levStoreRslt)
-		baseGenOp
-		 */
-/*
-		val fout = vrtLvs.foldRight[(List[Chunk[BinStoreRslt]])](List(baseRsltChnk))((recTup, rChnkList) => {
-			val prevLevRsltChnk: Chunk[BinStoreRslt] = rChnkList.head
-			val (levNum, levChnk) : (LevelNum, LevelTagNumChnk) = recTup
-		})
-
-		for {
-			// combStat <- ZIO.succeed(myBinSumCalc.combineWeightMeansAndVars(brPair._2))
-			// VirtRsltRow = (BinTagInfo, BinNumInfo, DBinWt, StatRow)
-			aggParentStats <- myBinSumCalc.combineStatsPerParent(brPair._2, brPair._1.virtLevels.last._2)
-			storeCmdStrm <- ZIO.succeed(mkAggLevCmds(aggParentStats))
-			levStoreRslt <- myGenBD.compileBinLevelStoreOp(storeCmdStrm)
-			_ <- ZIO.log(s"Got agg levStoreRslt: ${levStoreRslt}")
-		} yield(levStoreRslt)
-	}
-
- */
-
-
-	def storeVirtualLevel = ???
-
-	val myTestScenID = "gaussnoizBBB"
-	val myTestTimeInf = BinTimeInfo("NOPED", "TIMELESS", "NAKK")
-	val myTestBinFlav = BFLV_ANN_RET_MEAN_VAR
-
-	def mkMassyMeatStrm : UStream[(BinMassInfo, BinMeatInfo)] = {
-		val precision = 8
-		val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
-		val massyMeatStrm = myGenMM.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)(myTestBinFlav)
-		massyMeatStrm
-	}
-
 
 
 	// standalone test runner for just the tagNum generator step

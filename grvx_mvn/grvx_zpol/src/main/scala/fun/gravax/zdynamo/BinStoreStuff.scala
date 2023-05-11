@@ -49,7 +49,6 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 trait BinStoreTreeForFixedKey extends SpecialResultTypes {
 	// Using java style here to pull in context data because it is context data to pull in.
 	protected def getGenBD : GenBinData
-
 	protected def getBinSumCalc : BinSummaryCalc
 	protected def getKeyedCmdMaker : KeyedCmdMaker
 	private lazy val myGenBD = getGenBD
@@ -59,9 +58,9 @@ trait BinStoreTreeForFixedKey extends SpecialResultTypes {
 	// From output stream of Chunks, can flattenChunks (strategic pivot) or just run as-is.
 	def aggAndStoreVirtLevels(brPair : BaseRsltPair) : ZStream[ZDynDBExec, Throwable, Chunk[BinStoreRslt]] = { //  : RIO[ZDynDBExec, Chunk[BinStoreRslt]] = {
 		val (tagNumBlock, baseRsltChnk) = brPair
-		val vrtLvs: Chunk[(LevelNum, LevelTagNumChnk)] = tagNumBlock.getVirtLevelsChnk
+		val vrtLvsUpFromBase: Chunk[(LevelNum, LevelTagNumChnk)] = tagNumBlock.getVirtLevelsChnk.reverse
 		// We need to produce a sequence of effects, hence a (short-n-thick) stream will suffice.
-		val vrtLvsStrm = ZStream.fromChunk(vrtLvs)
+		val vrtLvsStrm = ZStream.fromChunk(vrtLvsUpFromBase).debug
 		// We need to carry the prev-result along, so we could use .runFoldZIO (building a List) or scanZIO
 		val aggRsltStrm: ZStream[ZDynDBExec, Throwable, Chunk[BinStoreRslt]] = vrtLvsStrm.mapAccumZIO(baseRsltChnk)((prevRsltChnk, levPair) => {
 			val (levNum, levTagChnk) = levPair
