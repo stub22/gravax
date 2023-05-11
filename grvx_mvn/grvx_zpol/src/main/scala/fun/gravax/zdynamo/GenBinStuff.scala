@@ -1,7 +1,5 @@
 package fun.gravax.zdynamo
 
-
-import fun.gravax.zdynamo.RunZioDynamoTrial.{myGenBD, myGenTN}
 import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
 import zio.{Chunk, NonEmptyChunk, RIO, UIO, ZIO, Random => ZRandom}
 import zio.stream.{UStream, ZStream}
@@ -24,6 +22,8 @@ trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes {
 	type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
 
 	type VirtRsltRow = (BinTagInfo, BinNumInfo, DBinWt, StatRow)
+
+	type BaseRsltPair = (GoodTagNumBlk, Chunk[BinStoreRslt])
 }
 
 trait GenBinData extends KnowsGenTypes {
@@ -41,9 +41,9 @@ trait GenBinData extends KnowsGenTypes {
 	// before we write the first bin to DB.  Otherwise we have to make a second pass to store absWeight.
 	// We have not yet written any app code that uses absolute weight.
 	// 2023-05-03 :  AbsoluteWeight is disabled until further notice.
-	def makeBaseBinStoreCmds(tblNm : String, scenID : String, timeInf : BinTimeInfo)(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
+	def makeBinStoreCmds(tblNm : String, scenID : String, timeInf : BinTimeInfo)(binSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
 		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
-		val binLevelStoreTupStrm: UStream[BinStoreCmdRow] = baseBinSpecStrm.map(bbSpec => {
+		val binLevelStoreTupStrm: UStream[BinStoreCmdRow] = binSpecStrm.map(bbSpec => {
 			val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
 			val baseBinItem = buildBinItem(skelBintem, tagInfo, massInfo, binMeat)
 			val ourPK: PrimaryKey = myTBI.getFBI.getPKfromFullBinItem(baseBinItem)
@@ -74,6 +74,7 @@ trait GenBinData extends KnowsGenTypes {
 		chnky
 	}
 
+	// We use this as an independent debug check.  Is not used in our main sequence.
 	def OLDE_computeParentMasses(baseRsltChnk : Chunk[BinStoreRslt]): SMap[String, BigDecimal] = {
 		val emptyParentMassMap = SMap[String,BigDecimal]()
 		val parentMasses: SMap[String, BigDecimal] = baseRsltChnk.foldLeft(emptyParentMassMap)((prevMassMap, nxtBGRR) => {
@@ -84,9 +85,30 @@ trait GenBinData extends KnowsGenTypes {
 				Some(updatedTotalMassForParent)
 			})
 		})
-		println(s"Computed parentMassMap: ${parentMasses}")
+		println(s"println: OLDE_computeParentMasses: Computed parentMassMap: ${parentMasses}")
 		val massGrndTot = parentMasses.foldLeft(zeroBD)((prevTot, nxtKV) => prevTot.+(nxtKV._2))
-		println(s"Computed grand total mass: ${massGrndTot}")
+		println(s"println: OLDE_computeParentMasses: Computed grand total mass: ${massGrndTot}")
 		parentMasses
+	}
+}
+// These integer class-constructor parameters determine the shape of this generator setup.
+abstract class BlockBaseGen(rootTagNum : Int, rootKidsCnt : Int, baseBinLevel : Int) extends KnowsGenTypes {
+	protected def getGenBD : GenBinData
+	protected def getGenTN : GenTagNumData
+
+	private lazy val myGenBD = getGenBD
+	private lazy val myGenTN = getGenTN
+
+	def genAndStoreBaseLevelOnly(keyedCmdMaker: KeyedCmdMaker, massyMeatStrm : UStream[(BinMassInfo, BinMeatInfo)]):
+										RIO[ZDynDBExec, BaseRsltPair] = {
+		val baseGenOp: RIO[ZDynDBExec, (myGenTN.BinTagNumBlock, Chunk[BinStoreRslt])] = for {
+			bntgnmBlk <- myGenTN.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
+			_ <- ZIO.log(s"genAndStoreBaseSqnc .genBinTagNumBlock produced: ${bntgnmBlk.describe}")
+			binSpecStrm <- ZIO.succeed(myGenBD.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
+			binStoreCmdStrm <- ZIO.succeed(keyedCmdMaker.mkBaseLevCmds(binSpecStrm))
+			levStoreRslt <- myGenBD.compileBinLevelStoreOp(binStoreCmdStrm)
+			_ <- ZIO.log(s"Got levStoreRslt: ${levStoreRslt.toString().substring(0,200)} [TRUNCATED]")
+		} yield(bntgnmBlk, levStoreRslt)
+		baseGenOp
 	}
 }

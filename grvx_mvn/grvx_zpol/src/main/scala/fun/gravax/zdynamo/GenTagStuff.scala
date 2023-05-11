@@ -91,7 +91,7 @@ trait GenTagNumData extends KnowsGenTypes {
 		case class ParentRec(seqNum : Int, numKids : Int, parLevelNum : Int)
 		// val initPosVec = Vector[Int](1)
 		val emptyParentQ = Queue.empty[ParentRec]
-		val initParentQ = emptyParentQ.enqueue(ParentRec(1, rootKidsCnt, 1))
+		val initParentQ = emptyParentQ.enqueue(ParentRec(rootSeqNum, rootKidsCnt, 1))
 
 		case class GenSt(parent_opt : Option[ParentRec], absIdx : Int, locIdx : Int, levelNum : Int, maxKids : Int) //  parentQ : Queue[ParentRec] )
 		// Root is special and must have

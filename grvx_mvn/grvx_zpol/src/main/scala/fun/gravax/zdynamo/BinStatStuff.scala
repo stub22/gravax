@@ -12,8 +12,6 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 	val myBDX = new BinDataXformer {}
 	// type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
 
-
-
 	def combineStatsPerParent(storeRsltChnk : Chunk[BinStoreRslt], parentTagNums : LevelTagNumChnk) : UIO[Chunk[VirtRsltRow]] = {
 
 		// Results in storeRsltChnk are already sorted by parents, and should be in same order as parents in fullBinTagNumBlk
@@ -22,17 +20,17 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 		val chunkOfChunksOp: UIO[Chunk[(ParentTag, NonEmptyChunk[BinStoreRslt])]] = rsltChnksPerParent.runCollect
 		val aggUIO: UIO[Chunk[VirtRsltRow]] = chunkOfChunksOp.map(cofc => {
 			// If all of the parents have at least one child, then parentTagNums and cofc should be same length and in same order.
-			assert(cofc.size == parentTagNums.size)
+			assert(cofc.size == parentTagNums.size, s"cofc.size ${cofc.size} != parentTagNums.size ${parentTagNums.size}")
 			// If inputs are NOT of equal size, the returned chunk will have the length of the shorter chunk.
 			// : Chunk[(BinTagInfo, BinNumInfo, (ParentTag, NonEmptyChunk[BinStoreRslt]))]
 			val combo = parentTagNums.toChunk.zip(cofc)
-			assert(combo.size == parentTagNums.size)
+			assert(combo.size == parentTagNums.size, s"combo.size ${combo.size} != parentTagNums.size ${parentTagNums.size}")
 			// Could make this a stream to
 			// combo.foreach(row =>
 			val aggregateRowChunk: Chunk[(BinTagInfo, BinNumInfo, DBinWt, StatRow)] = combo.map(row => {
 				val (tagInfo, numInfo, (ptag, rsltChnk)) = row
 				// Ensure that the parent binTags match up as expected.
-				assert(tagInfo.binTag == ptag)
+				assert(tagInfo.binTag == ptag, s"tagInfo.binTag ${tagInfo.binTag} != ptag ${ptag}")
 				val (aggWt, aggStatRow) = combineWeightMeansAndVars(rsltChnk)
 				val outTup = (tagInfo, numInfo, aggWt, aggStatRow)
 				outTup
