@@ -9,17 +9,18 @@ private trait BinStatStuff
 trait BinSummaryCalc extends KnowsGenTypes  {
 
 	val myBinStatCalcs = new BinStatCalcs {}
+	val myBDX = new BinDataXformer {}
 	// type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
 
-	type VirtRsltRow = (BinTagInfo, DBinWt, StatRow)
+	type VirtRsltRow = (BinTagInfo, BinNumInfo, DBinWt, StatRow)
 
-	def combineStatsPerParent(storeRsltChnk : Chunk[BinStoreRslt], parentTagNums : LevelTagNumChnk) : UIO[Chunk[(BinTagInfo, DBinWt, StatRow)]] = {
+	def combineStatsPerParent(storeRsltChnk : Chunk[BinStoreRslt], parentTagNums : LevelTagNumChnk) : UIO[Chunk[VirtRsltRow]] = {
 
 		// Results in storeRsltChnk are already sorted by parents, and should be in same order as parents in fullBinTagNumBlk
 		val rsltChnksPerParent: UStream[(ParentTag, NonEmptyChunk[BinStoreRslt])] =
 			ZStream.fromChunk(storeRsltChnk).groupAdjacentBy(rslt => rslt._1._1.parentTag)
 		val chunkOfChunksOp: UIO[Chunk[(ParentTag, NonEmptyChunk[BinStoreRslt])]] = rsltChnksPerParent.runCollect
-		val aggUIO: UIO[Chunk[(BinTagInfo, DBinWt, StatRow)]] = chunkOfChunksOp.map(cofc => {
+		val aggUIO: UIO[Chunk[VirtRsltRow]] = chunkOfChunksOp.map(cofc => {
 			// If all of the parents have at least one child, then parentTagNums and cofc should be same length and in same order.
 			assert(cofc.size == parentTagNums.size)
 			// If inputs are NOT of equal size, the returned chunk will have the length of the shorter chunk.
@@ -28,12 +29,12 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 			assert(combo.size == parentTagNums.size)
 			// Could make this a stream to
 			// combo.foreach(row =>
-			val aggregateRowChunk: Chunk[(BinTagInfo, DBinWt, StatRow)] = combo.map(row => {
+			val aggregateRowChunk: Chunk[(BinTagInfo, BinNumInfo, DBinWt, StatRow)] = combo.map(row => {
 				val (tagInfo, numInfo, (ptag, rsltChnk)) = row
 				// Ensure that the parent binTags match up as expected.
 				assert(tagInfo.binTag == ptag)
 				val (aggWt, aggStatRow) = combineWeightMeansAndVars(rsltChnk)
-				val outTup = (tagInfo, aggWt, aggStatRow)
+				val outTup = (tagInfo, numInfo, aggWt, aggStatRow)
 				outTup
 			})
 			aggregateRowChunk
@@ -50,7 +51,7 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 	}
 	def combineVirtRsltsToWMV(virtRsltSeq : IndexedSeq[VirtRsltRow]) : (DBinWt, StatRow)  = {
 		val dbdSeq : IndexedSeq[DBinDat] = virtRsltSeq.map(vrr => {
-			val (tagInfo, binWt, statRow) = vrr
+			val (tagInfo, numInfo, binWt, statRow) = vrr
 			val binIdHmm = -999 // tagInfo.binTag
 			val dbd = (binIdHmm, binWt, statRow )
 			dbd
@@ -58,24 +59,17 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 		myBinStatCalcs.aggregateWeightsMeansAndVars(dbdSeq)
 	}
 	// type BinStoreRslt = (BinSpec, PrimaryKey, Option[Item])
-	private def baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[BinTypes.EntryKey]) = {
+	private def baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[EntryKey]) = {
 		val binSpecs = baseRsltSeq.map(_._1)
 		val firstMeat = binSpecs.head._4
 		val meatKeyOrder = Ordering.String
 		val keySeq : IndexedSeq[BinTypes.EntryKey] = firstMeat.allKeysSorted(meatKeyOrder)
 		val binDatSeq : IndexedSeq[(ParentTag, BinTag, DBinDat)] = binSpecs.map(binSpec => {
-			val dbd : DBinDat = binSpecToDBD(binSpec, keySeq)
+			val dbd : DBinDat = myBDX.binSpecToDBD(binSpec, keySeq)
 			val tagInfo : BinTagInfo = binSpec._1
 			(tagInfo.parentTag, tagInfo.binTag, dbd)
 		})
 		(binDatSeq, keySeq)
-	}
-	private def binSpecToDBD(bbSpec : BinSpec, keySyms: IndexedSeq[EntryKey]) : DBinDat = {
-		val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
-		val statRow = binMeat.mkStatRow(keySyms)
-		val binIdHmm = -999 // tagInfo.binTag
-		val dbd = (binIdHmm, massInfo.binMass, statRow )
-		dbd
 	}
 
 }

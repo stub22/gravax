@@ -35,6 +35,7 @@ trait NameScopeHmm {
 	type BinTag = String
 	type ParentTag = BinTag
 
+	type BinFlavor = String
 
 
 }
@@ -76,7 +77,7 @@ case class BinNumInfo(binNum : Int, parentNum : Int, maxKids : Int, levelNum : I
 
 // Seems we cannot use abstract types (of our self-type, or inherited) in constructor parameters.
 // If we make an outer trait scope then those names are available, or we can refer to members of an object.
-case class BinMeatInfo(binFlavor : String, meatMap : BinTypes.StatMap) extends KnowsDistribTypes {
+case class BinMeatInfo(binFlavor : BinTypes.BinFlavor, meatMap : BinTypes.StatMap) extends KnowsDistribTypes {
 	def mkStatRow(keySeq : IndexedSeq[EntryKey]) : StatRow = {
 		val entrySeq : StatRow = keySeq.map(ksym => {
 			val statAtSym: StatEntry = meatMap.get(ksym).get // This second .get will throw if no value present
@@ -168,7 +169,7 @@ trait BinModel {
 
 	type TimeInfo = PredictionTimeInfo
 
-	case class BinRecord(scenario : ScenarioID, timeInf : TimeInfo, mean : QV, count_opt: Option[Int], weight_opt: Option[BigDecimal])
+	case class BinRecord(scenario : ScenarioID, myTestTimeInf : TimeInfo, mean : QV, count_opt: Option[Int], weight_opt: Option[BigDecimal])
 
 	def makeZDI(br : BinRecord) : Item
 }

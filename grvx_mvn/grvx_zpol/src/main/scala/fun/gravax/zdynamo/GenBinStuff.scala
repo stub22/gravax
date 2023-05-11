@@ -60,25 +60,18 @@ trait GenBinData extends KnowsGenTypes {
 		val fullBI = myTBI.fillBinSortKey(binItemWithMeat)
 		fullBI
 	}
-/*
 
-	def OLDE_baseGenRsltsToDBinDats(baseRsltSeq : IndexedSeq[BinStoreRslt]) : IndexedSeq[DBinDat] = {
-		val (taggedDBDs, ekeys) = OLDE_baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
-		taggedDBDs.map(_._3)
-	}
-	def OLDE_baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[BinTypes.EntryKey]) = {
-		val binSpecs = baseRsltSeq.map(_._1)
-		val firstMeat = binSpecs.head._4
-		val meatKeyOrder = Ordering.String
-		val keySeq : IndexedSeq[BinTypes.EntryKey] = firstMeat.allKeysSorted(meatKeyOrder)
-		val binDatSeq : IndexedSeq[(ParentTag, BinTag, DBinDat)] = binSpecs.map(binSpec => {
-			val dbd : DBinDat = binSpecToDBD(binSpec, keySeq)
-			val tagInfo : BinTagInfo = binSpec._1
-			(tagInfo.parentTag, tagInfo.binTag, dbd)
+	// To process a Stream-of-ZIO we can use mapZIO, or more awkwardly runFoldZIO.
+	def compileBinLevelStoreOp(storeCmdStrm : UStream[BinStoreCmdRow]) : RIO[ZDynDBExec, Chunk[BinStoreRslt]] = {
+		val wovenCmdStream: ZStream[ZDynDBExec, Throwable, BinStoreRslt] = storeCmdStrm.mapZIO(cmdRow => {
+			val (binSpec, binItem, binPK, binCmd) = cmdRow
+			val enhCmd: RIO[ZDynDBExec, BinStoreRslt] = binCmd.map(rsltOptItm => (binSpec, binPK, rsltOptItm))
+			enhCmd
 		})
-		(binDatSeq, keySeq)
+		val chnky: RIO[ZDynDBExec, Chunk[BinStoreRslt]] = wovenCmdStream.runCollect
+		chnky
 	}
-*/
+
 	def OLDE_computeParentMasses(baseRsltChnk : Chunk[BinStoreRslt]): SMap[String, BigDecimal] = {
 		val emptyParentMassMap = SMap[String,BigDecimal]()
 		val parentMasses: SMap[String, BigDecimal] = baseRsltChnk.foldLeft(emptyParentMassMap)((prevMassMap, nxtBGRR) => {

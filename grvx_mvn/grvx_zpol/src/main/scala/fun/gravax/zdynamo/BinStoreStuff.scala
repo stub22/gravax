@@ -42,7 +42,6 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 		})
 		op_binDatFetch
 	}
-
 }
 
 trait StoreDummyItems extends BinStoreApi {
