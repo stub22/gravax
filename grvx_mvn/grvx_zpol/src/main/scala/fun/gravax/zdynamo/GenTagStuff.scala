@@ -8,6 +8,12 @@ import scala.collection.immutable.Queue
 private trait GenTagStuff
 
 
+trait GoodTagNumBlk extends KnowsGenTypes {
+	def describe : String
+	def getBaseLevel : LevelTagNumChnk
+	def getVirtLevelsChnk : Chunk[(Int, LevelTagNumChnk)]
+
+}
 
 
 trait GenTagNumData extends KnowsGenTypes {
@@ -19,11 +25,17 @@ trait GenTagNumData extends KnowsGenTypes {
 	// would get the base-bin data standalone, (perhaps then do some clustering on it), and then build the virtLevels
 	// tree structure in a more incremental fashion.  We want all this code to care as little as possible which
 	// of those scenarios we are in.
-	case class BinTagNumBlock(baseLevel : LevelTagNumChnk, virtLevels : Chunk[(Int, LevelTagNumChnk)]) extends KnowsGenTypes {
-		def describe : String = {
+
+	case class BinTagNumBlock(baseLevel : LevelTagNumChnk, virtLevels : Chunk[(Int, LevelTagNumChnk)]) extends GoodTagNumBlk {
+		override def describe : String = {
 			val virtLevelsSizes = virtLevels.map(levPair => (levPair._1, levPair._2.size))
 			s"BinTagNumBlock baseLevel.count=${baseLevel.size}, virtLevels.count=${virtLevels.size}, innerSizes=${virtLevelsSizes}"
 		}
+
+		override def getBaseLevel: LevelTagNumChnk = baseLevel
+
+		override def getVirtLevelsChnk: Chunk[(DBinID, LevelTagNumChnk)] = virtLevels
+
 	}
 
 

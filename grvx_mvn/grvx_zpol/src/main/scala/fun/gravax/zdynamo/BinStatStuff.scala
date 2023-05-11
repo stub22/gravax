@@ -12,7 +12,7 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 	val myBDX = new BinDataXformer {}
 	// type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
 
-	type VirtRsltRow = (BinTagInfo, BinNumInfo, DBinWt, StatRow)
+
 
 	def combineStatsPerParent(storeRsltChnk : Chunk[BinStoreRslt], parentTagNums : LevelTagNumChnk) : UIO[Chunk[VirtRsltRow]] = {
 

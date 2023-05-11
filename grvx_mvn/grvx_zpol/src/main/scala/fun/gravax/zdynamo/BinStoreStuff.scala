@@ -1,6 +1,8 @@
 package fun.gravax.zdynamo
 
+// import fun.gravax.zdynamo.RunZioDynamoTrial.{BaseRsltPair, BinStoreRslt, LevelNum, LevelTagNumChnk, aggAndStoreOneVirtLevel}
 import zio.dynamodb.{AttributeValue, DynamoDBError, Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
+import zio.stream.{UStream, ZStream}
 import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URIO, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, dynamodb => ZDyn}
 
 import scala.collection.immutable.{Map => SMap}
@@ -44,67 +46,72 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 	}
 }
 
-trait StoreDummyItems extends BinStoreApi {
-	// unit-testing methods that write+read some items with hardcoded data
+trait BinStoreTreeForFixedKey extends SpecialResultTypes {
+	// Using java style here to pull in context data because it is context data to pull in.
+	protected def getGenBD : GenBinData
 
-	lazy val myDummyBinItem = myDIM.mkDummyBinItem
-	def putOneDummyBinItem() : RIO[ZDynDBExec, Unit] = {
-		putAndLog(binTblNm, myDummyBinItem)
-	}
+	protected def getBinSumCalc : BinSummaryCalc
+	protected def getKeyedCmdMaker : KeyedCmdMaker
+	private lazy val myGenBD = getGenBD
+	private lazy val myBinSumCalc = getBinSumCalc
+	private lazy val myKeyedCmdMaker = getKeyedCmdMaker
 
-	def putOneMessyItem() : RIO[ZDynDBExec, Unit] = {
-		val bigItem = myDIM.mkMessyItem
-		val zpi: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(binTblNm, bigItem)
-		val zpiex: ZIO[ZDynDBExec, Throwable, Option[Item]] = zpi.execute
-		zpiex.flatMap(opt_itm_out => ZIO.log(s"s Item-put[big] returned: ${opt_itm_out}"))
-	}
-	def putFeatherDBI : RIO[ZDynDBExec, PrimaryKey] = {
-		// Can we easily check the size of the value-map (annRetMeans) in a filter condition?
-		val (scen, binFlav) = ("featherScen", BFLV_ANN_RET_MEAN_VAR)
-		val (timeObs, timePred, timeCalc) = ("20221209_21:30", "20231209_21:30", "20230105_14:18")
-		val (binSeqNum, parentBinSeqNum)  = ("002", "001")
-		val (binMass, binRelWeight) = (BigDecimal("273"), BigDecimal("0.241")) //, BigDecimal("0.0813"), )
-
-		val qqqEntry : BinTypes.StatEntry = ("QQQ", BigDecimal("0.0772"), BigDecimal("0.0430"))
-		val spyEntry : BinTypes.StatEntry = ("SPY", BigDecimal("0.0613"), BigDecimal("0.0351"))
-		val meatInfoMap : BinTypes.StatMap = SMap("QQQ" -> qqqEntry, "SPY" -> spyEntry)
-		val meatInfo = BinMeatInfo(binFlav, meatInfoMap)
-
-		val skelBinItem = myTBI.mkBinItemSkel(scen, timeObs, timePred, timeCalc)
-		val fleshyBI = myTBI.fleshOutBinItem(skelBinItem, binSeqNum, parentBinSeqNum, binMass, binRelWeight) // , binAbsWeight, )
-
-		val meatyBI = myTBI.addMeatToBinItem(fleshyBI, meatInfo)
-		val fullBI = myTBI.fillBinSortKey(meatyBI)
-		val ourPK: PrimaryKey = myFBI.getPKfromFullBinItem(fullBI)
-		putAndLog(binTblNm, fullBI).map(_ => ourPK)
-	}
-
-
-	def readThatDummyBinYo() : RIO[ZDynDBExec, Unit] = {
-		val dummyPK = myFBI.getPKfromFullBinItem(myDummyBinItem)
-		val op: RIO[ZDynDBExec,Option[Item]] = ZDynDBQry.getItem(binTblNm, dummyPK).execute
-		val opLogged = op.flatMap(opt_itm_out => {
-			val rm: Option[Either[DynamoDBError, Item]] = opt_itm_out.map(_.get[Item](FLDNM_BROKED_MEAT_MAP)) // "returns"))
-			val opt_returns = rm.flatMap(_.toOption)
-
-			// dobleMap (via logB) is the form that actually works as of 23-05-02.  The others fail in decoding the List.
-			// GOOG -> List(Chunk(Number(0.093),Number(0.018)))
-			// Getting BigDecimal SET
-			// Error getting BigDecimal set value. Expected AttributeValue.Number but found List(Chunk(Number(0.093),Number(0.018)))))
-			val opt_googRet = opt_returns.map(_.get[Iterable[BigDecimal]]("GOOG"))
-			val logA = ZIO.log(s"Item-get[dummy].logA broked-meat-map-item=${rm}, optRet=${opt_returns}, googRet=${opt_googRet} fullRecord=${opt_itm_out}")
-			val dobleMap = opt_itm_out.map(itm => myFBI.fetchOrThrow[SMap[String,SMap[String,BigDecimal]]](itm, FLDNM_DOBLE_MAP))
-			val logB = ZIO.log(s"Item-get[dummy].logB doble-map-item=${dobleMap}")
-
-
-			val stringyMap_op: Task[Option[SMap[String, Iterable[String]]]] = ZIO.attempt(opt_itm_out.map(itm => myFBI.fetchOrThrow[SMap[String,Iterable[String]]](itm, FLDNM_STRINGY_MEAT_MAP)))
-			val stringyEither: URIO[Any, Either[Throwable, Option[SMap[String, Iterable[String]]]]] = stringyMap_op.either
-			val logC = stringyEither.flatMap(seith => ZIO.log(s"Item-get[dummy].logC stringy-either=${seith}"))
-			val combo: UIO[Unit] = logA.zipRight(logB).zipRight(logC)
-			combo
+	// From output stream of Chunks, can flattenChunks (strategic pivot) or just run as-is.
+	def aggAndStoreVirtLevels(brPair : BaseRsltPair) : ZStream[ZDynDBExec, Throwable, Chunk[BinStoreRslt]] = { //  : RIO[ZDynDBExec, Chunk[BinStoreRslt]] = {
+		val (tagNumBlock, baseRsltChnk) = brPair
+		val vrtLvs: Chunk[(LevelNum, LevelTagNumChnk)] = tagNumBlock.getVirtLevelsChnk
+		// We need to produce a sequence of effects, hence a (short-n-thick) stream will suffice.
+		val vrtLvsStrm = ZStream.fromChunk(vrtLvs)
+		// We need to carry the prev-result along, so we could use .runFoldZIO (building a List) or scanZIO
+		val aggRsltStrm: ZStream[ZDynDBExec, Throwable, Chunk[BinStoreRslt]] = vrtLvsStrm.mapAccumZIO(baseRsltChnk)((prevRsltChnk, levPair) => {
+			val (levNum, levTagChnk) = levPair
+			// We yield nxtRsltChnk for both the stream-output and the next-state
+			val storeOp: RIO[ZDynDBExec, Chunk[BinStoreRslt]] = aggAndStoreOneVirtLevel(levTagChnk, prevRsltChnk)
+			val accumRsltOp = storeOp.map(nxtRsltChnk => (nxtRsltChnk, nxtRsltChnk))
+			accumRsltOp
 		})
-		opLogged
+		aggRsltStrm
+	}
+	def aggAndStoreOneVirtLevel(parentBlkNums : LevelTagNumChnk, childBlkRslt : Chunk[BinStoreRslt]) : RIO[ZDynDBExec, Chunk[BinStoreRslt]] = {
+		// We can eagerly fetch these now, or allow the fetch to happen at effect time.
+
+		for {
+			aggParentStats <- myBinSumCalc.combineStatsPerParent(childBlkRslt, parentBlkNums)
+			storeCmdStrm <- ZIO.succeed(myKeyedCmdMaker.mkAggLevCmds(aggParentStats))
+			levStoreRslt <- myGenBD.compileBinLevelStoreOp(storeCmdStrm)
+			_ <- ZIO.log(s"Got agg-parent levStoreRslt: ${levStoreRslt}")
+		} yield(levStoreRslt)
 	}
 
+}
+// These integer class-constructor parameters determine the shape of this generator setup.
+abstract class GenRootXformer(rootTagNum : Int, rootKidsCnt : Int, baseBinLevel : Int) extends SpecialResultTypes {
+	protected def getGenBD : GenBinData
+	protected def getGenTN : GenTagNumData
+	//protected def getKeyedCmdMaker : KeyedCmdMaker
+
+	private lazy val myGenBD = getGenBD
+	private lazy val myGenTN = getGenTN
+	// private lazy val ourKeyedCmdMaker = getKeyedCmdMaker
+
+	def genAndStoreBaseLevelOnly(keyedCmdMaker: KeyedCmdMaker, massyMeatStrm : UStream[(BinMassInfo, BinMeatInfo)]):
+			RIO[ZDynDBExec, BaseRsltPair] = {
+		val baseGenOp: RIO[ZDynDBExec, (myGenTN.BinTagNumBlock, Chunk[BinStoreRslt])] = for {
+			bntgnmBlk <- myGenTN.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
+			_ <- ZIO.log(s"genBaseSqnc .genBinTagNumBlock produced: ${bntgnmBlk.describe}")
+			binSpecStrm <- ZIO.succeed(myGenBD.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
+			binStoreCmdStrm <- ZIO.succeed(keyedCmdMaker.mkBaseLevCmds(binSpecStrm))
+			levStoreRslt <- myGenBD.compileBinLevelStoreOp(binStoreCmdStrm)
+			_ <- ZIO.log(s"Got levStoreRslt: ${levStoreRslt.toString().substring(0,200)} [TRUNCATED]")
+		} yield(bntgnmBlk, levStoreRslt)
+		baseGenOp
+	}
+
+}
+trait KeyedCmdMaker extends KnowsGenTypes {
+	// All the info from outside of the bin needed to store the bin comes from here.
+	def mkBaseLevCmds(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow]
+
+	def mkAggLevCmds(aggRows : IndexedSeq[VirtRsltRow]) : UStream[BinStoreCmdRow]
 }
 

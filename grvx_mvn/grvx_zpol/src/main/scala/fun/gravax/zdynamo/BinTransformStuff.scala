@@ -1,5 +1,7 @@
 package fun.gravax.zdynamo
 
+import fun.gravax.zdynamo.RunZioDynamoTrial.{BaseRsltPair, BinStoreRslt, LevelNum, LevelTagNumChnk, aggAndStoreOneVirtLevel}
+import zio.{Chunk, RIO}
 import zio.stream.{UStream, ZStream}
 
 private trait BinTransformStuff
@@ -32,3 +34,4 @@ trait BinDataXformer extends KnowsGenTypes  {
 	}
 	// def aggInfToBinSpec(aggTup : (BinTagInfo, DBinWt, StatRow)) : BinSpec = {	??? 	}
 }
+

@@ -1,7 +1,7 @@
 package fun.gravax.zdynamo
 
 
-import fun.gravax.zdynamo.RunZioDynamoTrial.{myGenBD, myGenTN}
+
 import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec}
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, Console, NonEmptyChunk, RIO, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom, dynamodb => ZDyn}
@@ -9,8 +9,11 @@ import zio.{Chunk, Console, NonEmptyChunk, RIO, Scope, Task, TaskLayer, UIO, ZIO
 import java.math.{MathContext, RoundingMode}
 import scala.collection.immutable.{Map => SMap}
 
+trait SpecialResultTypes extends KnowsGenTypes {
+	type BaseRsltPair = (GoodTagNumBlk, Chunk[BinStoreRslt])
+}
 
-object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
+object RunZioDynamoTrial extends ZIOAppDefault with SpecialResultTypes {
 	override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = mkTask
 
 	def mkTask : Task[Unit] = {
@@ -33,9 +36,32 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 
 	lazy val myBinSumCalc = new BinSummaryCalc {}
 	lazy val myBDX = new BinDataXformer {}
+
 	// BinTagNumBlock is a case class, which we cannot easily push into our KnowsXyz setup.
 	// That's why this abstract type for BaseRsltPair is here and not in KnowsXyz.
-	type BaseRsltPair = (myGenTN.BinTagNumBlock, Chunk[BinStoreRslt])
+	// The BinTagNumBlock covers ALL the levels of the bin-tree.
+
+	lazy val ourKeyedCmdMaker = new KeyedCmdMaker {
+
+		override def mkBaseLevCmds(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
+			myGenBD.makeBaseBinStoreCmds(myBinStore.binTblNm, myTestScenID, myTestTimeInf)(baseBinSpecStrm)
+		}
+
+		override def mkAggLevCmds(aggRows : IndexedSeq[myBinSumCalc.VirtRsltRow]) : UStream[BinStoreCmdRow] = {
+			val binSpecStrm: UStream[BinSpec] = myBDX.aggStatsToBinSpecStrm(aggRows, myTestBinFlav)
+			myGenBD.makeBaseBinStoreCmds(myBinStore.binTblNm, myTestScenID, myTestTimeInf)(binSpecStrm)
+		}
+
+	}
+
+	lazy val myBSTX = new BinStoreTreeForFixedKey {
+		override protected def getGenBD: GenBinData = myGenBD
+
+		override protected def getBinSumCalc: BinSummaryCalc = myBinSumCalc
+
+		override protected def getKeyedCmdMaker: KeyedCmdMaker = ourKeyedCmdMaker
+	}
+
 
 	private def mkProgram = {
 
@@ -51,38 +77,52 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 
 			// _ <- dumpTagInfoStrm
 			baseRslt <- genBaseSqnc // : (myGenTN.BinTagNumBlock, Chunk[myGenBD.BinStoreRslt])
-			// case class BinTagNumBlock(baseLevel : LevelTagNumChnk, virtLevels : Chunk[(Int, LevelTagNumChnk)]) {
-			// type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
+			// All of random data generation is now complete, so it is now OK if we do some operations multiple times:
+			// all deterministic operations that start from baseRslt should get the same answer.
+			// Unused operation.
 			_ <- ZIO.succeed(myGenBD.OLDE_computeParentMasses(baseRslt._2))
 			combStat <- ZIO.succeed(myBinSumCalc.combineWeightMeansAndVars(baseRslt._2))
 			_ <- ZIO.log(s"Got combined stats: ${combStat}")
 			// combineStatsPerParent : UIO[Chunk[(BinTagInfo, DBinWt, StatRow)]]
-			parentStats <- myBinSumCalc.combineStatsPerParent(baseRslt._2, baseRslt._1.virtLevels.last._2)
+			parentStats <- myBinSumCalc.combineStatsPerParent(baseRslt._2, baseRslt._1.getVirtLevelsChnk.last._2)
 			_ <- ZIO.log(s"Got parent stats: ${parentStats}")
 			pcomb <-   ZIO.succeed(myBinSumCalc.combineVirtRsltsToWMV(parentStats))
 			_ <- ZIO.log(s"Parents combined: ${pcomb}")
-			_ <- aggAndStoreVirtLevels(baseRslt)
+			// _ <- aggAndStoreVirtLevels(baseRslt)
 			_ <- myBinStore.maybeDeleteBinTable
 		} yield ()
 	}
-
 	def genBaseSqnc: RIO[ZDynDBExec, BaseRsltPair] = {
 		val rootTagNum = 1200
 		val rootKidsCnt = 7
 		val baseBinLevel = 4
+		val genRootXfrm = new GenRootXformer(rootTagNum, rootKidsCnt, baseBinLevel) {
+			override protected def getGenBD: GenBinData = myGenBD
+
+			override protected def getGenTN: GenTagNumData = myGenTN
+		}
+
 		val massyMeatStrm = mkMassyMeatStrm
+		val keyedCmdMaker: KeyedCmdMaker = ourKeyedCmdMaker
+		val bsgnOp = genRootXfrm.genAndStoreBaseLevelOnly(keyedCmdMaker, massyMeatStrm)
+		bsgnOp
+	}
+		/*
 		val baseGenOp: RIO[ZDynDBExec, (myGenTN.BinTagNumBlock, Chunk[BinStoreRslt])] = for {
 			bntgnmBlk <- myGenTN.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
 			_ <- ZIO.log(s"genBaseSqnc .genBinTagNumBlock produced: ${bntgnmBlk.describe}")
 			binSpecStrm <- ZIO.succeed(myGenBD.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
-			binStoreCmdStrm <- ZIO.succeed(mkBaseLevCmds(binSpecStrm))
+			binStoreCmdStrm <- ZIO.succeed(ourKeyedCmdMaker.mkBaseLevCmds(binSpecStrm))
 			levStoreRslt <- myGenBD.compileBinLevelStoreOp(binStoreCmdStrm)
 			_ <- ZIO.log(s"Got levStoreRslt: ${levStoreRslt.toString().substring(0,200)} [TRUNCATED]")
 		} yield(bntgnmBlk, levStoreRslt)
 		baseGenOp
-	}
-
-	def aggAndStoreVirtLevels(brPair : BaseRsltPair) : RIO[ZDynDBExec, Chunk[BinStoreRslt]] = {
+		 */
+/*
+		val fout = vrtLvs.foldRight[(List[Chunk[BinStoreRslt]])](List(baseRsltChnk))((recTup, rChnkList) => {
+			val prevLevRsltChnk: Chunk[BinStoreRslt] = rChnkList.head
+			val (levNum, levChnk) : (LevelNum, LevelTagNumChnk) = recTup
+		})
 
 		for {
 			// combStat <- ZIO.succeed(myBinSumCalc.combineWeightMeansAndVars(brPair._2))
@@ -93,6 +133,9 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 			_ <- ZIO.log(s"Got agg levStoreRslt: ${levStoreRslt}")
 		} yield(levStoreRslt)
 	}
+
+ */
+
 
 	def storeVirtualLevel = ???
 
@@ -107,13 +150,7 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 		massyMeatStrm
 	}
 
-	def mkBaseLevCmds(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
-		myGenBD.makeBaseBinStoreCmds(myBinStore.binTblNm, myTestScenID, myTestTimeInf)(baseBinSpecStrm)
-	}
-	def mkAggLevCmds(aggRows : IndexedSeq[myBinSumCalc.VirtRsltRow]) : UStream[BinStoreCmdRow] = {
-		val binSpecStrm: UStream[BinSpec] = myBDX.aggStatsToBinSpecStrm(aggRows, myTestBinFlav)
-		myGenBD.makeBaseBinStoreCmds(myBinStore.binTblNm, myTestScenID, myTestTimeInf)(binSpecStrm)
-	}
+
 
 	// standalone test runner for just the tagNum generator step
 	def dumpTagInfoStrm  = {

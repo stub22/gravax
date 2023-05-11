@@ -20,8 +20,10 @@ trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes {
 	type BinStoreRslt = (BinSpec, PrimaryKey, Option[Item])
 	val zeroBD = BigDecimal("0.0")
 
+	type LevelNum = Int
 	type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
 
+	type VirtRsltRow = (BinTagInfo, BinNumInfo, DBinWt, StatRow)
 }
 
 trait GenBinData extends KnowsGenTypes {
