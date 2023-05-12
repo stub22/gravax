@@ -29,7 +29,7 @@ trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes {
 
 trait GenBinData extends KnowsGenTypes {
 
-	val myTBI : ToBinItem
+	// val myTBI : ToBinItem
 
 	// Combine the finite tree structure of the tagNumChnk (known number of records) with the stream of bin data (often random).
 	// Presume that mmStrm.size >= baseTagNumChunk.size.
