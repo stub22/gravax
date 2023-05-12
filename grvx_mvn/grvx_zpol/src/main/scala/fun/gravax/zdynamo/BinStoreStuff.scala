@@ -43,12 +43,44 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 	}
 }
 
-trait BinStoreTreeForFixedKey extends KnowsGenTypes {
-	// Using java style here to pull in context data because it is context data to pull in.
-	protected def getGenBD : GenBinData
-	protected def getBinSumCalc : BinSummaryCalc
+// Fractional weight fields impose extra costs.  We need to know the total mass (of the distribution, == sum of all leaf bins)
+// before we can complete writing any bins.  Otherwise we have to make a second pass after finding parent weights.
+trait BinStoreCmdBuilder extends KnowsGenTypes {
+	val myTBI : ToBinItem
 
-	private lazy val myGenBD = getGenBD
+	def makeBinStoreCmds(tblNm : String, scenID : String, timeInf : BinTimeInfo)(binSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
+		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
+		val binLevelStoreTupStrm: UStream[BinStoreCmdRow] = binSpecStrm.map(bbSpec => {
+			val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
+			val baseBinItem = myTBI.buildBinItem(skelBintem, tagInfo, massInfo, binMeat)
+			val ourPK: PrimaryKey = myTBI.getFBI.getPKfromFullBinItem(baseBinItem)
+			val putDynQry: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(tblNm, baseBinItem)
+			val putDynZIO: RIO[ZDynDBExec,Option[Item]] = putDynQry.execute
+			(bbSpec, baseBinItem, ourPK, putDynZIO)
+		})
+		binLevelStoreTupStrm
+	}
+
+	// To process a Stream-of-ZIO we can use mapZIO, or more awkwardly runFoldZIO.
+	def compileBinLevelStoreOp(storeCmdStrm : UStream[BinStoreCmdRow]) : RIO[ZDynDBExec, Chunk[BinStoreRslt]] = {
+		val wovenCmdStream: ZStream[ZDynDBExec, Throwable, BinStoreRslt] = storeCmdStrm.mapZIO(cmdRow => {
+			val (binSpec, binItem, binPK, binCmd) = cmdRow
+			val enhCmd: RIO[ZDynDBExec, BinStoreRslt] = binCmd.map(rsltOptItm => (binSpec, binPK, rsltOptItm))
+			enhCmd
+		})
+		val chnky: RIO[ZDynDBExec, Chunk[BinStoreRslt]] = wovenCmdStream.runCollect
+		chnky
+	}
+}
+
+trait BinStoreCmdXformer extends KnowsGenTypes {
+	// Using java style here to pull in context data because it is context data to pull in.
+	// protected def getGenBD : GenBinData
+	protected def getBinSumCalc : BinSummaryCalc
+	protected def getBSCB : BinStoreCmdBuilder
+
+	private lazy val myBSCB = getBSCB
+	// private lazy val myGenBD = getGenBD
 	private lazy val myBinSumCalc = getBinSumCalc
 
 	// From output stream of Chunks, can flattenChunks (strategic pivot) or just run as-is.
@@ -73,12 +105,13 @@ trait BinStoreTreeForFixedKey extends KnowsGenTypes {
 		for {
 			aggParentStats <- myBinSumCalc.combineStatsPerParent(childBlkRslt, parentBlkNums)
 			storeCmdStrm <- ZIO.succeed(keyedCmdMkr.mkAggLevCmds(aggParentStats))
-			levStoreRslt <- myGenBD.compileBinLevelStoreOp(storeCmdStrm)
+			levStoreRslt <- myBSCB.compileBinLevelStoreOp(storeCmdStrm)
 			_ <- ZIO.log(s"Got agg-parent levStoreRslt: ${levStoreRslt}")
 		} yield(levStoreRslt)
 	}
 
 }
+
 trait KeyedCmdMaker extends KnowsGenTypes {
 	// All the info from outside of the bin needed to store the bin comes from here.
 	def mkBaseLevCmds(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow]

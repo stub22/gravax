@@ -1,6 +1,6 @@
 package fun.gravax.zdynamo
 
-import fun.gravax.zdynamo.RunZioDynamoTrial.{BaseRsltPair, BinStoreRslt, LevelNum, LevelTagNumChnk, aggAndStoreOneVirtLevel}
+import fun.gravax.zdynamo.RunZioDynamoTrial.{BaseRsltPair, BinStoreRslt, LevelNum, LevelTagNumChnk}
 import zio.{Chunk, RIO}
 import zio.stream.{UStream, ZStream}
 
@@ -35,3 +35,21 @@ trait BinDataXformer extends KnowsGenTypes  {
 	// def aggInfToBinSpec(aggTup : (BinTagInfo, DBinWt, StatRow)) : BinSpec = {	??? 	}
 }
 
+
+abstract class OurKeyedCmdMkr(tableName : String, sceneID : String, timeInfo: BinTimeInfo, binFlavor : String) extends KeyedCmdMaker {
+	//protected def getGenBD : GenBinData
+	protected def getBDX : BinDataXformer
+	protected def getBSCB : BinStoreCmdBuilder
+
+	private lazy val myBDX = getBDX
+	private lazy val myBSCB = getBSCB
+
+	override def mkBaseLevCmds(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
+		myBSCB.makeBinStoreCmds(tableName, sceneID, timeInfo)(baseBinSpecStrm)
+	}
+
+	override def mkAggLevCmds(aggRows : IndexedSeq[VirtRsltRow]) : UStream[BinStoreCmdRow] = {
+		val binSpecStrm: UStream[BinSpec] = myBDX.aggStatsToBinSpecStrm(aggRows, binFlavor)
+		myBSCB.makeBinStoreCmds(tableName, sceneID, timeInfo)(binSpecStrm)
+	}
+}

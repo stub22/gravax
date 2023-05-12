@@ -3,7 +3,7 @@ package fun.gravax.zdynamo
 private trait DistroCalcStuff
 
 
-trait HoldingOptimizer extends NameScopeHmm {
+trait HoldingOptimizer extends StatTupleShapes {
 	type	AssetID = EntryKey
 	type 	MultiAssetAnnRetDist = VecDistrib
 	type	AnnRet = EntryMean

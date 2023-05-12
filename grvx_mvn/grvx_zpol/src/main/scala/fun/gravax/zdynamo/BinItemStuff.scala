@@ -201,6 +201,15 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 		combineMapWithItem(partialBin, addMap)
 	}
 	def fillBinSortKey(partBinItem : Item) : Item = fillSortKey(partBinItem, KEYNM_SORT_BIN, FLDSEQ_SORT_BIN, "#")
+
+	def buildBinItem(skelBinItem : Item, tagInfo: BinTagInfo,  massInfo : BinMassInfo, binMeat : BinMeatInfo) : Item = {
+		val binItemWithTags = addTagsToBinItem(skelBinItem, tagInfo)
+		val binItemWithMass = addMassInfoToBinItem(binItemWithTags, massInfo)
+		val binItemWithMeat = addMeatToBinItem(binItemWithMass, binMeat)
+
+		val fullBI = fillBinSortKey(binItemWithMeat)
+		fullBI
+	}
 }
 
 

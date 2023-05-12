@@ -7,37 +7,32 @@ import zio.{Chunk, Console, NonEmptyChunk, RIO, Scope, Task, TaskLayer, UIO, ZIO
 object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 	override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = mkTask
 
+	/* type TaskLayer[+ROut] = ZLayer[Any, Throwable, ROut]
+	// ZDynDBExec is a trait defining this single method:
+	//  def execute[A](atomicQuery : ZDynDBQry[_, A]) : zio.ZIO[scala.Any, scala.Throwable, A]
+ 	*/
+
 	def mkTask : Task[Unit] = {
-		// ZDynDBExec is a trait defining this single method:
-		//  def execute[A](atomicQuery : ZDynDBQry[_, A]) : zio.ZIO[scala.Any, scala.Throwable, A]
-		/*
-		TaskLayer[+ROut] is a type alias for ZLayer[Any, Throwable, ROut]
-		type TaskLayer[+ROut] = ZLayer[Any, Throwable, ROut]
-		 */
 		val localDB_layer: TaskLayer[ZDynDBExec] = LocalDynamoDB.layer
 		mkProgram.provide(localDB_layer)
 	}
 
 	lazy val myBinStore = new BinStoreApi {}
-	lazy val myGenBD = new GenBinData {
-		override val myTBI: ToBinItem = myBinStore.myTBI
+
+	lazy val myGenCtx = new GenCtx {
+		override protected def getGenBD: GenBinData = new GenBinData {
+			override val myTBI: ToBinItem = myBinStore.myTBI
+		}
 	}
 
-	// BinTagNumBlock is a case class, which we cannot easily push into our KnowsXyz setup.
-	// That's why this abstract type for BaseRsltPair is here and not in KnowsXyz.
-	// The BinTagNumBlock covers ALL the levels of the bin-tree.
-
-	lazy val justOneROFG = new PhonyFixedScenarioParams{
-		override def getTgtTblNm: BinTag = myBinStore.binTblNm
-	}
-
-	lazy val myConfGen = new ConfiguredGen {
-		override protected def getScenParams: ScenarioParams = justOneROFG
-
-		override protected def getGenBD: GenBinData = myGenBD
-	}
+	lazy val myConfGen = new ConfiguredGen(myGenCtx)
 
 	private def mkProgram = {
+		val justOneROFG = new PhonyFixedScenarioParams{
+			override def getTgtTblNm: BinTag = myBinStore.binTblNm
+		}
+		val kcm = myConfGen.mkKeyedCmdMaker(justOneROFG)
+		val bbg = myConfGen.mkBlockBaseGen(justOneROFG)
 
 		val dumStore = new StoreDummyItems {}
 		for {
@@ -50,13 +45,13 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 
 			// _ <- dumpTagInfoStrm
-			baseRslt <- genAndStoreBaseSqnc(justOneROFG) // : (myGenTN.BinTagNumBlock, Chunk[myGenBD.BinStoreRslt])
+			baseRslt <- genAndStoreBaseSqnc(justOneROFG, kcm, bbg) // : (myGenTN.BinTagNumBlock, Chunk[myGenBD.BinStoreRslt])
 			// All of random data generation is now complete, so it is now OK if we do some operations multiple times.
 			// All deterministic operations that start from baseRslt should give same answer.
 			// If we didn't CHUNK the baseRslt (if we left it as a stream), then we would not have this repeatability.
 			// This helps explains our two stage design : (oneBaseLevel, allVirtLevels)
 			xtraBool <- extraChecksSqnc(baseRslt)
-			virtRslt <- genAndStoreVirtSqnc(justOneROFG)(baseRslt)
+			virtRslt <- genAndStoreVirtSqnc(justOneROFG, kcm)(baseRslt)
 			_ <- ZIO.log(s"Virt sqnc rslt: ${virtRslt}")
 			_ <- myBinStore.maybeDeleteBinTable
 		} yield ()
@@ -64,35 +59,35 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 	// All randomness of the scenario is encapsulated here in the base operation.
 	// We store the full base result in RAM.
 	// The full shape of the bin-tree numbering is also stored in RAM.
-	def genAndStoreBaseSqnc(rofg : PhonyFixedScenarioParams): RIO[ZDynDBExec, BaseRsltPair] = {
-		val massyMeatStrm = myConfGen.mkMassyMeatStrm
-		val keyedCmdMaker: KeyedCmdMaker = myConfGen.ourKeyedCmdMaker
-		val bsgnOp = myConfGen.myBlockBaseGen.genAndStoreBaseLevelOnly(keyedCmdMaker, massyMeatStrm)
+	def genAndStoreBaseSqnc(rofg : PhonyFixedScenarioParams, kcm : KeyedCmdMaker, bbg : BlockBaseGen): RIO[ZDynDBExec, BaseRsltPair] = {
+		val massyMeatStrm = myConfGen.mkMassyMeatStrm(rofg)
+		val keyedCmdMaker: KeyedCmdMaker = kcm //  myConfGen.ourKeyedCmdMaker
+		val bsgnOp = bbg.genAndStoreBaseLevelOnly(keyedCmdMaker, massyMeatStrm)
 		bsgnOp
 	}
 	// Deterministic virtual levels using the baseResults.
 	// Numbering comes from baseResults
-	def genAndStoreVirtSqnc(rofg : PhonyFixedScenarioParams)(brPair : BaseRsltPair): ZIO[ZDynDBExec, Throwable, Chunk[BinStoreRslt]] = {
-		val levRsltChnkStrm = myConfGen.myBSTX.aggAndStoreVirtLevels(myConfGen.ourKeyedCmdMaker)(brPair)
+	def genAndStoreVirtSqnc(rofg : PhonyFixedScenarioParams, kcm : KeyedCmdMaker)(brPair : BaseRsltPair): ZIO[ZDynDBExec, Throwable, Chunk[BinStoreRslt]] = {
+		val levRsltChnkStrm = myGenCtx.myBSTX.aggAndStoreVirtLevels(kcm)(brPair)
 		val smootherOutStrm: ZStream[ZDynDBExec, Throwable, BinStoreRslt] = levRsltChnkStrm.flattenChunks
 		val bigFlatOutputOp = smootherOutStrm.debug.runCollect
 		bigFlatOutputOp
 	}
-	def extraChecksSqnc(brPair : BaseRsltPair) = {
+	def extraChecksSqnc(brPair : BaseRsltPair) : UIO[Boolean] = {
 		for {
-			_ <- ZIO.succeed(myGenBD.OLDE_computeParentMasses(brPair._2))
-			combStat <- ZIO.succeed(myConfGen.myBinSumCalc.combineWeightMeansAndVars(brPair._2))
+			_ <- ZIO.succeed(myGenCtx.myGenBD.OLDE_computeParentMasses(brPair._2))
+			combStat <- ZIO.succeed(myGenCtx.myBinSumCalc.combineWeightMeansAndVars(brPair._2))
 			_ <- ZIO.log(s"Got combined stats: ${combStat}")
 			// combineStatsPerParent : UIO[Chunk[(BinTagInfo, DBinWt, StatRow)]]
-			parentStats <- myConfGen.myBinSumCalc.combineStatsPerParent(brPair._2, brPair._1.getVirtLevelsChnk.last._2)
+			parentStats <- myGenCtx.myBinSumCalc.combineStatsPerParent(brPair._2, brPair._1.getVirtLevelsChnk.last._2)
 			_ <- ZIO.log(s"Got parent stats: ${parentStats}")
-			pcomb <-   ZIO.succeed(myConfGen.myBinSumCalc.combineVirtRsltsToWMV(parentStats))
+			pcomb <-   ZIO.succeed(myGenCtx.myBinSumCalc.combineVirtRsltsToWMV(parentStats))
 			_ <- ZIO.log(s"Parents combined: ${pcomb}")
 		} yield(true)
 	}
 	// standalone test runner for just the tagNum generator step
-	def dumpTagInfoStrm  = {
-		val ps = myConfGen.myGenTN.genTagInfoStrm(500, 7).zipWithIndex.take(300)
+	def dumpTagInfoStrm: UIO[Chunk[((BinTagInfo, BinNumInfo), Long)]] = {
+		val ps = myGenCtx.myGenTN.genTagInfoStrm(500, 7).zipWithIndex.take(300)
 		val psOp = ps.debug.runCollect
 		psOp
 	}

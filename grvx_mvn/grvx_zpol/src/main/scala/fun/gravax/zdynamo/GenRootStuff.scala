@@ -1,5 +1,6 @@
 package fun.gravax.zdynamo
 
+import zio.dynamodb.{DynamoDBExecutor, Item, PrimaryKey}
 import zio.stream.UStream
 import zio.{Chunk, NonEmptyChunk, RIO, UIO, ZIO, Random => ZRandom}
 
@@ -22,40 +23,57 @@ trait PhonyFixedScenarioParams extends ScenarioParams {
 	override def getTimeInf = BinTimeInfo("NOPED", "TIMELESS", "NAKK")
 }
 
-trait ConfiguredGen extends KnowsGenTypes {
+trait GenCtx {
+	protected def getGenBD: GenBinData
 
-	protected def getScenParams : ScenarioParams
-	lazy val myParams = getScenParams
-
-	protected def getGenBD : GenBinData
-	private val myGenBD = getGenBD
-
+	lazy val myGenBD = getGenBD
 	lazy val myGenMM = new GenMeatAndMassData {}
 	lazy val myGenTN = new GenTagNumData {}
 	lazy val myBinSumCalc = new BinSummaryCalc {}
 	lazy val myBDX = new BinDataXformer {}
-	lazy val myBSTX = new BinStoreTreeForFixedKey {
-		override protected def getGenBD: GenBinData = myGenBD
+	lazy val myBSCB = new BinStoreCmdBuilder {
+		override val myTBI: ToBinItem = myGenBD.myTBI
+	}
+	lazy val myBSTX = new BinStoreCmdXformer {
+		// override protected def getGenBD: GenBinData = myGenBD
 
 		override protected def getBinSumCalc: BinSummaryCalc = myBinSumCalc
+
+		override protected def getBSCB: BinStoreCmdBuilder = myBSCB
 	}
 
+}
 
-	lazy val myBlockBaseGen = new BlockBaseGen(myParams.rootTagNum, myParams.rootKidsCnt, myParams.baseBinLevel) {
-		override protected def getGenBD: GenBinData = myGenBD
 
-		override protected def getGenTN: GenTagNumData = myGenTN
+class ConfiguredGen(myGenCtx : GenCtx) extends KnowsGenTypes {
+
+	// protected def getScenParams: ScenarioParams
+
+	// lazy val myParams = getScenParams
+
+	def mkBlockBaseGen(scenParams : ScenarioParams) = new BlockBaseGen(scenParams.rootTagNum, scenParams.rootKidsCnt, scenParams.baseBinLevel) {
+		override protected def getGenBD: GenBinData = myGenCtx.myGenBD
+
+		override protected def getGenTN: GenTagNumData = myGenCtx.myGenTN
+
+		override protected def getBSCB: BinStoreCmdBuilder = myGenCtx.myBSCB
 	}
 
-	def mkMassyMeatStrm: UStream[(BinMassInfo, BinMeatInfo)] = {
+	def mkMassyMeatStrm(scenParams : ScenarioParams): UStream[(BinMassInfo, BinMeatInfo)] = {
 		val precision = 8
 		val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
-		val massyMeatStrm = myGenMM.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)(myParams.getBinFlav)
+		val massyMeatStrm = myGenCtx.myGenMM.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)(scenParams.getBinFlav)
 		massyMeatStrm
 	}
 
-	lazy val ourKeyedCmdMaker = new KeyedCmdMaker {
+	def mkKeyedCmdMaker(scenParams : ScenarioParams) = new OurKeyedCmdMkr(scenParams.getTgtTblNm, scenParams.getScenID, scenParams.getTimeInf, scenParams.getBinFlav) {
 
+		override protected def getBDX: BinDataXformer = myGenCtx.myBDX
+
+		override protected def getBSCB: BinStoreCmdBuilder = myGenCtx.myBSCB
+	}
+}
+/*
 		override def mkBaseLevCmds(baseBinSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
 			myGenBD.makeBinStoreCmds(myParams.getTgtTblNm, myParams.getScenID, myParams.getTimeInf)(baseBinSpecStrm)
 		}
@@ -64,6 +82,5 @@ trait ConfiguredGen extends KnowsGenTypes {
 			val binSpecStrm: UStream[BinSpec] = myBDX.aggStatsToBinSpecStrm(aggRows, myParams.getBinFlav)
 			myGenBD.makeBinStoreCmds(myParams.getTgtTblNm, myParams.getScenID, myParams.getTimeInf)(binSpecStrm)
 		}
+*/
 
-	}
-}

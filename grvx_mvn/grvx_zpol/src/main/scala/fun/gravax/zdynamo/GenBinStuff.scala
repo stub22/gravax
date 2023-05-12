@@ -12,7 +12,7 @@ private trait GenBinStuff
 
 trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes {
 	// Pure-data generated based on rules.  These tuples are used as stream records that do not need as much concreteness.
-	// type BaseMassyMeatRow = (BinTagInfo, BinNumInfo, (BigDecimal, BinMeatInfo))
+
 	type BinSpec = (BinTagInfo, BinNumInfo, BinMassInfo, BinMeatInfo) // Final agg of pure-data based on gen-rules
 	type BinStoreCmdRow = (BinSpec, Item, PrimaryKey, RIO[ZDynDBExec, Option[Item]])
 	type BinStoreRslt = (BinSpec, PrimaryKey, Option[Item])
@@ -26,6 +26,7 @@ trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes {
 	type BaseRsltPair = (GoodTagNumBlk, Chunk[BinStoreRslt])
 }
 
+
 trait GenBinData extends KnowsGenTypes {
 
 	val myTBI : ToBinItem
@@ -35,43 +36,6 @@ trait GenBinData extends KnowsGenTypes {
 	def joinMassyMeatRows(baseTagNumChunk : NonEmptyChunk[(BinTagInfo, BinNumInfo)], mmStrm : UStream[(BinMassInfo, BinMeatInfo)]) : UStream[BinSpec] = {
 		val btnStrm = ZStream.fromChunk(baseTagNumChunk)
 		btnStrm.zipWith(mmStrm)((tagNumPair, massMeatPair) => (tagNumPair._1, tagNumPair._2, massMeatPair._1, massMeatPair._2))
-	}
-
-	// Absolute-weight field is the sticking point.  We need to know the total mass (of the distribution, == sum of all leaf bins)
-	// before we write the first bin to DB.  Otherwise we have to make a second pass to store absWeight.
-	// We have not yet written any app code that uses absolute weight.
-	// 2023-05-03 :  AbsoluteWeight is disabled until further notice.
-	def makeBinStoreCmds(tblNm : String, scenID : String, timeInf : BinTimeInfo)(binSpecStrm : UStream[BinSpec]) : UStream[BinStoreCmdRow] = {
-		val skelBintem: Item = myTBI.mkBinItemSkel(scenID, timeInf)
-		val binLevelStoreTupStrm: UStream[BinStoreCmdRow] = binSpecStrm.map(bbSpec => {
-			val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
-			val baseBinItem = buildBinItem(skelBintem, tagInfo, massInfo, binMeat)
-			val ourPK: PrimaryKey = myTBI.getFBI.getPKfromFullBinItem(baseBinItem)
-			val putDynQry: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(tblNm, baseBinItem)
-			val putDynZIO: RIO[ZDynDBExec,Option[Item]] = putDynQry.execute
-			(bbSpec, baseBinItem, ourPK, putDynZIO)
-		})
-		binLevelStoreTupStrm
-	}
-
-	def buildBinItem(skelBinItem : Item, tagInfo: BinTagInfo,  massInfo : BinMassInfo, binMeat : BinMeatInfo) : Item = {
-		val binItemWithTags = myTBI.addTagsToBinItem(skelBinItem, tagInfo)
-		val binItemWithMass = myTBI.addMassInfoToBinItem(binItemWithTags, massInfo)
-		val binItemWithMeat = myTBI.addMeatToBinItem(binItemWithMass, binMeat)
-
-		val fullBI = myTBI.fillBinSortKey(binItemWithMeat)
-		fullBI
-	}
-
-	// To process a Stream-of-ZIO we can use mapZIO, or more awkwardly runFoldZIO.
-	def compileBinLevelStoreOp(storeCmdStrm : UStream[BinStoreCmdRow]) : RIO[ZDynDBExec, Chunk[BinStoreRslt]] = {
-		val wovenCmdStream: ZStream[ZDynDBExec, Throwable, BinStoreRslt] = storeCmdStrm.mapZIO(cmdRow => {
-			val (binSpec, binItem, binPK, binCmd) = cmdRow
-			val enhCmd: RIO[ZDynDBExec, BinStoreRslt] = binCmd.map(rsltOptItm => (binSpec, binPK, rsltOptItm))
-			enhCmd
-		})
-		val chnky: RIO[ZDynDBExec, Chunk[BinStoreRslt]] = wovenCmdStream.runCollect
-		chnky
 	}
 
 	// We use this as an independent debug check.  Is not used in our main sequence.
@@ -95,7 +59,9 @@ trait GenBinData extends KnowsGenTypes {
 abstract class BlockBaseGen(rootTagNum : Int, rootKidsCnt : Int, baseBinLevel : Int) extends KnowsGenTypes {
 	protected def getGenBD : GenBinData
 	protected def getGenTN : GenTagNumData
+	protected def getBSCB : BinStoreCmdBuilder
 
+	private lazy val myBSCB = getBSCB
 	private lazy val myGenBD = getGenBD
 	private lazy val myGenTN = getGenTN
 
@@ -106,7 +72,7 @@ abstract class BlockBaseGen(rootTagNum : Int, rootKidsCnt : Int, baseBinLevel : 
 			_ <- ZIO.log(s"genAndStoreBaseSqnc .genBinTagNumBlock produced: ${bntgnmBlk.describe}")
 			binSpecStrm <- ZIO.succeed(myGenBD.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
 			binStoreCmdStrm <- ZIO.succeed(keyedCmdMaker.mkBaseLevCmds(binSpecStrm))
-			levStoreRslt <- myGenBD.compileBinLevelStoreOp(binStoreCmdStrm)
+			levStoreRslt <- myBSCB.compileBinLevelStoreOp(binStoreCmdStrm)
 			_ <- ZIO.log(s"Got levStoreRslt: ${levStoreRslt.toString().substring(0,200)} [TRUNCATED]")
 		} yield(bntgnmBlk, levStoreRslt)
 		baseGenOp

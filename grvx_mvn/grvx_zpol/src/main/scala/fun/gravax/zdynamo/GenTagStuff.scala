@@ -185,7 +185,6 @@ trait GenTagNumData extends KnowsGenTypes {
 		val prevDepth = prevPosVec.length
 		val prevLast = prevPosVec.last
 		if (prevDepth > 1) {
-			// This is easier if we use mutab
 			val nextPosVec = if (prevLast == rootKidsCnt) {
 				val unfinishedDigits = prevPosVec.reverse.dropWhile(digit => digit == rootKidsCnt).reverse
 				val incompLen = unfinishedDigits.length

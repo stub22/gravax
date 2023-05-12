@@ -2,7 +2,15 @@ package fun.gravax.zdynamo
 
 private trait DistribImplStuff
 
-trait VecDistribFragment extends KnowsDistribTypes {
+trait VectorDistribTypes extends KnowsDistribTypes {
+	type Probability = BigDecimal // between 0.0 and 1.0
+	type ProbDensity = BigDecimal // Positive value, representing probability density per unit volume.
+
+	type PointEntry = (EntryKey, EntryValue)
+	type PointRow = Seq[PointEntry] // This is a vector in the space identified by the chosen keys.
+}
+
+trait VecDistribFragment extends VectorDistribTypes {
 	// We expect Assets (meatKeys) to be identical across all bins
 	// def	getFullKeySymSet : Set[EntryKey] // The syms do not have a canonical ordering.  Client may use alphabetic, or...
 	def projectStatRow(keySyms : IndexedSeq[EntryKey]) : StatRow // Often this is available directly from VecDistrib-bin-0

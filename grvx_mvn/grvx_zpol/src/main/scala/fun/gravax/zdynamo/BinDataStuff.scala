@@ -1,12 +1,10 @@
 package fun.gravax.zdynamo
 
-import zio.NonEmptyChunk
-
 import scala.collection.immutable.{Map => SMap}
 
 private trait BinDataStuff
 
-trait NameScopeHmm {
+trait StatTupleShapes {
 	// Building up data-types this way (vs. by traits) is ... extensional and sorta constructivist / algebraic.
 	type EntryKey = String
 	type EntryValue = BigDecimal
@@ -36,15 +34,14 @@ trait NameScopeHmm {
 	type ParentTag = BinTag
 
 	type BinFlavor = String
-
-
 }
-object BinTypes extends NameScopeHmm
+
+object BinTypes extends StatTupleShapes
 
 // Generally we don't store Covariances in bins.
 // Note that bins may be wide (100s of assets) and full covariance takes order-squared space.
 // Instead we compute covariance for a selection of assets, on the fly.
-trait BinData extends NameScopeHmm {
+trait BinData extends StatTupleShapes {
 	def getScenarioID : String
 	def getObsTime : String
 	def getPredTime : String
@@ -65,7 +62,6 @@ trait BinData extends NameScopeHmm {
 	def allKeysSorted(meatKeyOrder : Ordering[String]) : IndexedSeq[EntryKey]
 
 }
-
 
 case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
 case class BinTagInfo(binTag : String, parentTag : String) // levelNum, siblingNum
@@ -90,7 +86,6 @@ case class BinMeatInfo(binFlavor : BinTypes.BinFlavor, meatMap : BinTypes.StatMa
 		keySet.toSeq.sorted(meatKeyOrder).toIndexedSeq
 	}
 }
-
 
 case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, massDat : BinMassInfo, meat : BinMeatInfo) extends BinData {
 	override def getScenarioID: String = scenID

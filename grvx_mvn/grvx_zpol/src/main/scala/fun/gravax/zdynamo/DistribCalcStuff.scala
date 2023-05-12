@@ -2,12 +2,7 @@ package fun.gravax.zdynamo
 
 private trait DistribCalcStuff
 
-trait KnowsDistribTypes extends NameScopeHmm {
-	type Probability = BigDecimal // between 0.0 and 1.0
-	type ProbDensity = BigDecimal // Positive value, representing probability density per unit volume.
-
-	type PointEntry = (EntryKey, EntryValue)
-	type PointRow = Seq[PointEntry] // This is a vector in the space identified by the chosen keys.
+trait KnowsDistribTypes extends StatTupleShapes {
 
 	type UnwtCov = BigDecimal
 	type UnwtCovPair = (EntryKey, UnwtCov)
@@ -25,6 +20,9 @@ trait KnowsDistribTypes extends NameScopeHmm {
 	type StatTriMatrix = IndexedSeq[(StatEntry, WtCovRow)]
 }
 trait StatEntryOps extends KnowsDistribTypes {
+	val zeroBD = BigDecimal("0.0")
+	val oneBD = BigDecimal("1.0")
+
 	// Useful when pooling variances across bins.  expectedSquare = mean-squared plus variance
 	def expectedSquare(entry : StatEntry) = (entry._2.pow(2)).+(entry._3)
 	// Before we were passing the args separately, then it helps to do:  val helpFunc = (myStatEntryOps.entryFromExpects _).tupled
@@ -45,13 +43,6 @@ trait StatEntryOps extends KnowsDistribTypes {
 		val entMean = entry._2
 		(weight.*(expSqr), weight.*(entMean))
 	}
-	def squareMeans() = ???
-	def pooledVariance = ???
-
-	def mkZeroCovRow = ???
-
-	val zeroBD = BigDecimal("0.0")
-	val oneBD = BigDecimal("1.0")
 
 	// Weighted expect-rows (which use the same entry-keys in same order) are monoidally combinable using this op.
 	// (Technically are only using their semigroup property, because we don't have a reason to use zero-rows, yet).
