@@ -18,8 +18,9 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 		mkProgram.provide(localDB_layer)
 	}
 
-	lazy val myBinStore = new BinStoreApi {}
-
+	lazy val myBinStore = new BinStoreApi {
+		override val (flg_doCreate, flg_doDelete) = (false, false)
+	}
 	lazy val myGenCtx = new GenCtx {
 		override protected def getTBI: ToBinItem = myBinStore.myTBI
 	}
@@ -28,13 +29,18 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 	val fixedScenPrms = new PhonyFixedScenarioParams{
 		override def getTgtTblNm: BinTag = myBinStore.binTblNm
 	}
+	val binWalker = new BinWalker {
+		override protected def getBinStoreApi: BinStoreApi = myBinStore
+	}
 
-	private def mkProgram = {
+	private def mkProgram : ZIO[ZDynDBExec, Throwable, Unit] = {
 
 		val dumStore = new StoreDummyItems {}
-		for {
-			_ <- myBinStore.maybeCreateBinTable
-			_ <- dumStore.putOneMessyItem
+		println("println START mkProgram")
+		val forBlock: ZIO[ZDynDBExec, Throwable, Unit] = for {
+			// First line of for comp is special because it eagerly creates our first Zio
+			_ <- myBinStore.maybeCreateBinTable	// FIRST line of for-comp code executes immediately to produce our FIRST Zio.
+			_ <- dumStore.putOneMessyItem		// SECOND and further lines execute later in flatMap callbacks
 			_ <- dumStore.putOneDummyBinItem
 			_ <- dumStore.readThatDummyBinYo
 			secPK <- dumStore.putFeatherDBI
@@ -42,9 +48,12 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 			// _ <- dumpTagInfoStrm
 			rsltTup <- myGenStoreModule.mkGenAndStoreOp(fixedScenPrms)
-
+			qrslt <- binWalker.queryOp4BinScalars(fixedScenPrms)
+			_ <- ZIO.log(s"queryOp4BinScalars result: ${qrslt}")
 			_ <- myBinStore.maybeDeleteBinTable
-		} yield ()
+		} yield ("This result from RunZioDynamoTrial.mkProgram.forBlock may be ignored")	// .map to produce the output ZIO
+		println("println END mkProgram")
+		forBlock.unit
 	}
 
 	// standalone test runner for just the tagNum generator step
@@ -58,6 +67,20 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 
 
 /*
+https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html
+
+With GetItem, you must specify the entire primary key, not just part of it.
+For example, if a table has a composite primary key (partition key and sort key), you must supply a value for the
+partition key and a value for the sort key.
+A GetItem request performs an eventually consistent read by default. You can use the ConsistentRead parameter to
+request a strongly consistent read instead. (This consumes additional read capacity units, but it returns the most
+up-to-date version of the item.)
+
+GetItem returns all of the item's attributes. You can use a projection expression to return only some of the attributes.
+For more information, see Projection expressions.
+
+To return the number of read capacity units consumed by GetItem, set the ReturnConsumedCapacity parameter to TOTAL.
+
               val query = DynamoDBQuery
                 .queryAllItem(tableName)
                 .whereKey($("id") === "id")

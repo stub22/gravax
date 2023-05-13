@@ -11,51 +11,57 @@ private trait BinItemStuff
 trait KnowsBinItem {
 	// Scenario ID/URI is our partition key.  But we might want to add more data to this key to scale computation
 	// within a scenario.
-	val FLDNM_SCEN = "scenario"
+	val KEYNM_PART_SCENARIO = "scenKey"
+	val KEYNM_SORT_COMPOUND = "sortKey"
 
 	// Sort-key is made out of timestamps and sequence-numbers
 	// calc_obs_fut_seqNum
 	//
 	// We want to use some combination of these time fields as dynamo-db sort key.
 	// Dynamo wants that sort key to be a single attribute, so if there is going to be concatenation we have to manage it.
-	val FLDNM_TIME_OBS = "time-obs"		// Time of the last observation the prediction is based on, e.g. last price quote.
-	val FLDNM_TIME_CALC = "time-calc"	// Time the prediction was calculated.
-	val FLDNM_TIME_PRED = "time-pred"		// Time of the predicted future observation, e.g. asset return time horizon.
-	val FLDNM_BIN_TAG = "bin-tag"
-	val FLDNM_PARENT_TAG = "parent-bin-tag"
+	val FLDNM_TIME_OBS = "timeObs"		// Time of the last observation the prediction is based on, e.g. last price quote.
+	val FLDNM_TIME_CALC = "timeCalc"	// Time the prediction was calculated.
+	val FLDNM_TIME_PRED = "timePred"		// Time of the predicted future observation, e.g. asset return time horizon.
+	val FLDNM_BIN_TAG = "binTag"
+	val FLDNM_PARENT_TAG = "parentBinTag"
 
-	val FLDNM_BIN_REL_WEIGHT = "bin-rel-weight" // What is our mass's fraction of the parent bin mass?
-	val FLDNM_BIN_ABS_WEIGHT = "bin-abs-weight" // What is our mass's fraction of the root bin mass? (optional)
-	val FLDNM_BIN_MASS = "bin-obs-mass" // How many items have been observed by this bin?  (optional).  Should be the sum of child masses, if any.
+	val FLDNM_BIN_REL_WEIGHT = "binRelWt" // What is our mass's fraction of the parent bin mass?
+	val FLDNM_BIN_ABS_WEIGHT = "binAbsWt" // What is our mass's fraction of the root bin mass? (optional)
+	val FLDNM_BIN_MASS = "binObsMass" // How many items have been observed by this bin?  (optional).  Should be the sum of child masses, if any.
 
-	val FLDNM_BIN_FLAVOR = "bin-flavor"	// Enum telling us what kind of value-map this bin holds
+	val FLDNM_BIN_FLAVOR = "binFlavor"	// Enum telling us what kind of value-map this bin holds
 	val BFLV_ANN_RET_MEAN_VAR = "ANN_RET_MEAN_VAR" // FLAVOR for annual return x (mean, marginal variance)
 	// val BFLV_
 
-	val FLDNM_ANN_RET_MEAN = "ann-ret-mean"
+	// val FLDNM_ANN_RET_MEAN = "ann-ret-mean"
 
 	val FLDNM_BROKED_MEAT_MAP = "broked-map-of-lists"
 	val FLDNM_STRINGY_MEAT_MAP = "stringy-meat-map"
-	val FLDNM_DOBLE_MAP = "meat-map-of-map" // Double-map structure containing the data of type ${bin-flavor}.
+	val FLDNM_DOBLE_MAP = "meatMapOfMap" // Double-map structure containing the data of type ${bin-flavor}.
 	val SUBFLDNM_MEAN = "mean"
 	val SUBFLDNM_VAR = "var"
 
-	val KEYNM_SORT_BIN = "sort-key"		// Some string-concat of the above times.  Could be scenario specific!
+	// Some string-concat of the above times and tags.  Could possibly be scenario specific.
+	// Currently we expect the distribution to be located using 3 concatenated datetime strings.
+	// Within the distribution the bin is located at FLDNM_BIN_TAG, which we assume is a sufficient
+	// ordering WITHIN a given distribution.  We don't need the parent tag in the sort key, because the
+	// mechanism writing the bins is assumed to be orderly enough.  We generally expect to see the bin tags
+	// reflect a breadth first traversal of the bin tree levels: (root, kids, gkids, ggkids, ...).
 	val FLDSEQ_SORT_BIN = List(FLDNM_TIME_OBS, FLDNM_TIME_PRED, FLDNM_TIME_CALC, FLDNM_BIN_TAG)
-	val binKeySchm = ZDyn.KeySchema(FLDNM_SCEN, KEYNM_SORT_BIN)  // partition-key, sort-key
+	val binKeySchm = ZDyn.KeySchema(KEYNM_PART_SCENARIO, KEYNM_SORT_COMPOUND)  // partition-key, sort-key
 
 	// It seems we only need AttributeDefinitions for attributes that are used in keys ... or indices?
-	val scenAttr = ZDyn.AttributeDefinition.attrDefnString(FLDNM_SCEN)
+	val scenAttr = ZDyn.AttributeDefinition.attrDefnString(KEYNM_PART_SCENARIO)
 	// Examples seen so far use Strings for date values.
-	val sortKeyAttr = ZDyn.AttributeDefinition.attrDefnString(KEYNM_SORT_BIN)
+	val sortKeyAttr = ZDyn.AttributeDefinition.attrDefnString(KEYNM_SORT_COMPOUND)
 
 }
 
 trait FromBinItem extends FromItem with KnowsBinItem {
 	def getPKfromFullBinItem(fullBI : Item) : PrimaryKey = {
 		val partitionKeyVal = extractSceneID(fullBI)
-		val sortKeyVal = fetchOrThrow[String](fullBI, KEYNM_SORT_BIN)
-		PrimaryKey(FLDNM_SCEN	-> partitionKeyVal,	KEYNM_SORT_BIN -> sortKeyVal)
+		val sortKeyVal = fetchOrThrow[String](fullBI, KEYNM_SORT_COMPOUND)
+		PrimaryKey(KEYNM_PART_SCENARIO	-> partitionKeyVal,	KEYNM_SORT_COMPOUND -> sortKeyVal)
 	}
 	def extractBinData(itm : Item) : BinData = {
 		val sceneID = extractSceneID(itm)
@@ -67,7 +73,7 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 		binDat
 	}
 
-	def extractSceneID (itm : Item) : String = fetchOrThrow[String](itm, FLDNM_SCEN)
+	def extractSceneID (itm : Item) : String = fetchOrThrow[String](itm, KEYNM_PART_SCENARIO)
 
 	def extractTimeInfo(itm : Item) : BinTimeInfo = {
 		val timeObs = fetchOrThrow[String](itm, FLDNM_TIME_OBS)
@@ -127,7 +133,7 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 	def mkBinItemSkel(scen : String, timeInfo : BinTimeInfo) : Item = mkBinItemSkel(scen, timeInfo.obsTime, timeInfo.predTime, timeInfo.calcTime)
 	def mkBinItemSkel(scen : String, timeObs : String, timePred : String, timeCalc : String) : Item = {
 		Item(
-			FLDNM_SCEN 		-> 	scen,
+			KEYNM_PART_SCENARIO -> 	scen,
 			FLDNM_TIME_OBS 	->	timeObs,
 			FLDNM_TIME_PRED -> 	timePred,
 			FLDNM_TIME_CALC -> 	timeCalc
@@ -200,7 +206,7 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 
 		combineMapWithItem(partialBin, addMap)
 	}
-	def fillBinSortKey(partBinItem : Item) : Item = fillSortKey(partBinItem, KEYNM_SORT_BIN, FLDSEQ_SORT_BIN, "#")
+	def fillBinSortKey(partBinItem : Item) : Item = fillSortKey(partBinItem, KEYNM_SORT_COMPOUND, FLDSEQ_SORT_BIN, "#")
 
 	def buildBinItem(skelBinItem : Item, tagInfo: BinTagInfo,  massInfo : BinMassInfo, binMeat : BinMeatInfo) : Item = {
 		val binItemWithTags = addTagsToBinItem(skelBinItem, tagInfo)
@@ -230,8 +236,8 @@ trait DummyItemMaker extends KnowsBinItem {
 	def mkMessyItem = {
 		// Copied from ZDynamoDB example code.
 		val bigItem: Item = Item(
-			FLDNM_SCEN	-> scn_messy,
-			KEYNM_SORT_BIN -> sort_AA,
+			KEYNM_PART_SCENARIO	-> scn_messy,
+			KEYNM_SORT_COMPOUND -> sort_AA,
 			"id"          -> 0,
 			"bin"       -> Chunk.fromArray("abC".getBytes),
 			"binSet"    -> Set(Chunk.fromArray("aBc".getBytes)),
@@ -254,7 +260,7 @@ trait DummyItemMaker extends KnowsBinItem {
 		// Looking via Workbench, we see that inside collection fields, dynamo often stores pairs of {type, txtVal},
 		// where type is one of "N", "BOOL"...
 		val partialBinItem : Item = Item(
-			FLDNM_SCEN	-> scn_dummy,
+			KEYNM_PART_SCENARIO	-> scn_dummy,
 			FLDNM_TIME_OBS ->	"20221117_21:30",
 			FLDNM_TIME_PRED -> "20231117_21:30",
 			FLDNM_TIME_CALC -> "20221118_14:22",

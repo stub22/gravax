@@ -16,10 +16,13 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 	}
 	val myDIM = new DummyItemMaker {}
 
-	def maybeCreateBinTable: RIO[ZDynDBExec, Unit] = if (flg_doCreate) {
-		ZDynDBQry.createTable(binTblNm, binKeySchm, ZDyn.BillingMode.PayPerRequest)(
-			scenAttr, sortKeyAttr).execute *> ZIO.log(s"Created table ${binTblNm}")
-	} else ZIO.succeed()
+	def maybeCreateBinTable: RIO[ZDynDBExec, Unit] = {
+		println("println maybeCreateBinTable START")
+		if (flg_doCreate) {
+			ZDynDBQry.createTable(binTblNm, binKeySchm, ZDyn.BillingMode.PayPerRequest)(
+				scenAttr, sortKeyAttr).execute *> ZIO.log(s"Created table ${binTblNm}")
+		} else ZIO.succeed()
+	}
 
 	def maybeDeleteBinTable: RIO[ZDynDBExec, Unit] = if (flg_doDelete) {
 		ZDynDBQry.deleteTable(binTblNm).execute *> ZIO.log(s"Deleted table ${binTblNm}")

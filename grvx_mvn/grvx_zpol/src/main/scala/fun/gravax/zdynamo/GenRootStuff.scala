@@ -15,6 +15,14 @@ trait ScenarioParams extends KnowsGenTypes {
 	val rootTagNum : Int = 1200
 	val rootKidsCnt : Int  = 7
 	val baseBinLevel : Int = 4
+
+	private val sortKeySep = "#"
+
+	def sortKeyQryPrefix : String = {
+		val timeInf = getTimeInf
+		val sortPrefixFields = List(timeInf.obsTime, timeInf.predTime, timeInf.calcTime)
+		sortPrefixFields.mkString(sortKeySep)
+	}
 }
 
 trait PhonyFixedScenarioParams extends ScenarioParams {

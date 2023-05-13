@@ -17,6 +17,7 @@ trait StoreDummyItems extends BinStoreApi {
 	}
 
 	def putOneMessyItem() : RIO[ZDynDBExec, Unit] = {
+		println("println: putOneMessyItem START")
 		val bigItem = myDIM.mkMessyItem
 		val zpi: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(binTblNm, bigItem)
 		val zpiex: ZIO[ZDynDBExec, Throwable, Option[Item]] = zpi.execute
@@ -24,6 +25,7 @@ trait StoreDummyItems extends BinStoreApi {
 	}
 
 	def putFeatherDBI : RIO[ZDynDBExec, PrimaryKey] = {
+		println("println: putFeatherDBI START")
 		// Can we easily check the size of the value-map (annRetMeans) in a filter condition?
 		val (scen, binFlav) = ("featherScen", BFLV_ANN_RET_MEAN_VAR)
 		val (timeObs, timePred, timeCalc) = ("20221209_21:30", "20231209_21:30", "20230105_14:18")
