@@ -10,10 +10,14 @@ import scala.math.BigDecimal
 
 private trait GenBinStuff
 
-trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes {
+trait KnowsBinTupTupTypes {
+	type BinSpec = (BinTagInfo, BinNumInfo, BinMassInfo, BinMeatInfo) // Final agg of pure-data based on gen-rules
+
+	type BinScalarInfoTup = (BinTimeInfo, BinTagInfo, BinMassInfo)
+}
+trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes with KnowsBinTupTupTypes {
 	// Pure-data generated based on rules.  These tuples are used as stream records that do not need as much concreteness.
 
-	type BinSpec = (BinTagInfo, BinNumInfo, BinMassInfo, BinMeatInfo) // Final agg of pure-data based on gen-rules
 	type BinStoreCmdRow = (BinSpec, Item, PrimaryKey, RIO[ZDynDBExec, Option[Item]])
 	type BinStoreRslt = (BinSpec, PrimaryKey, Option[Item])
 	val zeroBD = BigDecimal("0.0")

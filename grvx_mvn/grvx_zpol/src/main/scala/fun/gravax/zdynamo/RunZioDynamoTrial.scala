@@ -50,6 +50,12 @@ object RunZioDynamoTrial extends ZIOAppDefault with KnowsGenTypes {
 			rsltTup <- myGenStoreModule.mkGenAndStoreOp(fixedScenPrms)
 			qrslt <- binWalker.queryOp4BinScalars(fixedScenPrms)
 			_ <- ZIO.log(s"queryOp4BinScalars result: ${qrslt}")
+			bdChnk <- ZIO.succeed(binWalker.extractBinScalarsFromQRsltItems(qrslt._1))
+			_ <- ZIO.log(s"extractBinScalarsFromQRsltItems result: ${bdChnk}")
+			meatyBinItems <- binWalker.fetchMeatyBinItems(fixedScenPrms, bdChnk)
+			_ <- ZIO.log(s"fetchMeatyBinItems result: ${meatyBinItems}")
+			shamWowRslt <- binWalker.shamWow(fixedScenPrms, bdChnk)
+			_ <- ZIO.log(s"shamWow result: ${shamWowRslt}")
 			_ <- myBinStore.maybeDeleteBinTable
 		} yield ("This result from RunZioDynamoTrial.mkProgram.forBlock may be ignored")	// .map to produce the output ZIO
 		println("println END mkProgram")

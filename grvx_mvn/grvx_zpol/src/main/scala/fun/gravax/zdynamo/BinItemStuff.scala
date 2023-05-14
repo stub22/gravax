@@ -57,7 +57,7 @@ trait KnowsBinItem {
 
 }
 
-trait FromBinItem extends FromItem with KnowsBinItem {
+trait FromBinItem extends FromItem with KnowsBinItem with KnowsBinTupTupTypes {
 	def getPKfromFullBinItem(fullBI : Item) : PrimaryKey = {
 		val partitionKeyVal = extractSceneID(fullBI)
 		val sortKeyVal = fetchOrThrow[String](fullBI, KEYNM_SORT_COMPOUND)
@@ -71,6 +71,12 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 		val meatInfo = extractMeat(itm)
 		val binDat = EzBinData(sceneID, timeData, seqInfo, massInfo, meatInfo)
 		binDat
+	}
+	def extractBinScalars(itm : Item) : BinScalarInfoTup = {
+		val timeData = extractTimeInfo(itm)
+		val seqInfo = extractSeqInfo(itm)
+		val massInfo = extractMassInfo(itm)
+		(timeData, seqInfo, massInfo)
 	}
 
 	def extractSceneID (itm : Item) : String = fetchOrThrow[String](itm, KEYNM_PART_SCENARIO)
@@ -92,9 +98,9 @@ trait FromBinItem extends FromItem with KnowsBinItem {
 
 	def extractMassInfo(itm: Item) : BinMassInfo = {
 		val binMass = fetchOrThrow[BigDecimal](itm, FLDNM_BIN_MASS)
-		val relWt = fetchOrThrow[BigDecimal](itm, FLDNM_BIN_REL_WEIGHT)
-		// val absWt = fetchOrThrow[BigDecimal](itm,	FLDNM_BIN_ABS_WEIGHT)
-		val massInfo = BinMassInfo(binMass, Some(relWt), None) // absWt)
+		val relWt_opt = fetchOptional[BigDecimal](itm, FLDNM_BIN_REL_WEIGHT)
+		val absWt_opt = fetchOptional[BigDecimal](itm,	FLDNM_BIN_ABS_WEIGHT)
+		val massInfo = BinMassInfo(binMass, relWt_opt, absWt_opt)
 		massInfo
 	}
 

@@ -63,9 +63,13 @@ trait BinData extends StatTupleShapes {
 
 }
 
+case class BinKeyInfo(scenPartKey : String, compoundSortKey : String)
+
 case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
 case class BinTagInfo(binTag : String, parentTag : String) // levelNum, siblingNum
 case class BinMassInfo(binMass : BigDecimal, relWt_opt : Option[BigDecimal], absWt_opt : Option[BigDecimal] = None)
+
+
 
 // TODO: add these index numbers to persistent store?
 //

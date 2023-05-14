@@ -23,6 +23,10 @@ trait ScenarioParams extends KnowsGenTypes {
 		val sortPrefixFields = List(timeInf.obsTime, timeInf.predTime, timeInf.calcTime)
 		sortPrefixFields.mkString(sortKeySep)
 	}
+	def exactSortKey(timeInf : BinTimeInfo, tagInf : BinTagInfo) = {
+		val sortKeyFields = List(timeInf.obsTime, timeInf.predTime, timeInf.calcTime, tagInf.binTag)
+		sortKeyFields.mkString(sortKeySep)
+	}
 }
 
 trait PhonyFixedScenarioParams extends ScenarioParams {
