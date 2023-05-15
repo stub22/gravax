@@ -56,8 +56,8 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	override def projectRootBin(keySyms: IndexedSeq[EntryKey]): DBinDat = rootBN.projectToDBD(keySyms)
 
 	// 1 level  => only the marginal self-variances stored in the root bin
-	// 2 levels => approximate covariance using local-means (only!) of the root-myKids (+ global means) for all the off-diagonal elements.
-	// on-diagonal are computed using pooled-variance formula from marginal-variances (+ local-means + global-means) in the root-myKids.
+	// 2 levels => approximate covariance using local-means (only!) of the root-getKids (+ global means) for all the off-diagonal elements.
+	// on-diagonal are computed using pooled-variance formula from marginal-variances (+ local-means + global-means) in the root-getKids.
 	// These latter on-diagonal sums should come out to the same as the root's stored self-variances (and this is where
 	// those values come from in a bottom-up assembly of bins).
 

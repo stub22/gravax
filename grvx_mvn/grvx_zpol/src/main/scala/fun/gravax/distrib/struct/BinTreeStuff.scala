@@ -30,5 +30,9 @@ trait BinTreeLoader extends KnowsBinItem with KnowsBinTupTupTypes {
 
 	}
 
+	def buildTree(binScInfTupChnk : Chunk[BinScalarInfoTup]) = {
+
+	}
+
 	def mkBinDataRecAndNode
 }

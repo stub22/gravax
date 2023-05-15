@@ -144,7 +144,7 @@ trait GenTagNumData extends KnowsGenTypes {
 									val nextGenSt = GenSt(Some(nextPRec), nextAbsIdx, 1, nxtLevNum, nxtMaxKids)
 									(nextGenSt, mParQ)
 								} else {
-									// Parent says no myKids so nothing to do here.
+									// Parent says no getKids so nothing to do here.
 									(noGenSt, mParQ)
 								}
 							}

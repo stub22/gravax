@@ -2,8 +2,9 @@ package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreCmdBuilder, KeyedCmdMaker, KnowsBinItem}
 import fun.gravax.distrib.calc.KnowsDistribTypes
-import fun.gravax.distrib.struct.{BinMassInfo, BinMeatInfo, BinNumInfo, BinTagInfo, BinTimeInfo}
+import fun.gravax.distrib.struct.{BinFullKeyInfo, BinMassInfo, BinMeatInfo, BinNumInfo, BinTagInfo, BinTimeInfo}
 import fun.gravax.zdynamo._
+import zio.cache.Cache
 import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec}
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, NonEmptyChunk, RIO, ZIO}
@@ -16,6 +17,8 @@ trait KnowsBinTupTupTypes {
 	type BinSpec = (BinTagInfo, BinNumInfo, BinMassInfo, BinMeatInfo) // Final agg of pure-data based on gen-rules
 
 	type BinScalarInfoTup = (BinTimeInfo, BinTagInfo, BinMassInfo)
+
+	type MeatyItemCache = Cache[BinFullKeyInfo, Throwable, Option[BinMeatInfo]]
 }
 trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes with KnowsBinTupTupTypes {
 	// Pure-data generated based on rules.  These tuples are used as stream records that do not need as much concreteness.

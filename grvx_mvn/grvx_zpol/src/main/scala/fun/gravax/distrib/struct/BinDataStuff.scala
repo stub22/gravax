@@ -57,10 +57,12 @@ trait BinData extends StatTupleShapes {
 	// def getAbsWt : BigDecimal
 	def getMass : BigDecimal
 
-	def getStatMap : StatMap
+	protected def getStatMap : StatMap
 
+	// Called from BinNode
 	def mkStatRow(keySeq : IndexedSeq[EntryKey]) : StatRow
 
+	// Called from BinNode, but only by unused val  myFullBinDat
 	def allKeysSorted(meatKeyOrder : Ordering[String]) : IndexedSeq[EntryKey]
 
 }

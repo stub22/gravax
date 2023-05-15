@@ -1,10 +1,16 @@
 package fun.gravax.distrib.struct
 
+import fun.gravax.distrib.binstore.KnowsBinItem
 import fun.gravax.distrib.calc.KnowsDistribTypes
+import fun.gravax.distrib.gen.KnowsBinTupTupTypes
+import zio.IO
+import zio.dynamodb.PrimaryKey
 
 private trait BinInfoStuff
 
-case class BinKeyInfo(scenPartKey : String, compoundSortKey : String)
+case class BinFullKeyInfo(tblNm : String, scenPartKey : String, compoundSortKey : String) extends KnowsBinItem  {
+	def getDynamoPK : PrimaryKey = PrimaryKey(KEYNM_PART_SCENARIO -> scenPartKey, KEYNM_SORT_COMPOUND -> compoundSortKey)
+}
 
 case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
 case class BinTagInfo(binTag : String, parentTag : String) // levelNum, siblingNum
@@ -30,21 +36,55 @@ case class BinMeatInfo(binFlavor : BinTypes.BinFlavor, meatMap : BinTypes.StatMa
 	}
 }
 
-case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, massDat : BinMassInfo, meat : BinMeatInfo) extends BinData {
-	override def getScenarioID: String = scenID
-	override def getObsTime: String = timeDat.obsTime
-	override def getPredTime: String = timeDat.predTime
-	override def getCalcTime: String = timeDat.calcTime
-	override def getBinTagTxt: String = seqDat.binTag
+abstract class BinDataCore(myScenID : String, myTimeDat : BinTimeInfo, mySeqDat : BinTagInfo) extends BinData {
+	override def getScenarioID: String = myScenID
+	override def getObsTime: String = myTimeDat.obsTime
+	override def getPredTime: String = myTimeDat.predTime
+	override def getCalcTime: String = myTimeDat.calcTime
+	override def getBinTagTxt: String = mySeqDat.binTag
 	override def getBinNumInt: Int = ???
-	override def getParentTagTxt: String = seqDat.parentTag
+	override def getParentTagTxt: String = mySeqDat.parentTag
 	override def getParentNumInt: Int = ???
-	override def getMass: BigDecimal = massDat.binMass
-	override def getRelWt: BigDecimal = massDat.relWt_opt.get
+}
+
+case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, myMassDat : BinMassInfo, meat : BinMeatInfo)
+		extends BinDataCore(scenID, timeDat, seqDat) {
+
+	override def getMass: BigDecimal = myMassDat.binMass
+	override def getRelWt: BigDecimal = myMassDat.relWt_opt.get
 	// override def getAbsWt: BigDecimal = massDat.absWt
 	override def getBinFlavor: String = meat.binFlavor
-	override def getStatMap: StatMap = meat.meatMap
+	override protected def getStatMap: StatMap = meat.meatMap
 
 	override def mkStatRow(keySeq: IndexedSeq[EntryKey]): StatRow = meat.mkStatRow(keySeq)
 	override def allKeysSorted(meatKeyOrder : Ordering[String]) : IndexedSeq[EntryKey] = meat.allKeysSorted(meatKeyOrder)
 }
+
+trait CacheBackedBinData extends BinData with KnowsBinTupTupTypes {
+	protected def getCache : MeatyItemCache
+	protected def getBinKey : BinFullKeyInfo
+	private lazy val myMeatInfoOp: IO[Throwable, Option[BinMeatInfo]] = {
+		val cache = getCache
+		val binKey = getBinKey
+		cache.get(binKey)
+	}
+}
+/*
+case class LazyBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, myBinKey : BinFullKeyInfo,
+					   myMeatyCache : MeatyItemCache)
+		extends BinDataCore(scenID, timeDat, seqDat) {
+
+	lazy
+
+	override def getBinFlavor: BinFlavor = ???
+	override def getRelWt: DBinWt = ???
+	override def getMass: DBinWt = ???
+
+	override protected def getStatMap: StatMap = ???
+	override def mkStatRow(keySeq: IndexedSeq[EntryKey]): StatRow = ???
+	override def allKeysSorted(meatKeyOrder: Ordering[BinFlavor]): IndexedSeq[EntryKey] = ???
+}
+*/
+//class LazyBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, myMassDat : BinMassInfo,
+//				  myMeatFetchOp : RIO[])
+//		extends BinDataCore(scenID, timeDat, seqDat) {

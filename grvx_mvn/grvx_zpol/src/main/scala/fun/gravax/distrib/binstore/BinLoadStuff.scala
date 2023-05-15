@@ -15,6 +15,8 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 
 	lazy private val myBinStoreApi = getBinStoreApi
 
+	def getFBI : FromBinItem = myBinStoreApi.myFBI
+
 	def loadRootBinOnly(scenParms: ScenarioParams): RIO[ZDynDBExec, Option[BinData]] = {
 		val rootBinPK: PrimaryKey = ???
 		val binDataRdOp = myBinStoreApi.readBinData(rootBinPK)
@@ -51,6 +53,8 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 		println(s"println: queryOp4BinScalars fullKeyExpr=${fullKeyExpr}")
 		val qryWW: ZDynDBQry[Any, (Chunk[Item], LastEvaluatedKey)] = baseQry.whereKey(fullKeyExpr)
 		// val countOp: ZIO[ZDynDBExec, Throwable, (Chunk[Item], LastEvaluatedKey)] = qryWW.selectCount.execute
+
+		// These seem to do nothing when talking to a local dynamoDB.  Needs testing with full AWS DynamoDB.
 		val qryWCap = qryWW.capacity(ReturnConsumedCapacity.Total)
 		val qryWMet = qryWCap.metrics(ReturnItemCollectionMetrics.Size)
 		val qryOp: RIO[ZDynDBExec, (Chunk[Item], LastEvaluatedKey)] = qryWMet.execute // .debug
@@ -67,26 +71,26 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 		// BatchGetItem() is private, but BatchGetItemExamples shows how to build up getItem requests that
 		// are supposed to magically become BatchGetItem
 		val batchGet: ZDynDBQry[Any, List[Option[Item]]] = ZDynDBQry.forEach(binInfoTups) { binfTup =>
-			qryForOneMeatyBinItem(scenParms, binfTup)
+			fetchOneMeatyBinItem(scenParms, binfTup)
 		}
 		val bgExec: ZIO[ZDynDBExec, Throwable, List[Option[Item]]] = batchGet.execute
 		bgExec
 	}
 	def shamWow(scenParms: ScenarioParams, binInfoTups : Seq[BinScalarInfoTup]) = {
 		val firstTup = binInfoTups.head
-		val qry = qryForOneMeatyBinItem(scenParms, firstTup)
+		val qry = fetchOneMeatyBinItem(scenParms, firstTup)
 		qry.execute
 	}
-	def qryForOneMeatyBinItem(scenParms: ScenarioParams, binfTup : BinScalarInfoTup): ZDynDBQry[Any, Option[Item]]  = {
+	def fetchOneMeatyBinItem(scenParms: ScenarioParams, binfTup : BinScalarInfoTup): ZDynDBQry[Any, Option[Item]]  = {
 		val (timeInf, tagInf, massInf) = binfTup
 		val sortKey = scenParms.exactSortKey(timeInf, tagInf)
 		val tblNm = scenParms.getTgtTblNm
 		val scenID = scenParms.getScenID
 		val itemPK = PrimaryKey(KEYNM_PART_SCENARIO -> scenID, KEYNM_SORT_COMPOUND -> sortKey)
-		val gitmQry: ZDynDBQry[Any, Option[Item]] = qryForOneMeatyBinItemAtPK(tblNm, itemPK)
+		val gitmQry: ZDynDBQry[Any, Option[Item]] = fetchOneMeatyBinItemAtPK(tblNm, itemPK)
 		gitmQry
 	}
-	def qryForOneMeatyBinItemAtPK(tblNm : String, itemPK : PrimaryKey) : ZDynDBQry[Any, Option[Item]] = {
+	def fetchOneMeatyBinItemAtPK(tblNm : String, itemPK : PrimaryKey) : ZDynDBQry[Any, Option[Item]] = {
 		// Adding any field projections to the getItem call makes the eventual DB fetch fail (returns None).
 		// Tried several variations but no luck yet.
 		// Anyway in our current design the "full item" is not much larger than just "the meat", so we are pushing
@@ -95,7 +99,7 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 		val gitmQry = ZDynDBQry.getItem(tblNm, itemPK) // , projList : _*)  // ,			$(FLDNM_BIN_TAG)
 		// $(KEYNM_SORT_COMPOUND),	$(FLDNM_BIN_TAG), $(FLDNM_BIN_MASS), $(FLDNM_BIN_FLAVOR), $(FLDNM_DOBLE_MAP)
 	    //  where $("field1") === 42
-		println(s"qryForOneMeatyBinItemAtPK: ${gitmQry}")
+		println(s"fetchOneMeatyBinItemAtPK: ${gitmQry}")
 		gitmQry
 	}
 

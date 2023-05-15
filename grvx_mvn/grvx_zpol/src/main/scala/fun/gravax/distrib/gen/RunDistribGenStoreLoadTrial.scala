@@ -1,6 +1,6 @@
 package fun.gravax.distrib.gen
 
-import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, LocalDynamoDB, StoreDummyItems, ToBinItem}
+import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
 import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo}
 import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
 import zio.{Chunk, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault}
@@ -29,8 +29,11 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	val fixedScenPrms = new PhonyFixedScenarioParams {
 		override def getTgtTblNm: BinTag = myBinStore.binTblNm
 	}
-	val binWalker = new BinWalker {
+	val myBinWalker = new BinWalker {
 		override protected def getBinStoreApi: BinStoreApi = myBinStore
+	}
+	val myMCM = new MeatCacheMaker {
+		override protected def getBinWalker: BinWalker = myBinWalker
 	}
 
 	private def mkProgram: ZIO[ZDynDBExec, Throwable, Unit] = {
@@ -48,13 +51,14 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 			_ <- ZIO.log(s"Read binData at ${secPK} and got result: ${rrslt}")
 			// _ <- dumpTagInfoStrm
 			rsltTup <- myGenStoreModule.mkGenAndStoreOp(fixedScenPrms)
-			qrslt <- binWalker.queryOp4BinScalars(fixedScenPrms)
+			qrslt <- myBinWalker.queryOp4BinScalars(fixedScenPrms)
 			_ <- ZIO.log(s"queryOp4BinScalars result: ${qrslt}")
-			bdChnk <- ZIO.succeed(binWalker.extractBinScalarsFromQRsltItems(qrslt._1))
+			bdChnk <- ZIO.succeed(myBinWalker.extractBinScalarsFromQRsltItems(qrslt._1))
 			_ <- ZIO.log(s"extractBinScalarsFromQRsltItems result: ${bdChnk}")
-			meatyBinItems <- binWalker.fetchMeatyBinItems(fixedScenPrms, bdChnk)
+			meatyBinItems <- myBinWalker.fetchMeatyBinItems(fixedScenPrms, bdChnk)
 			_ <- ZIO.log(s"fetchMeatyBinItems result: ${meatyBinItems}")
-			//		shamWowRslt <- binWalker.shamWow(fixedScenPrms, bdChnk)
+			meatCache <- myMCM.makeMeatyItemCacheOp
+			//		shamWowRslt <- myBinWalker.shamWow(fixedScenPrms, bdChnk)
 			//		_ <- ZIO.log(s"shamWow result: ${shamWowRslt}")
 			_ <- myBinStore.maybeDeleteBinTable
 		} yield ("This result from RunDistribGenStoreLoadTrial.mkProgram.forBlock may be ignored") // .map to produce the output ZIO
