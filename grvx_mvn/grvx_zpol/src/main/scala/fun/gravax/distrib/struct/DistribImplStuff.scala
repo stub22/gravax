@@ -15,7 +15,7 @@ trait VectorDistribTypes extends KnowsDistribTypes {
 trait VecDistribFragment extends VectorDistribTypes {
 	// We expect Assets (meatKeys) to be identical across all bins
 	// def	getFullKeySymSet : Set[EntryKey] // The syms do not have a canonical ordering.  Client may use alphabetic, or...
-	def projectStatRow(keySyms : IndexedSeq[EntryKey]) : StatRow // Often this is available directly from VecDistrib-bin-0
+	def projectShallowStatRow(keySyms : IndexedSeq[EntryKey]) : StatRow // Often this is available directly from VecDistrib-bin-0
 }
 
 // Distribution does not encode any canonical ordering of the Entry dimensions.
@@ -50,7 +50,7 @@ trait VecDistrib extends VecDistribFragment {
 class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	// override def getFullKeySymSet: Set[EntryKey] = rootBN.getFullKeySymSet
 
-	override def projectStatRow(keySyms: IndexedSeq[EntryKey]): StatRow = rootBN.projectStatRow(keySyms)
+	override def projectShallowStatRow(keySyms: IndexedSeq[EntryKey]): StatRow = rootBN.projectShallowStatRow(keySyms)
 
 	// Produces same result with another level of wrapper that includes binID and relWeight (which must be 1.0?)
 	override def projectRootBin(keySyms: IndexedSeq[EntryKey]): DBinDat = rootBN.projectToDBD(keySyms)
@@ -74,7 +74,7 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	override def projectEstimCovars(keySyms: IndexedSeq[EntryKey], maxLevels: Int): StatTriMatrix = {
 		// Stored mean and statistics of the root bin
 		// We always get
-		val rootStatRow: IndexedSeq[StatEntry] = projectStatRow(keySyms)
+		val rootStatRow: IndexedSeq[StatEntry] = projectShallowStatRow(keySyms)
 		val storedRootMeanVec: IndexedSeq[EntryMean] = rootStatRow.map(_._2)
 		val storedRootVarVec: IndexedSeq[EntryVar] = rootStatRow.map(_._3)
 		val fullStatOut : StatTriMatrix = if (maxLevels == 1) {

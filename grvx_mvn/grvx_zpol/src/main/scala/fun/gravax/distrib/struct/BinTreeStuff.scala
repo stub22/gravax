@@ -28,6 +28,7 @@ trait BinTreeLoader extends KnowsBinItem with KnowsBinTupTupTypes {
 		// So to "fetch any number" we would want a Stream.
 		// But perhaps for now we will be content to just fetch blocks of child nodes.
 
-
 	}
+
+	def mkBinDataRecAndNode
 }

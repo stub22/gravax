@@ -1,6 +1,6 @@
-package fun.gravax.zpol
+package fun.gravax.zaccum
 
-import zio.stream.{Sink, UStream, ZSink, ZStream}
+import zio.stream.{UStream, ZSink, ZStream}
 import zio.{Chunk, UIO, ZIO, ZIOAppDefault, Random => ZRandom}
 
 import java.io.IOException

@@ -1,8 +1,8 @@
-package fun.gravax.zpol
+package fun.gravax.zaccum
 
-import zio.stream.{Sink, UStream, ZSink, ZStream}
-import zio.{Chunk, UIO, ZIO, ZIOAppDefault, Random => ZRandom}
-import zio.{Console => ZConsole}
+import zio.stream.{UStream, ZSink, ZStream}
+import zio.{Chunk, UIO, ZIO, ZIOAppDefault, Console => ZConsole, Random => ZRandom}
+
 import java.io.IOException
 import java.math.{MathContext, RoundingMode}
 
