@@ -1,12 +1,12 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.binstore
 
-import zio.{Chunk, RIO, ZIO}
+import fun.gravax.distrib.gen.{KnowsBinTupTupTypes, ScenarioParams}
+import fun.gravax.distrib.struct.BinData
 import zio.dynamodb.PartitionKeyExpression.PartitionKey
 import zio.dynamodb.ProjectionExpression.{$, Unknown}
 import zio.dynamodb.SortKeyExpression.SortKey
 import zio.dynamodb.{Item, KeyConditionExpression, LastEvaluatedKey, PartitionKeyExpression, PrimaryKey, ProjectionExpression, ReturnConsumedCapacity, ReturnItemCollectionMetrics, SortKeyExpression, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
-
-import scala.collection.immutable.{Queue, Map => SMap}
+import zio.{Chunk, RIO, ZIO}
 
 private trait BinLoadStuff
 
@@ -64,25 +64,11 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 
 	def fetchMeatyBinItems(scenParms: ScenarioParams, binInfoTups : Seq[BinScalarInfoTup]): RIO[ZDynDBExec, List[Option[Item]]] = {
 		// We may batch fetch up to 100 items, within a total of 16MB, which would allow ~160K average per item.
-		// import zio.dynamodb._
-		// import zio.dynamodb.DynamoDBQuery._
-
-		val tblNm = scenParms.getTgtTblNm
-		val scenID = scenParms.getScenID
-
+		// BatchGetItem() is private, but BatchGetItemExamples shows how to build up getItem requests that
+		// are supposed to magically become BatchGetItem
 		val batchGet: ZDynDBQry[Any, List[Option[Item]]] = ZDynDBQry.forEach(binInfoTups) { binfTup =>
 			qryForOneMeatyBinItem(scenParms, binfTup)
-/*
-			val (timeInf, tagInf, massInf) = binfTup
-			val sortKey = scenParms.exactSortKey(timeInf, tagInf)
-			val itemPK = PrimaryKey(KEYNM_PART_SCENARIO -> scenID, KEYNM_SORT_COMPOUND -> sortKey)
-			val gitmQry = qryForOneMeatyBinItemAtPK(tblNm, itemPK)
-			println(s"println.fetchMeatyBinItems.batchGet.gitmQry = ${gitmQry}")
-			gitmQry
-
- */
 		}
-		// BatchGetItem() is private, but BatchGetItemExamples shows how to build up getItem requests
 		val bgExec: ZIO[ZDynDBExec, Throwable, List[Option[Item]]] = batchGet.execute
 		bgExec
 	}
@@ -97,16 +83,18 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 		val tblNm = scenParms.getTgtTblNm
 		val scenID = scenParms.getScenID
 		val itemPK = PrimaryKey(KEYNM_PART_SCENARIO -> scenID, KEYNM_SORT_COMPOUND -> sortKey)
-		val gitmQry: ZDynDBQry[Any, Option[Item]] = qryForOneMeatyBinItemAtPK(tblNm, itemPK) // .where($(FLDNM_BIN_TAG) === tagInf.binTag)
-		println(s"with extra where condition: ${gitmQry}")
+		val gitmQry: ZDynDBQry[Any, Option[Item]] = qryForOneMeatyBinItemAtPK(tblNm, itemPK)
 		gitmQry
 	}
 	def qryForOneMeatyBinItemAtPK(tblNm : String, itemPK : PrimaryKey) : ZDynDBQry[Any, Option[Item]] = {
-		val projList: Seq[ProjectionExpression[Any, Unknown]] = List(projExpr(FLDNM_BIN_TAG), projExpr(FLDNM_BIN_MASS))
 		// Adding any field projections to the getItem call makes the eventual DB fetch fail (returns None).
+		// Tried several variations but no luck yet.
+		// Anyway in our current design the "full item" is not much larger than just "the meat", so we are pushing
+		// ahead without the projections.
+		val projList: Seq[ProjectionExpression[Any, Unknown]] = List(projExpr(FLDNM_BIN_TAG), projExpr(FLDNM_BIN_MASS))
 		val gitmQry = ZDynDBQry.getItem(tblNm, itemPK) // , projList : _*)  // ,			$(FLDNM_BIN_TAG)
-			// $(KEYNM_SORT_COMPOUND),	$(FLDNM_BIN_TAG), $(FLDNM_BIN_MASS), $(FLDNM_BIN_FLAVOR), $(FLDNM_DOBLE_MAP)
-		    //  where $("field1") === 42
+		// $(KEYNM_SORT_COMPOUND),	$(FLDNM_BIN_TAG), $(FLDNM_BIN_MASS), $(FLDNM_BIN_FLAVOR), $(FLDNM_DOBLE_MAP)
+	    //  where $("field1") === 42
 		println(s"qryForOneMeatyBinItemAtPK: ${gitmQry}")
 		gitmQry
 	}
@@ -122,8 +110,7 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 	}
 	def projExprParse(expr: String) = ProjectionExpression.parse(expr)
 
-	def wow = {
-
+	def codeCopiedFromBatchGetItemExample = {
 		// From   zio.dynamodb.examples.BatchGetItemExamples
 		// If we have an Iterable of data from which we wish to create a batch query from we can use `DynamoDBQuery.forEach`
 		// The below example will create 1 BatchGetItem containing 10 GetItem requests

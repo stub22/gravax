@@ -1,5 +1,6 @@
 package fun.gravax.zdynamo
 
+import fun.gravax.distrib.binstore.LocalDynamoDB
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
 import zio.{Console, RIO, Task, TaskLayer, ZIO, ZIOAppDefault, ZLayer, dynamodb => ZDyn}
 import zio.stream.ZStream

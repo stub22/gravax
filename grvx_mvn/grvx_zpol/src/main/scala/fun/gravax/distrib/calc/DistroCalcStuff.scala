@@ -1,4 +1,6 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.calc
+
+import fun.gravax.distrib.struct.{StatTupleShapes, VecDistrib}
 
 private trait DistroCalcStuff
 

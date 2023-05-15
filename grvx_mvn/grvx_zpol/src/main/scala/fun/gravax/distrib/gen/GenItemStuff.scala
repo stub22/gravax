@@ -1,4 +1,4 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.gen
 
 import zio.dynamodb.{AttributeValue, DynamoDBError, Item}
 

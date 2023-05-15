@@ -1,9 +1,11 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.binstore
 
-import zio.dynamodb.{AttributeValue, DynamoDBError, Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
+import fun.gravax.distrib.gen.{FromItem, KnowsBinTupTupTypes, ToItem}
+import fun.gravax.distrib.struct.{BinData, BinMassInfo, BinMeatInfo, BinTagInfo, BinTimeInfo, BinTypes, EzBinData}
+import fun.gravax.zdynamo._
+import zio.dynamodb.{AttributeValue, Item, PrimaryKey}
 import zio.{Chunk, dynamodb => ZDyn}
 
-import scala.collection.immutable
 import scala.collection.immutable.{Map => SMap}
 
 private trait BinItemStuff

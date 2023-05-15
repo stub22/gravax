@@ -1,8 +1,8 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.binstore
 
+import fun.gravax.distrib.struct.{BinMeatInfo, BinTypes}
+import zio.dynamodb.{DynamoDBError, Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
 import zio.{RIO, Task, UIO, URIO, ZIO}
-import zio.dynamodb.{DynamoDBError, Item, PrimaryKey}
-import zio.dynamodb.{AttributeValue, DynamoDBError, Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
 // import zio.{dynamodb => ZDyn}
 import scala.collection.immutable.{Map => SMap}
 

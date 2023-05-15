@@ -1,10 +1,11 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.gen
 
-import zio.{Chunk, NonEmptyChunk, RIO, UIO, ZIO, Random => ZRandom}
+import fun.gravax.distrib.struct.{BinMassInfo, BinMeatInfo, BinTypes}
 import zio.stream.{UStream, ZStream}
+import zio.{Chunk, UIO, Random => ZRandom}
 
 import java.math.MathContext
-import scala.collection.immutable.{Queue, Map => SMap}
+import scala.collection.immutable.{Map => SMap}
 
 private trait GenMeatStuff
 

@@ -1,8 +1,10 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.calc
 
-// import fun.gravax.zdynamo.RunZioDynamoTrial.{BinStoreRslt, DBinWt, LevelTagNumChnk, ParentTag, StatRow, combineWeightMeansAndVars, myGenBD, myBinStatCalc, myBinSumCalc}
-import zio.{Chunk, NonEmptyChunk, UIO}
+// import fun.gravax.zdynamo.RunDistribGenStoreLoadTrial.{BinStoreRslt, DBinWt, LevelTagNumChnk, ParentTag, StatRow, combineWeightMeansAndVars, myGenBD, myBinStatCalc, myBinSumCalc}
+import fun.gravax.distrib.gen.KnowsGenTypes
+import fun.gravax.distrib.struct.{BinDataXformer, BinNumInfo, BinTagInfo, BinTypes}
 import zio.stream.{UStream, ZStream}
+import zio.{Chunk, NonEmptyChunk, UIO}
 
 private trait BinStatStuff
 
@@ -57,7 +59,8 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 		myBinStatCalcs.aggregateWeightsMeansAndVars(dbdSeq)
 	}
 	// type BinStoreRslt = (BinSpec, PrimaryKey, Option[Item])
-	private def baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[EntryKey]) = {
+	private def baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) :
+				(IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[EntryKey]) = {
 		val binSpecs = baseRsltSeq.map(_._1)
 		val firstMeat = binSpecs.head._4
 		val meatKeyOrder = Ordering.String

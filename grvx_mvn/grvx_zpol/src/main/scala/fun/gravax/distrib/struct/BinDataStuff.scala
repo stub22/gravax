@@ -1,4 +1,6 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.struct
+
+import fun.gravax.distrib.calc.KnowsDistribTypes
 
 import scala.collection.immutable.{Map => SMap}
 

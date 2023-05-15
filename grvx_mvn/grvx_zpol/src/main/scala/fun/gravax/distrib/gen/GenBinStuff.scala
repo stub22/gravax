@@ -1,12 +1,14 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.gen
 
-import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
-import zio.{Chunk, NonEmptyChunk, RIO, UIO, ZIO, Random => ZRandom}
+import fun.gravax.distrib.binstore.{BinStoreCmdBuilder, KeyedCmdMaker, KnowsBinItem}
+import fun.gravax.distrib.calc.KnowsDistribTypes
+import fun.gravax.distrib.struct.{BinMassInfo, BinMeatInfo, BinNumInfo, BinTagInfo, BinTimeInfo}
+import fun.gravax.zdynamo._
+import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec}
 import zio.stream.{UStream, ZStream}
+import zio.{Chunk, NonEmptyChunk, RIO, ZIO}
 
-import java.math.{MathContext, RoundingMode}
-import scala.collection.immutable.{Queue, Map => SMap}
-import scala.math.BigDecimal
+import scala.collection.immutable.{Map => SMap}
 
 private trait GenBinStuff
 

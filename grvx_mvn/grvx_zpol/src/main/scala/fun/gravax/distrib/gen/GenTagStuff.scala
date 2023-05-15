@@ -1,7 +1,8 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.gen
 
-import zio.{Chunk, NonEmptyChunk, UIO}
+import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo}
 import zio.stream.{UStream, ZStream}
+import zio.{Chunk, NonEmptyChunk, UIO}
 
 import scala.collection.immutable.Queue
 

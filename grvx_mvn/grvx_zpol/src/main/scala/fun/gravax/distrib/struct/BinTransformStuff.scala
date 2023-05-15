@@ -1,7 +1,7 @@
-package fun.gravax.zdynamo
+package fun.gravax.distrib.struct
 
-import fun.gravax.zdynamo.RunZioDynamoTrial.{BaseRsltPair, BinStoreRslt, LevelNum, LevelTagNumChnk}
-import zio.{Chunk, RIO}
+import fun.gravax.distrib.binstore.{BinStoreCmdBuilder, KeyedCmdMaker}
+import fun.gravax.distrib.gen.KnowsGenTypes
 import zio.stream.{UStream, ZStream}
 
 private trait BinTransformStuff
