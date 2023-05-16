@@ -17,10 +17,12 @@ trait StoreDummyItems extends BinStoreApi {
 	}
 
 	def putOneMessyItem() : RIO[ZDynDBExec, Unit] = {
-		println("println: putOneMessyItem START")
+		println(s"println: putOneMessyItem into ${binTblNm} START")
 		val bigItem = myDIM.mkMessyItem
+		println(s"Made messy bigItem: ${bigItem}")
 		val zpi: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(binTblNm, bigItem)
 		val zpiex: ZIO[ZDynDBExec, Throwable, Option[Item]] = zpi.execute
+		println(s"Made exec-op ${zpiex} from qry ${zpi}")
 		zpiex.flatMap(opt_itm_out => ZIO.log(s"s Item-put[big] returned: ${opt_itm_out}"))
 	}
 

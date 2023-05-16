@@ -1,34 +1,22 @@
 package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
-import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo}
-import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
-import zio.{Chunk, Scope, Task, TaskLayer, UIO, ZIO, ZIOAppArgs, ZIOAppDefault}
+import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, DynLayerSetup}
+import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
+import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer}
+
+import java.net.URI
 
 object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
-	override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = mkTask
-
-	/* type TaskLayer[+ROut] = ZLayer[Any, Throwable, ROut]
-	// ZDynDBExec is a trait defining this single method:
-	//  def execute[A](atomicQuery : ZDynDBQry[_, A]) : zio.ZIO[scala.Any, scala.Throwable, A]
- 	*/
-
-	def mkTask: Task[Unit] = {
-		val localDB_layer: TaskLayer[ZDynDBExec] = LocalDynamoDB.layer
-		mkProgram.provide(localDB_layer)
+	// 4 booleans
+	private lazy val myDynLayerSetup = new DynLayerSetup {
+		override def getFlg_useLocalDB = false
 	}
-
+	protected def getFlg_doFullTableCycle : Boolean = false	// write data, optionally create/delete table
 	lazy val myBinStore = new BinStoreApi {
 		override val (flg_doCreate, flg_doDelete) = (false, false)
 	}
-	lazy val myGenCtx = new GenCtx {
-		override protected def getTBI: ToBinItem = myBinStore.myTBI
-	}
-
-	val myGenStoreModule = new GenAndStoreModule(myBinStore, myGenCtx)
-	val fixedScenPrms = new PhonyFixedScenarioParams {
-		override def getTgtTblNm: BinTag = myBinStore.binTblNm
-	}
+	/*******************************************************************************/
 	val myBinWalker = new BinWalker {
 		override protected def getBinStoreApi: BinStoreApi = myBinStore
 	}
@@ -36,10 +24,26 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 		override protected def getBinWalker: BinWalker = myBinWalker
 	}
 
-	private def mkProgram: ZIO[ZDynDBExec, Throwable, Unit] = {
+	lazy val myGenCtx = new GenCtx {
+		override protected def getTBI: ToBinItem = myBinStore.myTBI
+	}
+	val myGenStoreModule = new GenAndStoreModule(myBinStore, myGenCtx)
+	val fixedScenPrms = new PhonyFixedScenarioParams {
+		override def getTgtTblNm: BinTag = myBinStore.binTblNm
+	}
+	/*******************************************************************************/
 
+	override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = {
+		val program = if (getFlg_doFullTableCycle)	mkDynProg_WriteThenReadOneBin
+		else mkDynProg_ReadSomeBins
+
+		myDynLayerSetup.wireDynamoTask(program)
+	}
+
+	// Also may create and delete tables, mix margaritas, fix wagons
+	private def mkDynProg_WriteThenReadOneBin: RIO[ZDynDBExec, Unit] = {
 		val dumStore = new StoreDummyItems {}
-		println("println START mkProgram")
+		println("println START mkDynProg_WriteThenReadOneBin")
 		val forBlock: ZIO[ZDynDBExec, Throwable, Unit] = for {
 			// First line of for comp is special because it eagerly creates our first Zio
 			_ <- myBinStore.maybeCreateBinTable // FIRST line of for-comp code executes immediately to produce our FIRST Zio.
@@ -61,8 +65,23 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 			//		shamWowRslt <- myBinWalker.shamWow(fixedScenPrms, bdChnk)
 			//		_ <- ZIO.log(s"shamWow result: ${shamWowRslt}")
 			_ <- myBinStore.maybeDeleteBinTable
-		} yield ("This result from RunDistribGenStoreLoadTrial.mkProgram.forBlock may be ignored") // .map to produce the output ZIO
-		println("println END mkProgram")
+		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_WriteThenReadOneBin.forBlock may be ignored") // .map to produce the output ZIO
+		println("println END mkDynProg_WriteThenReadOneBin")
+		forBlock.unit
+	}
+	private def mkDynProg_ReadSomeBins: RIO[ZDynDBExec, Unit] = {
+		println("println START mkDynProg_ReadSomeBins")
+		val forBlock: ZIO[ZDynDBExec, Throwable, Unit] = for {
+			// First line of for comp is special because it eagerly creates our first Zio
+			qrslt <- myBinWalker.queryOp4BinScalars(fixedScenPrms)
+			_ <- ZIO.log(s"queryOp4BinScalars result: ${qrslt}")
+			bdChnk <- ZIO.succeed(myBinWalker.extractBinScalarsFromQRsltItems(qrslt._1))
+			_ <- ZIO.log(s"extractBinScalarsFromQRsltItems result: ${bdChnk}")
+			meatyBinItems <- myBinWalker.fetchMeatyBinItems(fixedScenPrms, bdChnk)
+			_ <- ZIO.log(s"fetchMeatyBinItems result size=${meatyBinItems.size}, data: ${meatyBinItems}")
+			meatCache <- myMCM.makeMeatyItemCacheOp
+		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_ReadSomeBins.forBlock may be ignored") // .map to produce the output ZIO
+		println("println END mkDynProg_ReadSomeBins")
 		forBlock.unit
 	}
 
@@ -73,3 +92,5 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 		psOp
 	}
 }
+
+// arn:aws:dynamodb:us-west-2:693649829226:table/distro-bin

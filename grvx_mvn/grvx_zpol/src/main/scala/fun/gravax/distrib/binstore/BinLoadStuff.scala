@@ -23,7 +23,7 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 		binDataRdOp
 	}
 
-	val maxBinKeyResultSize = 10
+	val maxBinKeyResultSize = 60
 
 	def queryOp4BinScalars(scenParms: ScenarioParams): RIO[ZDynDBExec, (Chunk[Item], LastEvaluatedKey)]  = {
 
