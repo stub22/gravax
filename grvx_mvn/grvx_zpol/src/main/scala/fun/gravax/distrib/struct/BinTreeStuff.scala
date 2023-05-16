@@ -13,12 +13,16 @@ trait BinTreeLoader extends KnowsBinItem with KnowsBinTupTupTypes {
 	protected def getBinWalker : BinWalker
 	lazy private val myBinWalker = getBinWalker
 
-	def loadBinTree(scenParms: ScenarioParams, maxLevels : Int, maxBins : Int) = {
+	def loadBinTree(meatCache : MeatyItemCache)(scenParms: ScenarioParams, maxLevels : Int, maxBins : Int): RIO[DynamoDBExecutor, Chunk[BinScalarInfoTup]] = {
 		// This can return any number of records as long as the total data returned is < 1 MB.
 		val fetchSclrItemsOp: RIO[DynamoDBExecutor, (Chunk[Item], LastEvaluatedKey)] = myBinWalker.queryOp4BinScalars(scenParms)
 
 		val fetchSclrTupsOp: RIO[DynamoDBExecutor, Chunk[BinScalarInfoTup]] = fetchSclrItemsOp.map(rsltPair =>
 				myBinWalker.extractBinScalarsFromQRsltItems(rsltPair._1))
+
+		fetchSclrTupsOp
+
+		// meatyBinItems <- myBinWalker.fetchMeatyBinItems(fixedScenPrms, sclrTups)
 
 		// At this point we can look at the Tags to determine how many levels we are working with.
 		// We could build up a BinNode structure that can be optionally eager or lazy.
@@ -34,5 +38,5 @@ trait BinTreeLoader extends KnowsBinItem with KnowsBinTupTupTypes {
 
 	}
 
-	def mkBinDataRecAndNode
+	def mkBinDataRecAndNode = ???
 }

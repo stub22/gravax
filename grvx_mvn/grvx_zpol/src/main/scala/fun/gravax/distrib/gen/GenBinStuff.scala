@@ -3,7 +3,6 @@ package fun.gravax.distrib.gen
 import fun.gravax.distrib.binstore.{BinStoreCmdBuilder, KeyedCmdMaker, KnowsBinItem}
 import fun.gravax.distrib.calc.KnowsDistribTypes
 import fun.gravax.distrib.struct.{BinFullKeyInfo, BinMassInfo, BinMeatInfo, BinNumInfo, BinTagInfo, BinTimeInfo}
-import fun.gravax.zdynamo._
 import zio.cache.Cache
 import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec}
 import zio.stream.{UStream, ZStream}

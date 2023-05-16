@@ -1,7 +1,7 @@
 package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, DynLayerSetup, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
-import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo}
+import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, BinTreeLoader}
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer}
 
@@ -23,6 +23,9 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	val myMCM = new MeatCacheMaker {
 		override protected def getBinWalker: BinWalker = myBinWalker
 	}
+	val myBTL = new BinTreeLoader {
+		override protected def getBinWalker: BinWalker = myBinWalker
+	}
 
 	lazy val myGenCtx = new GenCtx {
 		override protected def getTBI: ToBinItem = myBinStore.myTBI
@@ -33,7 +36,7 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	}
 	/*******************************************************************************/
 
-	override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = {
+	override def run: Task[Unit] = {
 		val program = if (getFlg_doFullTableCycle)	mkDynProg_WriteThenReadOneBin
 		else mkDynProg_ReadSomeBins
 
@@ -70,16 +73,17 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 		forBlock.unit
 	}
 	private def mkDynProg_ReadSomeBins: RIO[ZDynDBExec, Unit] = {
+		val (maxLevels, maxBins) = (2, 10)
 		println("println START mkDynProg_ReadSomeBins")
 		val forBlock: ZIO[ZDynDBExec, Throwable, Unit] = for {
+			// TODO:  Go through BinTreeLoader and use meatCache
 			// First line of for comp is special because it eagerly creates our first Zio
-			qrslt <- myBinWalker.queryOp4BinScalars(fixedScenPrms)
-			_ <- ZIO.log(s"queryOp4BinScalars result: ${qrslt}")
-			bdChnk <- ZIO.succeed(myBinWalker.extractBinScalarsFromQRsltItems(qrslt._1))
-			_ <- ZIO.log(s"extractBinScalarsFromQRsltItems result: ${bdChnk}")
-			meatyBinItems <- myBinWalker.fetchMeatyBinItems(fixedScenPrms, bdChnk)
-			_ <- ZIO.log(s"fetchMeatyBinItems result size=${meatyBinItems.size}, data: ${meatyBinItems}")
 			meatCache <- myMCM.makeMeatyItemCacheOp
+			sclrTups <- myBTL.loadBinTree(meatCache)(fixedScenPrms, maxLevels, maxBins)
+			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.loadBinTree-sclrTups: ${sclrTups}")
+			meatyBinItems <- myBinWalker.fetchMeatyBinItems(fixedScenPrms, sclrTups)
+			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.fetchMeatyBinItems result size=${meatyBinItems.size}, data: ${meatyBinItems}")
+
 		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_ReadSomeBins.forBlock may be ignored") // .map to produce the output ZIO
 		println("println END mkDynProg_ReadSomeBins")
 		forBlock.unit

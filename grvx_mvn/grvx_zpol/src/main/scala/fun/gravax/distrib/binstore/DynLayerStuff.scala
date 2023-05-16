@@ -1,54 +1,47 @@
 package fun.gravax.distrib.binstore
 
 import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials, ProfileCredentialsProvider, StaticCredentialsProvider}
-import software.amazon.awssdk.regions.Region
-import zio.aws.core.config.{AwsConfig, CommonAwsConfig}
-import zio.aws.core.httpclient.HttpClient
 import zio.aws.core.{config => zconfig}
-import zio.aws.dynamodb.{DynamoDb => ZDynDb}
+import zio.aws.core.config.{AwsConfig, CommonAwsConfig}
 import zio.aws.{netty => znetty}
+import zio.aws.core.httpclient.HttpClient
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
+import zio.aws.dynamodb.{DynamoDb => ZDynDb}
 import zio.{RIO, Task, TaskLayer, ULayer, URLayer, ZLayer}
 
-import java.net.URI
-
 private trait DynLayerStuff
-/* To use "&" instead of with, import zio.IntersectionTypeCompat
-private[zio] trait IntersectionTypeCompat {
-	type &[+A, +B] = A with B
-} */
-trait DynLayerSetup {
-	// type TaskLayer[+ROut] = ZLayer[Any, Throwable, ROut]
+//To use "&" instead of with, import some exporter of zio.IntersectionTypeCompat to get    type &[+A, +B] = A with B
+// type TaskLayer[+ROut] = ZLayer[Any, Throwable, ROut]
+// type URLayer[-RIn, +ROut] = zio.ZLayer[RIn, scala.Nothing, ROut]
+// ZDynDBExec is a trait defining this single method:
+//  def execute[A](atomicQuery : ZDynDBQry[_, A]) : zio.ZIO[scala.Any, scala.Throwable, A]
 
-	val localDB_layer: TaskLayer[ZDynDBExec] = LocalDynamoDB.layer
+trait DynLayerSetup {
+
+
+	val localDynLayer: TaskLayer[ZDynDBExec] = LocalDynamoDB.layer
 
 	val dfltNettyClient: ZLayer[Any, Throwable, HttpClient] = znetty.NettyHttpClient.default
 
 	// Note that AwsConfig is different from CommonAwsConfig
 	val dfltAwsConf: ZLayer[HttpClient, Nothing, AwsConfig] = zconfig.AwsConfig.default
-	val otherAwsConf: ZLayer[HttpClient with CommonAwsConfig, Nothing, AwsConfig] = zconfig.AwsConfig.configured()
+	val otherAwsConf_UNUSED: ZLayer[HttpClient with CommonAwsConfig, Nothing, AwsConfig] = zconfig.AwsConfig.configured()
 
 	val zdbLyr: ZLayer[AwsConfig, Throwable, ZDynDb] = ZDynDb.live
 	val zdbExecLyr: URLayer[ZDynDb, ZDynDBExec] = ZDynDBExec.live
 
 	// Relies on default settings for credentials and config, such as ~/aws/
-	val ezDbLayer: ZLayer[Any, Throwable, ZDynDBExec] = dfltNettyClient >>> dfltAwsConf >>> zdbLyr >>> zdbExecLyr
-
-	/*
-	// ZDynDBExec is a trait defining this single method:
-	//  def execute[A](atomicQuery : ZDynDBQry[_, A]) : zio.ZIO[scala.Any, scala.Throwable, A]
-	 type URLayer[-RIn, +ROut] = zio.ZLayer[RIn, scala.Nothing, ROut]
- 	*/
+	val dfltAwsDynLayer: ZLayer[Any, Throwable, ZDynDBExec] = dfltNettyClient >>> dfltAwsConf >>> zdbLyr >>> zdbExecLyr
 
 	protected def getFlg_useLocalDB : Boolean = true // Override to
 	private lazy val myFlg_useLocalDB = getFlg_useLocalDB
 
 	def wireDynamoTask(program : RIO[ZDynDBExec, Unit]) : Task[Unit] = {
-		val taskDBLayer : TaskLayer[ZDynDBExec] = if (myFlg_useLocalDB) localDB_layer else ezDbLayer
+		val taskDBLayer : TaskLayer[ZDynDBExec] = if (myFlg_useLocalDB) localDynLayer else dfltAwsDynLayer
 		program.provide(taskDBLayer)
 	}
 }
-trait MoreDynLayerExamplesUnused {
+private trait MoreDynLayerExamples_UNUSED {
 	// Some code scraps we copied from zio-dynamodb source and tweaked
 	// Is profileCred the default already?
 	private val profileCred =  ProfileCredentialsProvider.create()
@@ -60,26 +53,8 @@ trait MoreDynLayerExamplesUnused {
 			commonClientConfig = None
 		)
 	)
-
-	// Below is same as what LocalDynamoDB does
+	// Below is first step of LocalDynamoDB setup.
 	private val exBasicCred = AwsBasicCredentials.create("dummy", "dummy")
-	private val exAwsConfig = ZLayer.succeed(
-		zconfig.CommonAwsConfig(
-			region = None,
-			credentialsProvider = StaticCredentialsProvider.create(exBasicCred),
-			endpointOverride = None,
-			commonClientConfig = None
-		)
-	)
-	private val exDynDbLayer: ZLayer[Any, Throwable, ZDynDb] = {
-		// Talking to local server, from zio-dynamodb/LiveSpec.scala
-		(znetty.NettyHttpClient.default ++ exAwsConfig) >>> zconfig.AwsConfig.configured() >>> ZDynDb.customized {
-			builder =>
-				builder.endpointOverride(URI.create("http://localhost:8000")).region(Region.US_WEST_2)
-		}
-	}
-	private val exTestLayer: ZLayer[Any, Throwable, ZDynDBExec] = (exDynDbLayer >>> ZDynDBExec.live)
-
 }
 /*
 
@@ -93,7 +68,7 @@ Example From zio-dynamodb/readme.md
       DynamoDBExecutor.live
     )
 
-Talking to local server, from zio-dynamodb/LiveSpec.scala
+Talking to local server, from zio-dynamodb/PartialCopyOfZioDynamoDbLiveSpec.scala
   object DdbHelper {
     import scala.language.implicitConversions
 

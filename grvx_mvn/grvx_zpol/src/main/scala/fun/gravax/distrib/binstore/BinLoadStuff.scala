@@ -24,7 +24,7 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 	}
 
 	// Levels 1-3 require a total of 50 bins (1 + 7 + 7*6).  Level 4 is another 126 (= 42 * 3).
-	val maxBinKeyResultSize = 60 // Fetch first 3 levels plus a few more to test partiality robustness.
+	val maxBinKeyResultSize = 12 // Fetch first 3 levels plus a few more to test partiality robustness.
 
 	def queryOp4BinScalars(scenParms: ScenarioParams): RIO[ZDynDBExec, (Chunk[Item], LastEvaluatedKey)]  = {
 
@@ -77,11 +77,7 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 		val bgExec: ZIO[ZDynDBExec, Throwable, List[Option[Item]]] = batchGet.execute
 		bgExec
 	}
-	def shamWow(scenParms: ScenarioParams, binInfoTups : Seq[BinScalarInfoTup]) = {
-		val firstTup = binInfoTups.head
-		val qry = fetchOneMeatyBinItem(scenParms, firstTup)
-		qry.execute
-	}
+
 	def fetchOneMeatyBinItem(scenParms: ScenarioParams, binfTup : BinScalarInfoTup): ZDynDBQry[Any, Option[Item]]  = {
 		val (timeInf, tagInf, massInf) = binfTup
 		val sortKey = scenParms.exactSortKey(timeInf, tagInf)
@@ -91,15 +87,14 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 		val gitmQry: ZDynDBQry[Any, Option[Item]] = fetchOneMeatyBinItemAtPK(tblNm, itemPK)
 		gitmQry
 	}
+
 	def fetchOneMeatyBinItemAtPK(tblNm : String, itemPK : PrimaryKey) : ZDynDBQry[Any, Option[Item]] = {
-		// Adding any field projections to the getItem call makes the eventual DB fetch fail (returns None).
-		// Tried several variations but no luck yet.
-		// Anyway in our current design the "full item" is not much larger than just "the meat", so we are pushing
-		// ahead without the projections.
-		val projList: Seq[ProjectionExpression[Any, Unknown]] = List(projExpr(FLDNM_BIN_TAG), projExpr(FLDNM_BIN_MASS))
-		val gitmQry = ZDynDBQry.getItem(tblNm, itemPK) // , projList : _*)  // ,			$(FLDNM_BIN_TAG)
-		// $(KEYNM_SORT_COMPOUND),	$(FLDNM_BIN_TAG), $(FLDNM_BIN_MASS), $(FLDNM_BIN_FLAVOR), $(FLDNM_DOBLE_MAP)
-	    //  where $("field1") === 42
+		// As of zio-dynamodb version 0.2.9, if we use projection expressions with .getItem we need to
+		// be sure to include both keys (partition-key and sort-key) in the field list.  Otherwise .getItem
+		// will return None.
+		val projList: Seq[ProjectionExpression[Any, Unknown]] = List(projExpr(KEYNM_PART_SCENARIO), projExpr(KEYNM_SORT_COMPOUND),
+				projExpr(FLDNM_BIN_MASS), projExpr(FLDNM_BIN_FLAVOR), projExpr(FLDNM_DOBLE_MAP))
+		val gitmQry = ZDynDBQry.getItem(tblNm, itemPK, projList : _*)
 		println(s"fetchOneMeatyBinItemAtPK: ${gitmQry}")
 		gitmQry
 	}

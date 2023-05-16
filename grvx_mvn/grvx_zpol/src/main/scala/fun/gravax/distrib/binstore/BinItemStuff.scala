@@ -2,7 +2,6 @@ package fun.gravax.distrib.binstore
 
 import fun.gravax.distrib.gen.{FromItem, KnowsBinTupTupTypes, ToItem}
 import fun.gravax.distrib.struct.{BinData, BinMassInfo, BinMeatInfo, BinTagInfo, BinTimeInfo, BinTypes, EzBinData}
-import fun.gravax.zdynamo._
 import zio.dynamodb.{AttributeValue, Item, PrimaryKey}
 import zio.{Chunk, dynamodb => ZDyn}
 

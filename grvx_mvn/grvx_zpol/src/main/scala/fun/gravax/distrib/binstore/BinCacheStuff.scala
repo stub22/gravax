@@ -4,7 +4,7 @@ import fun.gravax.distrib.gen.KnowsBinTupTupTypes
 import fun.gravax.distrib.struct.{BinFullKeyInfo, BinMeatInfo}
 import zio.cache.{Cache, Lookup}
 import zio.{Duration, IO, RIO, URIO, ZIO}
-import zio.dynamodb.{Item, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
+import zio.dynamodb.{ DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
 
 import java.util.concurrent.TimeUnit
 
