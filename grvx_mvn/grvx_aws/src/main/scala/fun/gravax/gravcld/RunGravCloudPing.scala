@@ -2,7 +2,8 @@ package fun.gravax.gravtst.console
 
 import java.io.StringReader
 
-import axmgc.dmo.fin.ontdmp.OntQryMgr
+// Requires heavy dependency on axiomagic.dmo.fibo
+// import axmgc.dmo.fin.ontdmp.OntQryMgr
 import fun.gravax.gravcld.ReadS3Files
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -58,11 +59,14 @@ trait N3Analyzer {
 		myS4JLog.info("Finished load from {}, final model size is: {}", mdlRsrcPath, jmdl.size())
 		jmdl
 	}
-	private val myOQM = new OntQryMgr{}
+	// private val myOQM = new OntQryMgr{}
 	def chkModelStats(modelName : String, jenaMdl : JenaMdl) : Unit = {
+		myS4JLog.info(s"Model stats disabled for modelName=${modelName}:  Requires heavy dependency on axiomagic.dmo.fibo")
+		/*
 		val statJsnTxt = myOQM.dumpMdlStatsToJsnArrTxt(jenaMdl)
 		myS4JLog.info(s"Collected stats for modelName=${modelName}")
 		myS4JLog.info("Stats as JsonArray: {}", statJsnTxt)
+		 */
 	}
 
 }

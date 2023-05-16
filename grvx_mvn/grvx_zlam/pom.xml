@@ -8,9 +8,10 @@
 		<version>1.0.0-SNAPSHOT</version>	
     </parent>
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>gravax.gravcld</artifactId>
+    <artifactId>gravax.zaxlam</artifactId>
 
     <!-- Consolidated AWS version managment may be placed in parent pom.xml -->
+    <!--  DISABLED IN ZLAM
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -22,6 +23,7 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+    -->
     <dependencies>
         <dependency>
             <groupId>org.scala-lang</groupId>
@@ -29,13 +31,12 @@
             <version>${scala.version}</version>
         </dependency>
 
-        <!--
         <dependency>
-            <groupId>${axmgc.groupId}</groupId>
-            <artifactId>axiomagic.web.pond</artifactId>
-            <version>${axmgc.version}</version>
+            <groupId>dev.zio</groupId>
+            <artifactId>zio-lambda_2.13</artifactId>
+            <version>1.0.2</version>
         </dependency>
-        -->
+
         <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_2.13</artifactId>
@@ -43,51 +44,17 @@
             <scope>test</scope>
         </dependency>
 
-        <!--
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-memory-netty</artifactId>
-            <version>${arrow.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-vector</artifactId>
-            <version>${arrow.version}</version>
-        </dependency>
-        -->
-
-        <!-- 2022-01-14 pulling dmo.fibo project into gravcld so we can use MdlStat code to analyze RDF -->
-        <!--
-        <dependency>
-            <groupId>${axmgc.groupId}</groupId>
-            <artifactId>axiomagic.dmo.fibo</artifactId>
-            <version>${axmgc.version}</version>
-        </dependency>
-        -->
         <!-- suggested deps for lambda project
         https://docs.aws.amazon.com/lambda/latest/dg/java-package.html
          -->
-        <dependency>
-            <groupId>org.apache.jena</groupId>
-            <artifactId>apache-jena-libs</artifactId>
-            <type>pom</type>
-            <version>${jena.version}</version>
-        </dependency>
 
+        <!--
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
         </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>dynamodb-enhanced</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>dynamodb</artifactId>
-        </dependency>
-
+        -->
+        <!-- We need these for SERVER side until the zio-lambda "as layer" gets sorted out -->
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-lambda-java-core</artifactId>
@@ -104,6 +71,17 @@
             <version>1.5.1</version>
         </dependency>
 
+        <!-- Temporarily including CLIENT side deps here -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>lambda</artifactId>
+            <version>${awssdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20230227</version>
+        </dependency>
     </dependencies>
 
     <repositories>
@@ -140,7 +118,6 @@
 
             <!-- Without minimizeJar, the output .jar is about 33MB, with Jena the largest piece and awssdk also significant.
                 Using minimizeJar knocks it down to about 27MB.  -->
-            <!--
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -165,7 +142,6 @@
                     </execution>
                 </executions>
             </plugin>
-            -->
         </plugins>
 
     </build>
