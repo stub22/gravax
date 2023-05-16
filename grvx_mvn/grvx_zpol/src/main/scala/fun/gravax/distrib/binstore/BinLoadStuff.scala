@@ -23,7 +23,8 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 		binDataRdOp
 	}
 
-	val maxBinKeyResultSize = 60
+	// Levels 1-3 require a total of 50 bins (1 + 7 + 7*6).  Level 4 is another 126 (= 42 * 3).
+	val maxBinKeyResultSize = 60 // Fetch first 3 levels plus a few more to test partiality robustness.
 
 	def queryOp4BinScalars(scenParms: ScenarioParams): RIO[ZDynDBExec, (Chunk[Item], LastEvaluatedKey)]  = {
 

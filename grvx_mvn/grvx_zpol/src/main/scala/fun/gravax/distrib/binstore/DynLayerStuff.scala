@@ -1,15 +1,14 @@
-package fun.gravax.distrib.struct
+package fun.gravax.distrib.binstore
 
-import fun.gravax.distrib.binstore.LocalDynamoDB
 import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials, ProfileCredentialsProvider, StaticCredentialsProvider}
 import software.amazon.awssdk.regions.Region
 import zio.aws.core.config.{AwsConfig, CommonAwsConfig}
 import zio.aws.core.httpclient.HttpClient
-import zio.{RIO, Task, TaskLayer, ULayer, URLayer, ZIO, ZLayer}
-import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
-import zio.aws.dynamodb.{DynamoDb => ZDynDb}
 import zio.aws.core.{config => zconfig}
+import zio.aws.dynamodb.{DynamoDb => ZDynDb}
 import zio.aws.{netty => znetty}
+import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
+import zio.{RIO, Task, TaskLayer, ULayer, URLayer, ZLayer}
 
 import java.net.URI
 
@@ -20,7 +19,7 @@ private[zio] trait IntersectionTypeCompat {
 } */
 trait DynLayerSetup {
 	// type TaskLayer[+ROut] = ZLayer[Any, Throwable, ROut]
-	// To use local DB, all we need is this layer.
+
 	val localDB_layer: TaskLayer[ZDynDBExec] = LocalDynamoDB.layer
 
 	val dfltNettyClient: ZLayer[Any, Throwable, HttpClient] = znetty.NettyHttpClient.default
@@ -41,7 +40,7 @@ trait DynLayerSetup {
 	 type URLayer[-RIn, +ROut] = zio.ZLayer[RIn, scala.Nothing, ROut]
  	*/
 
-	protected def getFlg_useLocalDB : Boolean = true
+	protected def getFlg_useLocalDB : Boolean = true // Override to
 	private lazy val myFlg_useLocalDB = getFlg_useLocalDB
 
 	def wireDynamoTask(program : RIO[ZDynDBExec, Unit]) : Task[Unit] = {
@@ -50,10 +49,9 @@ trait DynLayerSetup {
 	}
 }
 trait MoreDynLayerExamplesUnused {
+	// Some code scraps we copied from zio-dynamodb source and tweaked
 	// Is profileCred the default already?
 	private val profileCred =  ProfileCredentialsProvider.create()
-
-
 	private val myCommonAwsConfig: ULayer[CommonAwsConfig] = ZLayer.succeed(
 		zconfig.CommonAwsConfig(
 			region = None,
@@ -63,6 +61,7 @@ trait MoreDynLayerExamplesUnused {
 		)
 	)
 
+	// Below is same as what LocalDynamoDB does
 	private val exBasicCred = AwsBasicCredentials.create("dummy", "dummy")
 	private val exAwsConfig = ZLayer.succeed(
 		zconfig.CommonAwsConfig(

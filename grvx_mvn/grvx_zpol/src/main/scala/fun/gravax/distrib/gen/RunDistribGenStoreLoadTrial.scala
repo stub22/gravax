@@ -1,7 +1,7 @@
 package fun.gravax.distrib.gen
 
-import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
-import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, DynLayerSetup}
+import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, DynLayerSetup, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
+import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo}
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer}
 
@@ -10,7 +10,7 @@ import java.net.URI
 object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	// 4 booleans
 	private lazy val myDynLayerSetup = new DynLayerSetup {
-		override def getFlg_useLocalDB = false
+		override def getFlg_useLocalDB = true // true if local-only, false if remote AW$
 	}
 	protected def getFlg_doFullTableCycle : Boolean = false	// write data, optionally create/delete table
 	lazy val myBinStore = new BinStoreApi {

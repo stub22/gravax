@@ -9,6 +9,17 @@ import scala.collection.immutable.{Map => SMap}
 
 private trait GenMeatStuff
 
+// These params are applied to value generation in the BASE level of bins.
+// The virtual bins are aggregated from those base.
+trait MeatGenParams {
+	val (meanMin, meanMax) = (BigDecimal("-1.0"), BigDecimal("1.0"))
+	val (vrMin, vrMax) = (BigDecimal("0.0"), BigDecimal("0.5"))
+	val (myKeyLen, myNumKeys) = (3, 50)
+}
+trait MassGenParams {
+	val (massMin, massMax) = (BigDecimal("1.0"), BigDecimal("1000.0"))
+}
+
 trait GenMeatAndMassData extends KnowsGenTypes {
 
 	def gaussianBD(zrnd : ZRandom, mathCtx : MathContext)(mean : BigDecimal, stdDev : BigDecimal): UIO[BigDecimal] = {
@@ -30,21 +41,19 @@ trait GenMeatAndMassData extends KnowsGenTypes {
 		bgbdEff
 	}
 
-	val (meanMin, meanMax) = (BigDecimal("-1.0"), BigDecimal("1.0"))
-	val (vrMin, vrMax) = (BigDecimal("0.0"), BigDecimal("0.5"))
-	def genRandStatEntry(zrnd : ZRandom, mathCtx : MathContext)(ekey : EntryKey) : UIO[StatEntry] = {
+	def genRandStatEntry(zrnd : ZRandom, mathCtx : MathContext)(ekey : EntryKey, meatGenPrms : MeatGenParams) : UIO[StatEntry] = {
 		for {
-			mean <- truncGaussBD(zrnd, mathCtx)(meanMin, meanMax)
-			vr <- truncGaussBD(zrnd, mathCtx)(vrMin, vrMax)
+			mean <- truncGaussBD(zrnd, mathCtx)(meatGenPrms.meanMin, meatGenPrms.meanMax)
+			vr <- truncGaussBD(zrnd, mathCtx)(meatGenPrms.vrMin, meatGenPrms.vrMax)
 		} yield (ekey, mean, vr)
 	}
 
 
-	def genRandStatMap(zrnd : ZRandom, mathCtx : MathContext)(keys : Iterable[EntryKey]) : UIO[StatMap] = {
+	def genRandStatMap(zrnd : ZRandom, mathCtx : MathContext)(keys : Iterable[EntryKey], meatGenPrms : MeatGenParams) : UIO[StatMap] = {
 		val kstrm: UStream[EntryKey] = ZStream.fromIterable(keys)
 		// This could be done in fewer lines using ZSink.collectAllToMap
 		val stStrm: UStream[(EntryKey, StatEntry)] = kstrm.flatMap(key => {
-			val steOp  = genRandStatEntry(zrnd, mathCtx)(key)
+			val steOp  = genRandStatEntry(zrnd, mathCtx)(key, meatGenPrms)
 			val tupOp = steOp.map(statEnt => (statEnt._1, statEnt))
 			ZStream.fromZIO(tupOp)
 		})
@@ -70,30 +79,29 @@ trait GenMeatAndMassData extends KnowsGenTypes {
 		enoughKeysOp
 	}
 	// Generate a stream of random stat maps, and treat each as the meat-map of a bin.
-	def genMeatInfoStrmFromFixedKeys(zrnd : ZRandom, mathCtx : MathContext, fixedKeys : Seq[EntryKey], fixedFlavor : String): UStream[BinMeatInfo] = {
-		val oneStMpOp = genRandStatMap(zrnd, mathCtx)(fixedKeys)
+	def genMeatInfoStrmFromFixedKeys(zrnd : ZRandom, mathCtx : MathContext, fixedKeys : Seq[EntryKey], fixedFlavor : String, meatGenPrms: MeatGenParams): UStream[BinMeatInfo] = {
+		val oneStMpOp = genRandStatMap(zrnd, mathCtx)(fixedKeys, meatGenPrms)
 		val stMpStrm = ZStream.repeatZIO(oneStMpOp)
 		val miStrm = stMpStrm.map(stMap => BinMeatInfo(fixedFlavor, stMap))
 		miStrm
 	}
 
-	val (massMin, massMax) = (BigDecimal("1.0"), BigDecimal("1000.0"))
-	val (myKeyLen, myNumKeys) = (3, 50)
-
-	def mkMassGenOp(zrnd: ZRandom, mathCtx: MathContext): UIO[BigDecimal] = truncGaussBD(zrnd, mathCtx)(massMin, massMax)
+	def mkMassGenOp(zrnd: ZRandom, mathCtx: MathContext)(massGenPrms : MassGenParams): UIO[BigDecimal] = {
+		truncGaussBD(zrnd, mathCtx)(massGenPrms.massMin, massGenPrms.massMax)
+	}
 	def addMassToMeatStrm(meatStrm : UStream[BinMeatInfo], massGenOp : UIO[BigDecimal]) : UStream[(BinMassInfo, BinMeatInfo)] = {
 		meatStrm.mapZIO(bmi => massGenOp.map(massBD => (BinMassInfo(massBD, None, None),bmi)))
 	}
 
 	// The configuration of this stream is sprinkled in the vals, currently Stu counts 8 of em
 	// Each stream tuple is ready to be the genesis of a leaf-bin (with no kiddos)
-	def mkMassyMeatStrm(zrnd: ZRandom, mathCtx: MathContext)(binFlav : BinFlavor) : UStream[(BinMassInfo, BinMeatInfo)] = {
+	def mkMassyMeatStrm(zrnd: ZRandom, mathCtx: MathContext)(binFlav : BinFlavor, meatGenPrms: MeatGenParams, massGenPrms: MassGenParams ) : UStream[(BinMassInfo, BinMeatInfo)] = {
 
-		val ekeysOp : UIO[Seq[BinTypes.EntryKey]] = genManyEKeys(zrnd, myKeyLen, myNumKeys)
+		val ekeysOp : UIO[Seq[BinTypes.EntryKey]] = genManyEKeys(zrnd, meatGenPrms.myKeyLen, meatGenPrms.myNumKeys)
 		val ekeyStrmOfSeq = ZStream.fromZIO(ekeysOp)
 		val massyMeatStrm : UStream[(BinMassInfo, BinMeatInfo)] = ekeyStrmOfSeq.flatMap(keySeq => {
-			val meatInfoStrm = genMeatInfoStrmFromFixedKeys(zrnd, mathCtx, keySeq, binFlav)
-			val massOp = mkMassGenOp(zrnd, mathCtx)
+			val meatInfoStrm = genMeatInfoStrmFromFixedKeys(zrnd, mathCtx, keySeq, binFlav, meatGenPrms)
+			val massOp = mkMassGenOp(zrnd, mathCtx)(massGenPrms)
 			val massyMeatStrm = addMassToMeatStrm(meatInfoStrm, massOp)
 			massyMeatStrm
 		})

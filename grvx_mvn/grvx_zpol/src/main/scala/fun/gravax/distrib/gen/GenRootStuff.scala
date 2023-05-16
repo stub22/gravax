@@ -20,6 +20,9 @@ trait ScenarioParams extends KnowsGenTypes {
 	val rootKidsCnt : Int  = 7
 	val baseBinLevel : Int = 4
 
+	val massGenParams = new MassGenParams {}
+	val meatGenParams = new MeatGenParams {}
+
 	private val sortKeySep = "#"
 
 	def sortKeyQryPrefix : String = {
@@ -73,7 +76,8 @@ class ConfiguredGen(myGenCtx : GenCtx) extends KnowsGenTypes {
 	def mkMassyMeatStrm(scenParams : ScenarioParams): UStream[(BinMassInfo, BinMeatInfo)] = {
 		val precision = 8
 		val mathCtx = new MathContext(precision, RoundingMode.HALF_UP)
-		val massyMeatStrm = myGenCtx.myGenMM.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)(scenParams.getBinFlav)
+		val massyMeatStrm = myGenCtx.myGenMM.mkMassyMeatStrm(ZRandom.RandomLive, mathCtx)(scenParams.getBinFlav,
+				scenParams.meatGenParams, scenParams.massGenParams)
 		massyMeatStrm
 	}
 
