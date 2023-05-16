@@ -6,8 +6,8 @@ import zio.{RIO, Task, TaskLayer, ZIO, ZIOAppDefault, dynamodb => ZDyn}
 private trait  BugStoreStuff
 
 object MinBugStore extends ZIOAppDefault {
-	val KEYNM_PARTITION = "scenKey"
-	val KEYNM_SORT = "sortKey"
+	val KEYNM_PARTITION = "bugPartKey"
+	val KEYNM_SORT = "bugSortKey"
 
 	val scenAttr = ZDyn.AttributeDefinition.attrDefnString(KEYNM_PARTITION)
 	// Examples seen so far use Strings for date values.
