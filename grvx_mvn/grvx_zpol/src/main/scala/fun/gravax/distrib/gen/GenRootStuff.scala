@@ -2,7 +2,7 @@ package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreApi, BinStoreCmdBuilder, BinStoreCmdXformer, KeyedCmdMaker, ToBinItem}
 import fun.gravax.distrib.calc.BinSummaryCalc
-import fun.gravax.distrib.struct.{BinDataXformer, BinMassInfo, BinMeatInfo, BinTagInfo, BinTimeInfo, OurKeyedCmdMkr}
+import fun.gravax.distrib.struct.{BinDataXformer, BinFullKeyInfo, BinMassInfo, BinMeatInfo, BinTagInfo, BinTimeInfo, OurKeyedCmdMkr}
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, RIO, UIO, ZIO, Random => ZRandom}
 
@@ -32,6 +32,13 @@ trait ScenarioParams extends KnowsGenTypes {
 	def exactSortKey(timeInf : BinTimeInfo, tagInf : BinTagInfo) = {
 		val sortKeyFields = List(timeInf.obsTime, timeInf.predTime, timeInf.calcTime, tagInf.binTag)
 		sortKeyFields.mkString(sortKeySep)
+	}
+
+	def mkFullBinKey(timeInf : BinTimeInfo, tagInf : BinTagInfo) : BinFullKeyInfo = {
+		val sortKey = exactSortKey(timeInf, tagInf)
+		val tblNm = getTgtTblNm
+		val scenID = getScenID
+		BinFullKeyInfo(tblNm, scenID, sortKey)
 	}
 }
 

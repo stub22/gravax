@@ -79,11 +79,8 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 			// TODO:  Go through BinTreeLoader and use meatCache
 			// First line of for comp is special because it eagerly creates our first Zio
 			meatCache <- myMCM.makeMeatyItemCacheOp
-			sclrTups <- myBTL.loadBinTree(meatCache)(fixedScenPrms, maxLevels, maxBins)
-			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.loadBinTree-sclrTups: ${sclrTups}")
-			meatyBinItems <- myBinWalker.fetchMeatyBinItems(fixedScenPrms, sclrTups)
-			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.fetchMeatyBinItems result size=${meatyBinItems.size}, data: ${meatyBinItems}")
-
+			meatyPairChnk <- myBTL.loadBinTree(meatCache)(fixedScenPrms, maxLevels, maxBins)
+			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.loadBinTree-meatyPairChnk size=${meatyPairChnk.size}, data=${meatyPairChnk}")
 		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_ReadSomeBins.forBlock may be ignored") // .map to produce the output ZIO
 		println("println END mkDynProg_ReadSomeBins")
 		forBlock.unit

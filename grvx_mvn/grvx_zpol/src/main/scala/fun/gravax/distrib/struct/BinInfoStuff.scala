@@ -9,6 +9,7 @@ import zio.dynamodb.PrimaryKey
 private trait BinInfoStuff
 
 case class BinFullKeyInfo(tblNm : String, scenPartKey : String, compoundSortKey : String) extends KnowsBinItem  {
+	def getTableName : String = tblNm
 	def getDynamoPK : PrimaryKey = PrimaryKey(KEYNM_PART_SCENARIO -> scenPartKey, KEYNM_SORT_COMPOUND -> compoundSortKey)
 }
 

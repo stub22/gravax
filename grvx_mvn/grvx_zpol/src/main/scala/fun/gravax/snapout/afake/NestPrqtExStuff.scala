@@ -1,7 +1,6 @@
 package fun.gravax.snapout.afake
 
-import com.github.mjakubowski84.parquet4s.{ParquetReader, ParquetWriter, Path}
-
+import com.github.mjakubowski84.parquet4s.{ParquetIterable, ParquetReader, ParquetWriter, Path}
 
 case class SubRec(title : String, weight : BigDecimal, fruits : List[String])
 
@@ -24,8 +23,8 @@ trait BigRecStoreApi {
 		ParquetWriter.of[BigRec].writeAndClose(folderPathToUse.append(fileNm01), brs)
 	}
 	def doRead : Unit = {
-		val readData = ParquetReader.as[BigRec].read(folderPathToUse)
-		try readData.foreach(println)
+		val readData: ParquetIterable[BigRec] = ParquetReader.as[BigRec].read(folderPathToUse)
+		try readData.foreach(row => println(s"BigRecStoreApi.doRead got BigRec: ${row}"))
 		finally readData.close()
 	}
 }
