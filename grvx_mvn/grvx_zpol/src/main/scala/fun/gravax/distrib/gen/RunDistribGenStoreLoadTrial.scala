@@ -1,7 +1,7 @@
 package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, DynLayerSetup, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
-import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, BinTreeLoader}
+import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, BinTreeEagerLoader, BinTreeLazyLoader, BinTreeLoader}
 import zio.cache.CacheStats
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer}
@@ -24,7 +24,10 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	val myMCM = new MeatCacheMaker {
 		override protected def getBinWalker: BinWalker = myBinWalker
 	}
-	val myBTL = new BinTreeLoader {
+	val myBTEL = new BinTreeEagerLoader {
+		override protected def getBinWalker: BinWalker = myBinWalker
+	}
+	val myBTLL = new BinTreeLazyLoader {
 		override protected def getBinWalker: BinWalker = myBinWalker
 	}
 
@@ -74,17 +77,16 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 		forBlock.unit
 	}
 	private def mkDynProg_ReadSomeBins: RIO[ZDynDBExec, Unit] = {
-		val (maxLevels, maxBins) = (2, 10)
+		val (maxLevels, maxBins) = (3, 10)
 		println("println START mkDynProg_ReadSomeBins")
 		val forBlock: ZIO[ZDynDBExec, Throwable, Unit] = for {
-			// TODO:  Go through BinTreeLoader and use meatCache
 			// First line of for comp is special because it eagerly creates our first Zio
 			meatCache <- myMCM.makeMeatyItemCacheOp
-			meatyPairChnk <- myBTL.loadBinTreeEagerly(meatCache)(fixedScenPrms, maxLevels, maxBins)
+			meatyPairChnk <- myBTEL.loadBinTreeEagerly(meatCache)(fixedScenPrms, maxLevels, maxBins)
 			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.loadBinTreeEagerly-meatyPairChnk size=${meatyPairChnk.size}, data=${meatyPairChnk}")
 			cstts <- meatCache.cacheStats
 			_ <- ZIO.log(s"CacheStats (hits,misses,size) = ${cstts}")
-			rootBinNode <- myBTL.loadBinTreeLazily(meatCache)(fixedScenPrms, maxLevels, maxBins)
+			rootBinNode <- myBTLL.loadBinTreeLazily(meatCache)(fixedScenPrms, maxLevels, maxBins)
 			_ <- ZIO.log(s"loadBinTreeLazily.rootBinNode = ${rootBinNode}")
 		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_ReadSomeBins.forBlock may be ignored") // .map to produce the output ZIO
 		println("println END mkDynProg_ReadSomeBins")
