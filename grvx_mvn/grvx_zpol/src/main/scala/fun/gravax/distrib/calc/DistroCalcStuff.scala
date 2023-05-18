@@ -25,28 +25,32 @@ trait HoldingOptimizer extends StatTupleShapes {
 		val availAssetSeq = availAssets.toIndexedSeq
 		// Expected portfolio return will be dot-product of our portfolio asset weights with these mean asset returns.
 		// This is a purely linear calculation, with a single number as result.
-		val rootDBD = maRetDist.projectRootBin(availAssetSeq)
-		val (rootBinID, rootBinWt, rootBinRow) = rootDBD
-		val bd1 = BigDecimal("1.0")
-		assert (rootBinWt == bd1)
-		// Computing the portfolio variance is more complicated.  Each child bin represents some PART of the total
-		// distribution (but the support of the bins may be overlapping).  For a given set of portfolio asset weights,
-		// the variance will be the expected squared difference over all possible outcomes.  This can be treated as
-		// the weighted sum of the variance found in each bin (computed relative to the GLOBAL mean of the distribution).
-		// Using only the mean return of the bin as a representative gives us an imperfect estimate of the
-		// bin-variance-relative-to-global, in which we skip over the squared-value integral.
-		// If the bins are chosen to be heavily overlapping, then our estimated variance will tend to undershoot.
-		// Our method is more accurate when the bins are mostly disjoint.  We can try to improve by asking for
-		// additional information with the bins.
-		// Note that Sortino ratio emphasizes the downside variance, whereas Sharpe treats all variance equally.
-		val childDBDs : Seq[maRetDist.DBinDat] = maRetDist.projectChildBins(rootBinID, availAssetSeq)
-		// Now we need either
-		// 1) An iterative algorithm, e.g. gradient descent.
-		// 2) A gaussian approximation using covariances (which turns optimization into a matrix-inverse problem).
-		// 3) An optimization expression that we can differentiate and solve for 0 to find candidate extrema.
-		// 4) A monte-carlo guesser.  This might be the easiest way to start.
-		// In some scenarios we may allow negative weights.
-		val distsFromMean = ??? // childDBDs.map()
+		val rootDBD_op = maRetDist.projectRootBin(availAssetSeq)
+		rootDBD_op.map(rootDBD => {
+
+			val (rootBinID, rootBinWt, rootBinRow) = rootDBD
+			val bd1 = BigDecimal("1.0")
+			assert (rootBinWt == bd1)
+			// Computing the portfolio variance is more complicated.  Each child bin represents some PART of the total
+			// distribution (but the support of the bins may be overlapping).  For a given set of portfolio asset weights,
+			// the variance will be the expected squared difference over all possible outcomes.  This can be treated as
+			// the weighted sum of the variance found in each bin (computed relative to the GLOBAL mean of the distribution).
+			// Using only the mean return of the bin as a representative gives us an imperfect estimate of the
+			// bin-variance-relative-to-global, in which we skip over the squared-value integral.
+			// If the bins are chosen to be heavily overlapping, then our estimated variance will tend to undershoot.
+			// Our method is more accurate when the bins are mostly disjoint.  We can try to improve by asking for
+			// additional information with the bins.
+			// Note that Sortino ratio emphasizes the downside variance, whereas Sharpe treats all variance equally.
+			val childDBDs : Seq[maRetDist.DBinDat] = maRetDist.projectChildBins(rootBinID, availAssetSeq)
+			// Now we need either
+			// 1) An iterative algorithm, e.g. gradient descent.
+			// 2) A gaussian approximation using covariances (which turns optimization into a matrix-inverse problem).
+			// 3) An optimization expression that we can differentiate and solve for 0 to find candidate extrema.
+			// 4) A monte-carlo guesser.  This might be the easiest way to start.
+			// In some scenarios we may allow negative weights.
+			val distsFromMean = ??? // childDBDs.map()
+			???
+		})
 		???
 	}
 

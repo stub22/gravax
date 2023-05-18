@@ -1,6 +1,7 @@
 package fun.gravax.distrib.struct
 
 import fun.gravax.distrib.calc.{BinStatCalcs, KnowsDistribTypes}
+import zio.{Task, ZIO}
 
 private trait DistribImplStuff
 
@@ -15,7 +16,7 @@ trait VectorDistribTypes extends KnowsDistribTypes {
 trait VecDistribFragment extends VectorDistribTypes {
 	// We expect Assets (meatKeys) to be identical across all bins
 	// def	getFullKeySymSet : Set[EntryKey] // The syms do not have a canonical ordering.  Client may use alphabetic, or...
-	def projectShallowStatRow(keySyms : IndexedSeq[EntryKey]) : StatRow // Often this is available directly from VecDistrib-bin-0
+	def projectShallowStatRow(keySyms : IndexedSeq[EntryKey]) : Task[StatRow] // Often this is available directly from VecDistrib-bin-0
 }
 
 // Distribution does not encode any canonical ordering of the Entry dimensions.
@@ -27,7 +28,7 @@ trait VecDistrib extends VecDistribFragment {
 	type CovarMatrix = IndexedSeq[CovarRow]
 
 	// Produce a covariance matrix for the given keys (only), using at most maxLevels of the distro-bin structure
-	def projectEstimCovars(keySyms : IndexedSeq[EntryKey], maxLevels : Int) : StatTriMatrix
+	def projectEstimCovars(keySyms : IndexedSeq[EntryKey], maxLevels : Int) : Task[StatTriMatrix]
 
 	// CDF of the marginal distribution of our VecDistrib's projection into the dimensions of point's keys.
 	def projEstimMarginalCDF(point : PointRow, maxLevels : Int) : Probability = ???
@@ -39,7 +40,7 @@ trait VecDistrib extends VecDistribFragment {
 	def projectMarginalDistrib_DoWeNeedThis(keySyms : Seq[EntryKey]) : VecDistrib = ???
 
 	// Pull out the data of the root bin for the given keys (only)
-	def projectRootBin(keySyms : IndexedSeq[EntryKey]) : DBinDat
+	def projectRootBin(keySyms : IndexedSeq[EntryKey]) : Task[DBinDat]
 
 	// Pull out the data of all direct children of the given bin, for the given keys only.
 	def projectChildBins(parentBinID : DBinID, keySyms : IndexedSeq[EntryKey]) : Seq[DBinDat] = ???
@@ -50,10 +51,10 @@ trait VecDistrib extends VecDistribFragment {
 class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	// override def getFullKeySymSet: Set[EntryKey] = rootBN.getFullKeySymSet
 
-	override def projectShallowStatRow(keySyms: IndexedSeq[EntryKey]): StatRow = rootBN.projectShallowStatRow(keySyms)
+	override def projectShallowStatRow(keySyms: IndexedSeq[EntryKey]): Task[StatRow] = rootBN.projectShallowStatRow(keySyms)
 
 	// Produces same result with another level of wrapper that includes binID and relWeight (which must be 1.0?)
-	override def projectRootBin(keySyms: IndexedSeq[EntryKey]): DBinDat = rootBN.projectToDBD(keySyms)
+	override def projectRootBin(keySyms: IndexedSeq[EntryKey]): Task[DBinDat] = rootBN.projectToDBD_op(keySyms)
 
 	// 1 level  => only the marginal self-variances stored in the root bin
 	// 2 levels => approximate covariance using local-means (only!) of the root-getKids (+ global means) for all the off-diagonal elements.
@@ -71,10 +72,15 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	case class SummedWeightedSquares(sumOfWtSqMns : BigDecimal, sumOfWtVrncs : BigDecimal)
 
 	// type StatTriMatrix = IndexedSeq[(StatEntry, WtCovRow)]
-	override def projectEstimCovars(keySyms: IndexedSeq[EntryKey], maxLevels: Int): StatTriMatrix = {
+	override def projectEstimCovars(keySyms: IndexedSeq[EntryKey], maxLevels: Int): Task[StatTriMatrix] = {
 		// Stored mean and statistics of the root bin
 		// We always get
-		val rootStatRow: IndexedSeq[StatEntry] = projectShallowStatRow(keySyms)
+		val rootStatRow_op: Task[IndexedSeq[StatEntry]] = projectShallowStatRow(keySyms)
+		val projectedDeepBins_op: Task[DBinMatrix] = rootBN.projectAndCollectBins(keySyms, maxLevels)
+		val bothOp: Task[(IndexedSeq[(EntryKey, EntryMean, EntryVar)], DBinMatrix)] = rootStatRow_op.zip(projectedDeepBins_op)
+		bothOp.flatMap(pair => {
+		val (rootStatRow, projectedDeepBins) = pair
+
 		val storedRootMeanVec: IndexedSeq[EntryMean] = rootStatRow.map(_._2)
 		val storedRootVarVec: IndexedSeq[EntryVar] = rootStatRow.map(_._3)
 		val fullStatOut : StatTriMatrix = if (maxLevels == 1) {
@@ -82,7 +88,8 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 			// Or define a subtype of CovarMatrix that is Variance-only
 			???
 		} else {
-			val projectedDeepBins: DBinMatrix = rootBN.projectAndCollectBins(keySyms, maxLevels)
+
+
 			val entryIdx = 0 to keySyms.size - 1
 			val deepBinIdx = 0 to projectedDeepBins.size - 1
 
@@ -146,6 +153,8 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 			outStatsPerKey
 		}
 		fullStatOut
+		???
+		})
 	}
 
 

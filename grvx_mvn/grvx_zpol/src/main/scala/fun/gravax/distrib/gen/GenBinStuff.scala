@@ -26,6 +26,8 @@ trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes with KnowsBinTup
 	type BinStoreRslt = (BinSpec, PrimaryKey, Option[Item])
 	val zeroBD = BigDecimal("0.0")
 
+	val PTAG_NO_PARENT = "NO_PARENT"
+
 	type LevelNum = Int
 	type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
 

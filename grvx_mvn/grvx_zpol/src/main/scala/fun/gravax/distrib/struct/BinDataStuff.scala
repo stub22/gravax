@@ -1,6 +1,7 @@
 package fun.gravax.distrib.struct
 
 import fun.gravax.distrib.calc.KnowsDistribTypes
+import zio.Task
 
 import scala.collection.immutable.{Map => SMap}
 
@@ -57,16 +58,56 @@ trait BinData extends StatTupleShapes {
 	// def getAbsWt : BigDecimal
 	def getMass : BigDecimal
 
-	protected def getStatMap : StatMap
+	// protected def getStatMap : StatMap
 
 	// Called from BinNode
-	def mkStatRow(keySeq : IndexedSeq[EntryKey]) : StatRow
+	def mkStatRow(keySeq : IndexedSeq[EntryKey]) : Task[StatRow]
 
 	// Called from BinNode, but only by unused val  myFullBinDat
 	def allKeysSorted(meatKeyOrder : Ordering[String]) : IndexedSeq[EntryKey]
 
 }
 
+trait BinDataUsingInfo extends BinData {
+	protected def getTimeInfo : BinTimeInfo
+	private lazy val myTimeInfo = getTimeInfo
+
+	protected def getTagInfo : BinTagInfo
+	private lazy val myTagInfo = getTagInfo
+
+	protected def getMassInfo : BinMassInfo
+	private lazy val myMassInfo = getMassInfo
+
+	// override def getScenarioID: BinFlavor = ???
+
+	override def getObsTime: BinFlavor = myTimeInfo.obsTime
+
+	override def getPredTime: BinFlavor = myTimeInfo.predTime
+
+	override def getCalcTime: BinFlavor = myTimeInfo.calcTime
+
+	override def getBinTagTxt: BinFlavor = myTagInfo.binTag
+
+	override def getBinNumInt: DBinID = ???
+
+	override def getParentTagTxt: BinFlavor = myTagInfo.parentTag
+
+	override def getParentNumInt: DBinID = ???
+
+	override def getMass: DBinWt = myMassInfo.binMass
+
+	override def getRelWt: DBinWt = myMassInfo.relWt_opt.get
+
+
+
+	// override def getBinFlavor: BinFlavor = ???
+
+	// override protected def getStatMap: StatMap = ???
+
+	// override def mkStatRow(keySeq: IndexedSeq[EntryKey]): Task[StatRow] = ???
+
+	// override def allKeysSorted(meatKeyOrder: Ordering[BinFlavor]): IndexedSeq[EntryKey] = ???
+}
 
 
 

@@ -173,7 +173,7 @@ trait GenTagNumData extends KnowsGenTypes {
 			val maxKids = genSt.maxKids
 			val numInfo = BinNumInfo(genSt.absIdx, parentNum, maxKids, levelNum, genSt.locIdx)
 			val chldTxt = genSt.absIdx.toString
-			val parTxt = genSt.parent_opt.fold("NO_PARENT")(prec => prec.seqNum.toString)
+			val parTxt : String = genSt.parent_opt.fold(PTAG_NO_PARENT)(prec => prec.seqNum.toString)
 			val tagInfo = BinTagInfo(chldTxt, parTxt)
 			(tagInfo, numInfo)
 		})

@@ -14,7 +14,7 @@ private trait GenMeatStuff
 trait MeatGenParams {
 	val (meanMin, meanMax) = (BigDecimal("-1.0"), BigDecimal("1.0"))
 	val (vrMin, vrMax) = (BigDecimal("0.0"), BigDecimal("0.5"))
-	val (myKeyLen, myNumKeys) = (3, 50)
+	val (myKeyLen, myNumKeys) = (3, 8)
 }
 trait MassGenParams {
 	val (massMin, massMax) = (BigDecimal("1.0"), BigDecimal("1000.0"))

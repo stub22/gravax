@@ -2,6 +2,7 @@ package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, DynLayerSetup, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
 import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, BinTreeLoader}
+import zio.cache.CacheStats
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer}
 
@@ -79,13 +80,21 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 			// TODO:  Go through BinTreeLoader and use meatCache
 			// First line of for comp is special because it eagerly creates our first Zio
 			meatCache <- myMCM.makeMeatyItemCacheOp
-			meatyPairChnk <- myBTL.loadBinTree(meatCache)(fixedScenPrms, maxLevels, maxBins)
-			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.loadBinTree-meatyPairChnk size=${meatyPairChnk.size}, data=${meatyPairChnk}")
+			meatyPairChnk <- myBTL.loadBinTreeEagerly(meatCache)(fixedScenPrms, maxLevels, maxBins)
+			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.loadBinTreeEagerly-meatyPairChnk size=${meatyPairChnk.size}, data=${meatyPairChnk}")
+			cstts <- meatCache.cacheStats
+			_ <- ZIO.log(s"CacheStats (hits,misses,size) = ${cstts}")
+			rootBinNode <- myBTL.loadBinTreeLazily(meatCache)(fixedScenPrms, maxLevels, maxBins)
+			_ <- ZIO.log(s"loadBinTreeLazily.rootBinNode = ${rootBinNode}")
 		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_ReadSomeBins.forBlock may be ignored") // .map to produce the output ZIO
 		println("println END mkDynProg_ReadSomeBins")
 		forBlock.unit
 	}
-
+/*	def logCacheStats(meatCache: MeatyItemCache) = {
+		val cchSttsOp = meatCache.cacheStats()
+		val (hits, misses, size) = cacheStats.hi
+	}
+*/
 	// standalone test runner for just the tagNum generator step
 	def dumpTagInfoStrm: UIO[Chunk[((BinTagInfo, BinNumInfo), Long)]] = {
 		val ps = myGenCtx.myGenTN.genTagInfoStrm(500, 7).zipWithIndex.take(300)
