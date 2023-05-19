@@ -53,7 +53,7 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 		val dbdSeq : IndexedSeq[DBinDat] = virtRsltSeq.map(vrr => {
 			val (tagInfo, numInfo, binWt, statRow) = vrr
 			val binIdHmm = -999 // tagInfo.binTag
-			val dbd = (binIdHmm, binWt, statRow )
+			val dbd = (binIdHmm.toString, binWt, statRow )
 			dbd
 		})
 		myBinStatCalcs.aggregateWeightsMeansAndVars(dbdSeq)

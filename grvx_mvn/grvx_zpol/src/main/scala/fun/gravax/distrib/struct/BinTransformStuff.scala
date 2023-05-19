@@ -11,7 +11,7 @@ trait BinDataXformer extends KnowsGenTypes  {
 		val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
 		val statRow = binMeat.mkStatRow(keySyms)
 		val binIdHmm = -999 // tagInfo.binTag
-		val dbd = (binIdHmm, massInfo.binMass, statRow )
+		val dbd = (binIdHmm.toString, massInfo.binMass, statRow )
 		dbd
 	}
 	def aggStatsToBinSpecStrm(aggStats : IndexedSeq[(BinTagInfo, BinNumInfo, DBinWt, StatRow)]) : UStream[BinSpec] = {

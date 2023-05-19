@@ -35,7 +35,7 @@ trait GenTagNumData extends KnowsGenTypes {
 
 		override def getBaseLevel: LevelTagNumChnk = baseLevel
 
-		override def getVirtLevelsChnk: Chunk[(DBinID, LevelTagNumChnk)] = virtLevels
+		override def getVirtLevelsChnk: Chunk[(Int, LevelTagNumChnk)] = virtLevels
 
 	}
 

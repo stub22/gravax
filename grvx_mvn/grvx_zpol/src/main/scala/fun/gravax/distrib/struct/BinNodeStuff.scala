@@ -1,6 +1,6 @@
 package fun.gravax.distrib.struct
 
-import zio.{Task, ZIO}
+import zio.{Task, UIO, ZIO}
 import zio.stream.{UStream, ZStream}
 
 private trait BinNodeStuff
@@ -8,7 +8,7 @@ private trait BinNodeStuff
 
 trait BinNode extends VecDistribFragment  {
 	protected def getBinData : BinData
-	protected def getParent_opt : Option[BinNode]
+	protected def getParent_opt : UIO[Option[BinNode]]
 	protected def getKids : Iterable[BinNode]
 	protected def getMeatKeyOrdering : Ordering[EntryKey]
 
@@ -27,7 +27,7 @@ trait BinNode extends VecDistribFragment  {
 
 	def projectToDBD_op(orderedSyms : IndexedSeq[EntryKey]) : Task[DBinDat] = {
 		val projStatRowOp = projectShallowStatRow(orderedSyms)
-		projStatRowOp.map(psrow => (getBinData.getBinNumInt, getBinData.getRelWt, psrow))
+		projStatRowOp.map(psrow => (getBinData.getBinTagTxt, getBinData.getRelWt, psrow))
 	}
 
 	def allKeysSorted : Task[Seq[EntryKey]] = {

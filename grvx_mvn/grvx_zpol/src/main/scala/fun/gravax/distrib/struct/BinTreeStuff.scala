@@ -4,7 +4,7 @@ import fun.gravax.distrib.binstore.{BinWalker, KnowsBinItem}
 import fun.gravax.distrib.gen.{KnowsBinTupTupTypes, KnowsGenTypes, ScenarioParams}
 import zio.dynamodb.{Item, LastEvaluatedKey, PrimaryKey, DynamoDBExecutor => ZDynDBExec, DynamoDBQuery => ZDynDBQry}
 import zio.stream.ZStream
-import zio.{Chunk, IO, RIO, Task, ZIO}
+import zio.{Chunk, IO, Promise, RIO, Task, UIO, ZIO}
 
 import scala.collection.immutable.{Map => SMap}
 
@@ -40,9 +40,16 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 		val tupStrm = scalarTupStream(scenParms, maxLevels, maxBins)
 		val skelIndexMapOp = buildIndexMap(tupStrm)
 
-		val binTreeOp: RIO[ZDynDBExec, BinNode] = skelIndexMapOp.map(skelIdxMap => {
+		val binTreeOp: RIO[ZDynDBExec, BinNode] = skelIndexMapOp.flatMap(skelIdxMap => {
 			val rootTag = findRootTag(skelIdxMap)
-			buildBinSubtree(meatCache, meatKeyOrder)(scenParms, maxLevels)(skelIdxMap, rootTag)
+			// We want to create a promise that returns the value none.
+			val binNodeOptPromiseMkr: UIO[Promise[Nothing, Option[BinNode]]] = Promise.make[Nothing, Option[BinNode]]
+			binNodeOptPromiseMkr.flatMap(parentOptPromise => {
+				val psOp: UIO[Boolean] = parentOptPromise.succeed(None)
+				psOp.flatMap(psuccResult => {
+					buildBinSubtree(meatCache, meatKeyOrder)(scenParms, maxLevels)(skelIdxMap, rootTag, parentOptPromise)
+				})
+			})
 		})
 		binTreeOp
 	}
@@ -81,45 +88,70 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 
 	// To make a tree (where immutable nodes point to immutable children) we want to *complete* the leaf nodes *first*.
 	// One way to do this is to proceed recursively from the unfinished-root.
+
+	// To wire up the parentNode we need to pass a promise and make the operation effectful, which makes the recursive
+	// call a little more elaborate.
 	private def buildBinSubtree(meatCache : MeatyItemCache, meatKeyOrder : Ordering[EntryKey])(scenParms: ScenarioParams, maxLevels : Int)
-								(skelNodeMap : SMap[BinTag, SkelNode], topTag : BinTag): BinNode = {
+								(skelNodeMap : SMap[BinTag, SkelNode], topTag : BinTag,
+								 parentNodeOptPromise: Promise[Nothing, Option[BinNode]]): UIO[BinNode] = {
+
+		// .make  Makes a new promise to be completed by the fiber creating the promise.
 
 		val topSkelNode = skelNodeMap.get(topTag).get
 		val kidTags: Seq[BinTag] = topSkelNode.kids
-		val kidSubtrees: Seq[BinNode] = if (maxLevels >= 2) {
-			kidTags.map(ktag => buildBinSubtree(meatCache, meatKeyOrder)(scenParms, maxLevels - 1)(skelNodeMap, ktag))
-		} else Seq()
+		val binNodeOptPromiseMkr: UIO[Promise[Nothing, Option[BinNode]]] = Promise.make[Nothing, Option[BinNode]]
+		val kidTagStrm = ZStream.fromIterable(kidTags)
+	  	val recursiveOp : UIO[(Seq[BinNode],Promise[Nothing, Option[BinNode]])] = binNodeOptPromiseMkr.flatMap(binNodeOptPromise => {
+			// Under cats we could use .traverse to turn Seq[UIO] into UIO[Seq], but...
+			// https://stackoverflow.com/questions/67301065/zio-transform-seqzio-to-zioseq
+			val kidStrm: ZStream[Any, Nothing, BinNode] = if (maxLevels >= 2) {
+				kidTagStrm.mapZIO(ktag => buildBinSubtree(meatCache, meatKeyOrder)(scenParms, maxLevels - 1)(skelNodeMap, ktag, binNodeOptPromise))
+			} else ZStream.empty
+			val kidsOp: ZIO[Any, Nothing, Chunk[BinNode]] = kidStrm.runCollect
+			val kidSeqOp = kidsOp.map(chnk => (chnk.toSeq, binNodeOptPromise))
+			kidSeqOp
+		})
 
 		val topInfoTup = topSkelNode.infoTup_opt.get
+		val topBinDat = mkBinData(meatCache)(topInfoTup, scenParms)
+
+		val topBinNodeOp: UIO[BinNode] = recursiveOp.flatMap(rrPair => {
+			val (kidSubtrees, binNodeOptPromise) = rrPair
+			val node = new BinNode {
+				override protected def getBinData: BinData = topBinDat
+
+				override protected def getParent_opt: UIO[Option[BinNode]] = parentNodeOptPromise.await
+
+				override protected def getKids: Iterable[BinNode] = kidSubtrees
+
+				override protected def getMeatKeyOrdering: Ordering[EntryKey] = meatKeyOrder
+
+				override def toString: String = {
+					val kidTxt = getKids.mkString("%%%")
+					s"\nbuildBinSubtree.BinNode[binData=${getBinData}, parentOpt=${getParent_opt}, kids=${kidTxt}]"
+				}
+			}
+			val promiseFinishOp: UIO[Boolean] = binNodeOptPromise.succeed(Some(node))
+			promiseFinishOp.map(_ => node)
+		})
+		topBinNodeOp
+	}
+	private def mkBinData(meatCache : MeatyItemCache)(topInfoTup : BinScalarInfoTup, scenParms: ScenarioParams): BinData = {
 		val (topTimeInfo, topTagInfo, topMassInfo) = topInfoTup
 		val topKeyInfo = scenParms.mkFullBinKey(topTimeInfo, topTagInfo)
 		val scenID = scenParms.getScenID
-		val topBinDat = new CacheBackedBinData {
-			override protected def getCache: MeatyItemCache = meatCache
+		val binDat = new CacheBackedBinData {
+			override def getScenarioID: BinFlavor = scenID
 			override protected def getBinKey: BinFullKeyInfo = topKeyInfo
 			override protected def getTimeInfo: BinTimeInfo = topTimeInfo
 			override protected def getTagInfo: BinTagInfo = topTagInfo
 			override protected def getMassInfo: BinMassInfo = topMassInfo
-			override def getScenarioID: BinFlavor = scenID
 
-			// override protected def getStatMap: StatMap = ???
+			override protected def getCache: MeatyItemCache = meatCache
 
 			override def toString: String = s"buildBinSubtree.BinData[key=${getBinKey}, ...]"
 		}
-
-		val topBinNode = new BinNode {
-			override protected def getBinData: BinData = topBinDat
-			override protected def getParent_opt: Option[BinNode] = None
-			override protected def getKids: Iterable[BinNode] = kidSubtrees
-
-			override protected def getMeatKeyOrdering: Ordering[EntryKey] = meatKeyOrder
-
-			override def toString: String = {
-				val kidTxt = getKids.mkString("%%%")
-				s"\nbuildBinSubtree.BinNode[binData=${getBinData}, parentOpt=${getParent_opt}, kids=${kidTxt}]"
-			}
-		}
-		topBinNode
+		binDat
 	}
 }
 

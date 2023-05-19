@@ -7,7 +7,18 @@ import scala.collection.immutable.{Map => SMap}
 
 private trait BinDataStuff
 
-trait KnowsStatTupleShapes {
+trait KnowsDistKeyShapes {
+	type DistScenario = String
+	type DistTime = String
+}
+trait KnowsBinTagShapes {
+	type BinTag = String
+	type ParentTag = BinTag
+	type BinFlavor = String
+}
+trait KnowsStatTupleShapes extends KnowsBinTagShapes with KnowsDistKeyShapes {
+
+
 	// Building up data-types this way (vs. by traits) is ... extensional and sorta constructivist / algebraic.
 	type EntryKey = String
 	type EntryValue = BigDecimal
@@ -22,7 +33,7 @@ trait KnowsStatTupleShapes {
 	type EntryExpects = (EntryKey, EntryMean, ExpectSquare)
 	type WtExpectsRow = (DBinWt, IndexedSeq[EntryExpects])
 
-	type DBinID = Int
+	type DBinID = BinTag
 	type DBinWt = BigDecimal
 	type DBinDat = (DBinID, DBinWt, StatRow) // Does NOT contain covariances.
 
@@ -33,10 +44,6 @@ trait KnowsStatTupleShapes {
 
 	type KindaCrazy[X[_]] = List[X[String]]
 
-	type BinTag = String
-	type ParentTag = BinTag
-
-	type BinFlavor = String
 }
 
 object BinTypes extends KnowsStatTupleShapes
@@ -45,18 +52,16 @@ object BinTypes extends KnowsStatTupleShapes
 // Note that bins may be wide (100s of assets) and full covariance takes order-squared space.
 // Instead we compute covariance for a selection of assets, on the fly.
 trait BinData extends KnowsStatTupleShapes {
-	def getScenarioID : String
-	def getObsTime : String
-	def getPredTime : String
-	def getCalcTime : String
-	def getBinTagTxt : String
-	def getBinNumInt : Int
-	def getParentTagTxt : String
-	def getParentNumInt : Int
-	def getBinFlavor : String // TODO: Make enum-ish
-	def getRelWt : BigDecimal
+	def getScenarioID : DistScenario
+	def getObsTime : DistTime
+	def getPredTime : DistTime
+	def getCalcTime : DistTime
+	def getBinTagTxt : BinTag
+	def getParentTagTxt : BinTag
+	def getBinFlavor : BinFlavor // TODO: Make enum-ish
+	def getRelWt : DBinWt
 	// def getAbsWt : BigDecimal
-	def getMass : BigDecimal
+	def getMass : DBinWt
 
 	// protected def getStatMap : StatMap
 
@@ -82,19 +87,15 @@ trait BinDataUsingInfo extends BinData {
 
 	// override def getScenarioID: BinFlavor = ???
 
-	override def getObsTime: BinFlavor = myTimeInfo.obsTime
+	override def getObsTime: DistTime = myTimeInfo.obsTime
 
-	override def getPredTime: BinFlavor = myTimeInfo.predTime
+	override def getPredTime: DistTime = myTimeInfo.predTime
 
-	override def getCalcTime: BinFlavor = myTimeInfo.calcTime
+	override def getCalcTime: DistTime = myTimeInfo.calcTime
 
-	override def getBinTagTxt: BinFlavor = myTagInfo.binTag
+	override def getBinTagTxt: BinTag = myTagInfo.binTag
 
-	override def getBinNumInt: DBinID = ???
-
-	override def getParentTagTxt: BinFlavor = myTagInfo.parentTag
-
-	override def getParentNumInt: DBinID = ???
+	override def getParentTagTxt: BinTag = myTagInfo.parentTag
 
 	override def getBinFlavor: BinFlavor = myTagInfo.binFlavor
 

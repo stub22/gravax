@@ -14,7 +14,7 @@ case class BinFullKeyInfo(tblNm : String, scenPartKey : String, compoundSortKey 
 }
 
 case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
-case class BinTagInfo(binTag : String, parentTag : String, binFlavor : BinTypes.BinFlavor) // levelNum, siblingNum
+case class BinTagInfo(binTag : BinTypes.BinTag, parentTag : BinTypes.BinTag, binFlavor : BinTypes.BinFlavor) // levelNum, siblingNum
 case class BinMassInfo(binMass : BigDecimal, relWt_opt : Option[BigDecimal], absWt_opt : Option[BigDecimal] = None)
 
 // TODO: add these index numbers to persistent store?
@@ -64,5 +64,4 @@ trait CacheBackedBinData extends BinDataUsingInfo with KnowsBinTupTupTypes {
 		val binKey = getBinKey
 		cache.get(binKey).map(_.get)
 	}
-
 }
