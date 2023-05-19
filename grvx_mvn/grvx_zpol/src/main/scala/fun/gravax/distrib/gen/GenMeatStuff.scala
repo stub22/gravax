@@ -78,11 +78,11 @@ trait GenMeatAndMassData extends KnowsGenTypes {
 		val enoughKeysOp = keyStrm.take(numKeys).runCollect.map(_.toSeq)
 		enoughKeysOp
 	}
-	// Generate a stream of random stat maps, and treat each as the meat-map of a bin.
-	def genMeatInfoStrmFromFixedKeys(zrnd : ZRandom, mathCtx : MathContext, fixedKeys : Seq[EntryKey], fixedFlavor : String, meatGenPrms: MeatGenParams): UStream[BinMeatInfo] = {
+	// Generate a stream of random stat maps, and treat each as the myMeatInf-map of a bin.
+	def genMeatInfoStrmFromFixedKeys(zrnd : ZRandom, mathCtx : MathContext, fixedKeys : Seq[EntryKey], fixedFlavor : BinFlavor, meatGenPrms: MeatGenParams): UStream[BinMeatInfo] = {
 		val oneStMpOp = genRandStatMap(zrnd, mathCtx)(fixedKeys, meatGenPrms)
 		val stMpStrm = ZStream.repeatZIO(oneStMpOp)
-		val miStrm = stMpStrm.map(stMap => BinMeatInfo(fixedFlavor, stMap))
+		val miStrm = stMpStrm.map(stMap => BinMeatInfo(stMap))
 		miStrm
 	}
 

@@ -14,14 +14,14 @@ trait BinDataXformer extends KnowsGenTypes  {
 		val dbd = (binIdHmm, massInfo.binMass, statRow )
 		dbd
 	}
-	def aggStatsToBinSpecStrm(aggStats : IndexedSeq[(BinTagInfo, BinNumInfo, DBinWt, StatRow)], binFlav : BinFlavor) : UStream[BinSpec] = {
+	def aggStatsToBinSpecStrm(aggStats : IndexedSeq[(BinTagInfo, BinNumInfo, DBinWt, StatRow)]) : UStream[BinSpec] = {
 		val aggStStrm = ZStream.fromIterable(aggStats)
 		val binSpecStrm = aggStStrm.map(aggStatTup => {
 			val (tagInfo, numInfo, binWt, statRow) = aggStatTup
 			val massInfo = BinMassInfo(binWt, None, None)
 			// type StatMap = SMap[EntryKey, StatEntry]
 			val statMap = statRowToStatMap(statRow)
-			val meatInfo = BinMeatInfo(binFlav, statMap)
+			val meatInfo = BinMeatInfo(statMap)
 			(tagInfo, numInfo, massInfo, meatInfo)
 		})
 		binSpecStrm
@@ -49,7 +49,7 @@ abstract class OurKeyedCmdMkr(tableName : String, sceneID : String, timeInfo: Bi
 	}
 
 	override def mkAggLevCmds(aggRows : IndexedSeq[VirtRsltRow]) : UStream[BinStoreCmdRow] = {
-		val binSpecStrm: UStream[BinSpec] = myBDX.aggStatsToBinSpecStrm(aggRows, binFlavor)
+		val binSpecStrm: UStream[BinSpec] = myBDX.aggStatsToBinSpecStrm(aggRows)
 		myBSCB.makeBinStoreCmds(tableName, sceneID, timeInfo)(binSpecStrm)
 	}
 }

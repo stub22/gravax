@@ -1,11 +1,11 @@
 package fun.gravax.distrib.calc
 
-import fun.gravax.distrib.struct.{StatTupleShapes, VecDistrib}
+import fun.gravax.distrib.struct.{KnowsStatTupleShapes, VecDistrib}
 
 private trait DistroCalcStuff
 
 
-trait HoldingOptimizer extends StatTupleShapes {
+trait HoldingOptimizer extends KnowsStatTupleShapes {
 	type	AssetID = EntryKey
 	type 	MultiAssetAnnRetDist = VecDistrib
 	type	AnnRet = EntryMean

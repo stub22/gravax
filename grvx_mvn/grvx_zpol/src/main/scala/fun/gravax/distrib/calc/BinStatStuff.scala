@@ -8,6 +8,7 @@ import zio.{Chunk, NonEmptyChunk, UIO}
 private trait BinStatStuff
 
 trait BinSummaryCalc extends KnowsGenTypes  {
+	val myMeatKeyOrder = Ordering.String
 
 	val myBinStatCalcs = new BinStatCalcs {}
 	val myBDX = new BinDataXformer {}
@@ -62,8 +63,8 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 				(IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[EntryKey]) = {
 		val binSpecs = baseRsltSeq.map(_._1)
 		val firstMeat = binSpecs.head._4
-		val meatKeyOrder = Ordering.String
-		val keySeq : IndexedSeq[BinTypes.EntryKey] = firstMeat.allKeysSorted(meatKeyOrder)
+
+		val keySeq : IndexedSeq[BinTypes.EntryKey] = firstMeat.allKeysSorted(myMeatKeyOrder)
 		val binDatSeq : IndexedSeq[(ParentTag, BinTag, DBinDat)] = binSpecs.map(binSpec => {
 			val dbd : DBinDat = myBDX.binSpecToDBD(binSpec, keySeq)
 			val tagInfo : BinTagInfo = binSpec._1

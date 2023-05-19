@@ -123,8 +123,10 @@ class GenAndStoreModule(myBinStore : BinStoreApi, myGenCtx : GenCtx) extends Kno
 	// The full shape of the bin-tree numbering is also stored in RAM.
 	def genAndStoreBaseSqnc(scenParams : ScenarioParams, kcm : KeyedCmdMaker, bbg : BlockBaseGen): RIO[ZDynDBExec, BaseRsltPair] = {
 		val massyMeatStrm = myConfGen.mkMassyMeatStrm(scenParams)
+		val fixedFlavor = scenParams.getBinFlav
 		val keyedCmdMaker: KeyedCmdMaker = kcm //  myConfGen.ourKeyedCmdMaker
-		val bsgnOp = bbg.genAndStoreBaseLevelOnly(keyedCmdMaker, massyMeatStrm)
+
+		val bsgnOp = bbg.genAndStoreBaseLevelOnly(keyedCmdMaker, fixedFlavor)(massyMeatStrm)
 		bsgnOp
 	}
 	// Deterministic virtual levels using the baseResults.

@@ -75,10 +75,10 @@ abstract class BlockBaseGen(rootTagNum : Int, rootKidsCnt : Int, baseBinLevel : 
 	private lazy val myGenBD = getGenBD
 	private lazy val myGenTN = getGenTN
 
-	def genAndStoreBaseLevelOnly(keyedCmdMaker: KeyedCmdMaker, massyMeatStrm : UStream[(BinMassInfo, BinMeatInfo)]):
+	def genAndStoreBaseLevelOnly(keyedCmdMaker: KeyedCmdMaker, fixedFlavor : BinFlavor)(massyMeatStrm : UStream[(BinMassInfo, BinMeatInfo)]):
 										RIO[ZDynDBExec, BaseRsltPair] = {
 		val baseGenOp: RIO[ZDynDBExec, (myGenTN.BinTagNumBlock, Chunk[BinStoreRslt])] = for {
-			bntgnmBlk <- myGenTN.genBinTagNumBlock(rootTagNum, rootKidsCnt, baseBinLevel)
+			bntgnmBlk <- myGenTN.genBinTagNumBlock(fixedFlavor)(rootTagNum, rootKidsCnt, baseBinLevel)
 			_ <- ZIO.log(s"genAndStoreBaseSqnc .genBinTagNumBlock produced: ${bntgnmBlk.describe}")
 			binSpecStrm <- ZIO.succeed(myGenBD.joinMassyMeatRows(bntgnmBlk.baseLevel, massyMeatStrm))
 			binStoreCmdStrm <- ZIO.succeed(keyedCmdMaker.mkBaseLevCmds(binSpecStrm))

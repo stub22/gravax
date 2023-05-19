@@ -1,7 +1,7 @@
 package fun.gravax.distrib.struct
 
 import fun.gravax.distrib.calc.{BinStatCalcs, KnowsDistribTypes}
-import zio.{Task, ZIO}
+import zio.{Task, ZIO, Random => ZRandom}
 
 private trait DistribImplStuff
 
@@ -156,8 +156,24 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 		???
 		})
 	}
+}
 
+trait VecDistTestHelper extends KnowsDistribTypes {
+	def computeCovars (rootBinNode : BinNode)(keySyms: Seq[EntryKey], maxLevels: Int) : Task[StatTriMatrix] = {
+		val vecDistrib = new VecDistribBinnedImpl(rootBinNode)
+		val keysIndexed = keySyms.toIndexedSeq
+		val covarTask = vecDistrib.projectEstimCovars(keysIndexed, maxLevels)
+		covarTask
+	}
 
+	def chooseSomeKeys(zrnd : ZRandom)(binNode : BinNode, maxKeys : Int) : Task[Seq[EntryKey]] = {
+		val allKeysOp: Task[Seq[binNode.EntryKey]] = binNode.allKeysSorted
+		allKeysOp.flatMap(sortedKeys => {
+			val numKeys = sortedKeys.size
+			val shuffledKeysOp = zrnd.shuffle(sortedKeys)
+			shuffledKeysOp.map(shuffledKeys => shuffledKeys.take(maxKeys))
+		})
+	}
 }
 
 

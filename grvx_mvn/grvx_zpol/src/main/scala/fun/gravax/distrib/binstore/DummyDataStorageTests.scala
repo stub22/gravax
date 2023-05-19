@@ -37,7 +37,7 @@ trait StoreDummyItems extends BinStoreApi {
 		val qqqEntry : BinTypes.StatEntry = ("QQQ", BigDecimal("0.0772"), BigDecimal("0.0430"))
 		val spyEntry : BinTypes.StatEntry = ("SPY", BigDecimal("0.0613"), BigDecimal("0.0351"))
 		val meatInfoMap : BinTypes.StatMap = SMap("QQQ" -> qqqEntry, "SPY" -> spyEntry)
-		val meatInfo = BinMeatInfo(binFlav, meatInfoMap)
+		val meatInfo = BinMeatInfo(meatInfoMap)
 
 		val skelBinItem = myTBI.mkBinItemSkel(scen, timeObs, timePred, timeCalc)
 		val fleshyBI = myTBI.fleshOutBinItem(skelBinItem, binSeqNum, parentBinSeqNum, binMass, binRelWeight) // , binAbsWeight, )
@@ -60,7 +60,7 @@ trait StoreDummyItems extends BinStoreApi {
 			// Getting BigDecimal SET
 			// Error getting BigDecimal set value. Expected AttributeValue.Number but found List(Chunk(Number(0.093),Number(0.018)))))
 			val opt_googRet = opt_returns.map(_.get[Iterable[BigDecimal]]("GOOG"))
-			val logA = ZIO.log(s"Item-get[dummy].logA broked-meat-map-item=${rm}, optRet=${opt_returns}, googRet=${opt_googRet} fullRecord=${opt_itm_out}")
+			val logA = ZIO.log(s"Item-get[dummy].logA broked-myMeatInf-map-item=${rm}, optRet=${opt_returns}, googRet=${opt_googRet} fullRecord=${opt_itm_out}")
 			val dobleMap = opt_itm_out.map(itm => myFBI.fetchOrThrow[SMap[String,SMap[String,BigDecimal]]](itm, FLDNM_DOBLE_MAP))
 			val logB = ZIO.log(s"Item-get[dummy].logB doble-map-item=${dobleMap}")
 

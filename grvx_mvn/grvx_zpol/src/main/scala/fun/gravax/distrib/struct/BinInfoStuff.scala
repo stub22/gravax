@@ -14,7 +14,7 @@ case class BinFullKeyInfo(tblNm : String, scenPartKey : String, compoundSortKey 
 }
 
 case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
-case class BinTagInfo(binTag : String, parentTag : String) // levelNum, siblingNum
+case class BinTagInfo(binTag : String, parentTag : String, binFlavor : BinTypes.BinFlavor) // levelNum, siblingNum
 case class BinMassInfo(binMass : BigDecimal, relWt_opt : Option[BigDecimal], absWt_opt : Option[BigDecimal] = None)
 
 // TODO: add these index numbers to persistent store?
@@ -23,7 +23,7 @@ case class BinNumInfo(binNum : Int, parentNum : Int, maxKids : Int, levelNum : I
 
 // Seems we cannot use abstract types (of our self-type, or inherited) in constructor parameters.
 // If we make an outer trait scope then those names are available, or we can refer to members of an object.
-case class BinMeatInfo(binFlavor : BinTypes.BinFlavor, meatMap : BinTypes.StatMap) extends KnowsDistribTypes {
+case class BinMeatInfo(meatMap : BinTypes.StatMap) extends KnowsDistribTypes {
 	def mkStatRow(keySeq : IndexedSeq[EntryKey]) : StatRow = {
 		val entrySeq : StatRow = keySeq.map(ksym => {
 			val statAtSym: StatEntry = meatMap.get(ksym).get // This second .get will throw if no value present
@@ -42,57 +42,27 @@ abstract class BinDataCore(myScenID : String, myTimeDat : BinTimeInfo, myTagDat 
 	override protected def getTimeInfo: BinTimeInfo = myTimeDat
 
 	override protected def getTagInfo: BinTagInfo = myTagDat
-	/*
-	override def getObsTime: String = myTimeDat.obsTime
-	override def getPredTime: String = myTimeDat.predTime
-	override def getCalcTime: String = myTimeDat.calcTime
-	override def getBinTagTxt: String = myTagDat.binTag
-	override def getBinNumInt: Int = ???
-	override def getParentTagTxt: String = myTagDat.parentTag
-	override def getParentNumInt: Int = ???
-	 */
+
+	override def getBinFlavor: String = myTagDat.binFlavor
 }
 
-case class EzBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, myMassDat : BinMassInfo, meat : BinMeatInfo)
-		extends BinDataCore(scenID, timeDat, seqDat) {
+case class EzBinData(scenID : String, timeDat : BinTimeInfo, myTagInf : BinTagInfo, myMassDat : BinMassInfo, myMeatInf : BinMeatInfo)
+		extends BinDataCore(scenID, timeDat, myTagInf) {
 
-	// override def getMass: BigDecimal = myMassDat.binMass
-	// override def getRelWt: BigDecimal = myMassDat.relWt_opt.get
-	// override def getAbsWt: BigDecimal = massDat.absWt
-	override def getBinFlavor: String = meat.binFlavor
-	// override protected def getStatMap: StatMap = meat.meatMap
 
-	override def mkStatRow(keySeq: IndexedSeq[EntryKey]): Task[StatRow] = ZIO.succeed(meat.mkStatRow(keySeq))
-	override def allKeysSorted(meatKeyOrder : Ordering[String]) : IndexedSeq[EntryKey] = meat.allKeysSorted(meatKeyOrder)
 
-	override protected def getMassInfo: BinMassInfo = ???
+	override protected def getMeatInfoOp :  Task[BinMeatInfo] = ZIO.succeed(myMeatInf)
+
+	override protected def getMassInfo: BinMassInfo = myMassDat
 }
 
 trait CacheBackedBinData extends BinDataUsingInfo with KnowsBinTupTupTypes {
 	protected def getCache : MeatyItemCache
 	protected def getBinKey : BinFullKeyInfo
-	private lazy val myMeatInfoOp: IO[Throwable, Option[BinMeatInfo]] = {
+	override protected def getMeatInfoOp :  Task[BinMeatInfo] = {
 		val cache = getCache
 		val binKey = getBinKey
-		cache.get(binKey)
+		cache.get(binKey).map(_.get)
 	}
+
 }
-/*
-case class LazyBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, myBinKey : BinFullKeyInfo,
-					   myMeatyCache : MeatyItemCache)
-		extends BinDataCore(scenID, timeDat, seqDat) {
-
-	lazy
-
-	override def getBinFlavor: BinFlavor = ???
-	override def getRelWt: DBinWt = ???
-	override def getMass: DBinWt = ???
-
-	override protected def getStatMap: StatMap = ???
-	override def mkStatRow(keySeq: IndexedSeq[EntryKey]): StatRow = ???
-	override def allKeysSorted(meatKeyOrder: Ordering[BinFlavor]): IndexedSeq[EntryKey] = ???
-}
-*/
-//class LazyBinData(scenID : String, timeDat : BinTimeInfo, seqDat : BinTagInfo, myMassDat : BinMassInfo,
-//				  myMeatFetchOp : RIO[])
-//		extends BinDataCore(scenID, timeDat, seqDat) {

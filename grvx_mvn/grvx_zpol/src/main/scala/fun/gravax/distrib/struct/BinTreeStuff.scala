@@ -10,7 +10,7 @@ import scala.collection.immutable.{Map => SMap}
 
 private trait BinTreeStuff
 
-trait BinTreeLoader extends KnowsBinItem with KnowsBinTupTupTypes with StatTupleShapes with KnowsGenTypes {
+trait BinTreeLoader extends KnowsBinItem with KnowsBinTupTupTypes with KnowsStatTupleShapes with KnowsGenTypes {
 	protected def getBinWalker: BinWalker
 
 	lazy private val myBinWalker = getBinWalker
@@ -36,13 +36,13 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 		//	def getParentTag_opt : Option[BinTag] = ??? // if(parentTag == PTAG_NO_PARENT) None else Some(parentTag)
 	}
 
-	def loadBinTreeLazily(meatCache : MeatyItemCache)(scenParms: ScenarioParams, maxLevels : Int, maxBins : Int): RIO[ZDynDBExec, BinNode] = {
+	def loadBinTreeLazily(meatCache : MeatyItemCache, meatKeyOrder : Ordering[EntryKey])(scenParms: ScenarioParams, maxLevels : Int, maxBins : Int): RIO[ZDynDBExec, BinNode] = {
 		val tupStrm = scalarTupStream(scenParms, maxLevels, maxBins)
 		val skelIndexMapOp = buildIndexMap(tupStrm)
 
 		val binTreeOp: RIO[ZDynDBExec, BinNode] = skelIndexMapOp.map(skelIdxMap => {
 			val rootTag = findRootTag(skelIdxMap)
-			buildBinSubtree(meatCache)(scenParms, maxLevels)(skelIdxMap, rootTag)
+			buildBinSubtree(meatCache, meatKeyOrder)(scenParms, maxLevels)(skelIdxMap, rootTag)
 		})
 		binTreeOp
 	}
@@ -81,13 +81,13 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 
 	// To make a tree (where immutable nodes point to immutable children) we want to *complete* the leaf nodes *first*.
 	// One way to do this is to proceed recursively from the unfinished-root.
-	private def buildBinSubtree(meatCache : MeatyItemCache)(scenParms: ScenarioParams, maxLevels : Int)
+	private def buildBinSubtree(meatCache : MeatyItemCache, meatKeyOrder : Ordering[EntryKey])(scenParms: ScenarioParams, maxLevels : Int)
 								(skelNodeMap : SMap[BinTag, SkelNode], topTag : BinTag): BinNode = {
 
 		val topSkelNode = skelNodeMap.get(topTag).get
 		val kidTags: Seq[BinTag] = topSkelNode.kids
 		val kidSubtrees: Seq[BinNode] = if (maxLevels >= 2) {
-			kidTags.map(ktag => buildBinSubtree(meatCache)(scenParms, maxLevels - 1)(skelNodeMap, ktag))
+			kidTags.map(ktag => buildBinSubtree(meatCache, meatKeyOrder)(scenParms, maxLevels - 1)(skelNodeMap, ktag))
 		} else Seq()
 
 		val topInfoTup = topSkelNode.infoTup_opt.get
@@ -102,13 +102,7 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 			override protected def getMassInfo: BinMassInfo = topMassInfo
 			override def getScenarioID: BinFlavor = scenID
 
-			override def getBinFlavor: BinFlavor = ???
-
 			// override protected def getStatMap: StatMap = ???
-
-			override def mkStatRow(keySeq: IndexedSeq[EntryKey]): Task[StatRow] = ???
-
-			override def allKeysSorted(meatKeyOrder: Ordering[BinFlavor]): IndexedSeq[EntryKey] = ???
 
 			override def toString: String = s"buildBinSubtree.BinData[key=${getBinKey}, ...]"
 		}
@@ -118,7 +112,7 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 			override protected def getParent_opt: Option[BinNode] = None
 			override protected def getKids: Iterable[BinNode] = kidSubtrees
 
-			override protected def getMeatKeyOrder: Ordering[EntryKey] = ???
+			override protected def getMeatKeyOrdering: Ordering[EntryKey] = meatKeyOrder
 
 			override def toString: String = {
 				val kidTxt = getKids.mkString("%%%")
@@ -141,7 +135,7 @@ trait BinTreeEagerLoader extends BinTreeLoader {
 		// At this point we can look at the Tags to determine how many levels we are working with.
 		// We could build up a BinNode structure that can be optionally eager or lazy.
 
-		// We can ony fetch up to 100 items in each meat-fetch (fewer if they are very big).  Batch data total < 16MB.
+		// We can ony fetch up to 100 items in each myMeatInf-fetch (fewer if they are very big).  Batch data total < 16MB.
 		// [unless there is automatic multi-batching in the ZDynDBQry.  (No reason to think there is, but COULD BE).]
 		// So to "fetch any number" we would want a Stream.
 		// But perhaps for now we will be content to just fetch blocks of child nodes.
@@ -150,13 +144,13 @@ trait BinTreeEagerLoader extends BinTreeLoader {
 	private def joinMeatToBinScalars(meatCache : MeatyItemCache)(scenParms: ScenarioParams, maxLevels : Int)
 						(binScInfTupStrm : ZStream[ZDynDBExec, Throwable, BinScalarInfoTup]):
 						ZStream[ZDynDBExec, Throwable, (BinScalarInfoTup, BinMeatInfo)] = {
-		// During this stream run, we force all meat to be loaded.
+		// During this stream run, we force all myMeatInf to be loaded.
 		// TODO:  Enforce maxLevels.
 		val strmWithMeat: ZStream[ZDynDBExec, Throwable, (BinScalarInfoTup, BinMeatInfo)] = binScInfTupStrm.mapZIO(binfTup => {
 			val (timeInf, tagInf, massInf) = binfTup
 			val binKeyInfo = scenParms.mkFullBinKey(timeInf, tagInf)
 			val meatFetchOp : Task[Option[BinMeatInfo]] = meatCache.get(binKeyInfo)
-			// By calling optMeat.get, we insist that meat-fetch must work, otherwise this stream should fail.
+			// By calling optMeat.get, we insist that myMeatInf-fetch must work, otherwise this stream should fail.
 			val pairedWithMeatOp: Task[(BinScalarInfoTup, BinMeatInfo)] = meatFetchOp.map(optMeat => (binfTup, optMeat.get))
 			pairedWithMeatOp
 		})

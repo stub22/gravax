@@ -1,10 +1,10 @@
 package fun.gravax.distrib.calc
 
-import fun.gravax.distrib.struct.StatTupleShapes
+import fun.gravax.distrib.struct.KnowsStatTupleShapes
 
 private trait DistribCalcStuff
 
-trait KnowsDistribTypes extends StatTupleShapes {
+trait KnowsDistribTypes extends KnowsStatTupleShapes {
 
 	type UnwtCov = BigDecimal
 	type UnwtCovPair = (EntryKey, UnwtCov)

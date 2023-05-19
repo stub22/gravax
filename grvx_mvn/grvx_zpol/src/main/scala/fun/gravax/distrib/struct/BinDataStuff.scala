@@ -1,13 +1,13 @@
 package fun.gravax.distrib.struct
 
 import fun.gravax.distrib.calc.KnowsDistribTypes
-import zio.Task
+import zio.{Task, ZIO}
 
 import scala.collection.immutable.{Map => SMap}
 
 private trait BinDataStuff
 
-trait StatTupleShapes {
+trait KnowsStatTupleShapes {
 	// Building up data-types this way (vs. by traits) is ... extensional and sorta constructivist / algebraic.
 	type EntryKey = String
 	type EntryValue = BigDecimal
@@ -39,12 +39,12 @@ trait StatTupleShapes {
 	type BinFlavor = String
 }
 
-object BinTypes extends StatTupleShapes
+object BinTypes extends KnowsStatTupleShapes
 
 // Generally we don't store Covariances in bins.
 // Note that bins may be wide (100s of assets) and full covariance takes order-squared space.
 // Instead we compute covariance for a selection of assets, on the fly.
-trait BinData extends StatTupleShapes {
+trait BinData extends KnowsStatTupleShapes {
 	def getScenarioID : String
 	def getObsTime : String
 	def getPredTime : String
@@ -64,7 +64,7 @@ trait BinData extends StatTupleShapes {
 	def mkStatRow(keySeq : IndexedSeq[EntryKey]) : Task[StatRow]
 
 	// Called from BinNode, but only by unused val  myFullBinDat
-	def allKeysSorted(meatKeyOrder : Ordering[String]) : IndexedSeq[EntryKey]
+	def allKeysSorted(meatKeyOrder : Ordering[String]) : Task[Seq[EntryKey]]
 
 }
 
@@ -77,6 +77,8 @@ trait BinDataUsingInfo extends BinData {
 
 	protected def getMassInfo : BinMassInfo
 	private lazy val myMassInfo = getMassInfo
+
+	protected def getMeatInfoOp :  Task[BinMeatInfo]
 
 	// override def getScenarioID: BinFlavor = ???
 
@@ -94,19 +96,16 @@ trait BinDataUsingInfo extends BinData {
 
 	override def getParentNumInt: DBinID = ???
 
+	override def getBinFlavor: BinFlavor = myTagInfo.binFlavor
+
 	override def getMass: DBinWt = myMassInfo.binMass
 
 	override def getRelWt: DBinWt = myMassInfo.relWt_opt.get
 
+	override def mkStatRow(keySeq: IndexedSeq[EntryKey]): Task[StatRow] = getMeatInfoOp.map(_.mkStatRow(keySeq))
 
+	override def allKeysSorted(meatKeyOrder : Ordering[EntryKey]) : Task[Seq[EntryKey]] = getMeatInfoOp.map(_.allKeysSorted(meatKeyOrder))
 
-	// override def getBinFlavor: BinFlavor = ???
-
-	// override protected def getStatMap: StatMap = ???
-
-	// override def mkStatRow(keySeq: IndexedSeq[EntryKey]): Task[StatRow] = ???
-
-	// override def allKeysSorted(meatKeyOrder: Ordering[BinFlavor]): IndexedSeq[EntryKey] = ???
 }
 
 

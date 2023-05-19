@@ -10,7 +10,7 @@ trait BinNode extends VecDistribFragment  {
 	protected def getBinData : BinData
 	protected def getParent_opt : Option[BinNode]
 	protected def getKids : Iterable[BinNode]
-	protected def getMeatKeyOrder : Ordering[EntryKey]
+	protected def getMeatKeyOrdering : Ordering[EntryKey]
 
 	// Assume meatKeys are same across all bins
 	// override def getFullKeySymSet : Set[EntryKey] = getBinData.getStatMap.keySet
@@ -21,13 +21,18 @@ trait BinNode extends VecDistribFragment  {
 
 	// Useful?  This just repackages the info from getBinData, with the keys in our given ordering.
 	/* private lazy val myFullBinDat : DBinDat = {
-		val keysInOrder = getBinData.allKeysSorted(getMeatKeyOrder)
+		val keysInOrder = getBinData.allKeysSorted(getMeatKeyOrdering)
 		projectToDBD_op(keysInOrder)
 	}*/
 
 	def projectToDBD_op(orderedSyms : IndexedSeq[EntryKey]) : Task[DBinDat] = {
 		val projStatRowOp = projectShallowStatRow(orderedSyms)
 		projStatRowOp.map(psrow => (getBinData.getBinNumInt, getBinData.getRelWt, psrow))
+	}
+
+	def allKeysSorted : Task[Seq[EntryKey]] = {
+		val meatKeyOrder = getMeatKeyOrdering
+		getBinData.allKeysSorted(meatKeyOrder)
 	}
 
 	// TODO:  We often (or...always?) want to force all children to have subtrees of equal queryDepth.

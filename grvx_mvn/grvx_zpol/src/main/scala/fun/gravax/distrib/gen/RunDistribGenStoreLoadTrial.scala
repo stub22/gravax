@@ -1,10 +1,10 @@
 package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, DynLayerSetup, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
-import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, BinTreeEagerLoader, BinTreeLazyLoader, BinTreeLoader}
+import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, BinTreeEagerLoader, BinTreeLazyLoader, BinTreeLoader, VecDistTestHelper}
 import zio.cache.CacheStats
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
-import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer}
+import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom}
 
 import java.net.URI
 
@@ -30,6 +30,7 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	val myBTLL = new BinTreeLazyLoader {
 		override protected def getBinWalker: BinWalker = myBinWalker
 	}
+	val myVDTH = new VecDistTestHelper{}
 
 	lazy val myGenCtx = new GenCtx {
 		override protected def getTBI: ToBinItem = myBinStore.myTBI
@@ -51,7 +52,7 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	private def mkDynProg_WriteThenReadOneBin: RIO[ZDynDBExec, Unit] = {
 		val dumStore = new StoreDummyItems {}
 		println("println START mkDynProg_WriteThenReadOneBin")
-		val forBlock: ZIO[ZDynDBExec, Throwable, Unit] = for {
+		val forBlock: ZIO[ZDynDBExec, Throwable, String] = for {
 			// First line of for comp is special because it eagerly creates our first Zio
 			_ <- myBinStore.maybeCreateBinTable // FIRST line of for-comp code executes immediately to produce our FIRST Zio.
 			_ <- dumStore.putOneMessyItem // SECOND and further lines execute later in flatMap callbacks
@@ -78,28 +79,30 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	}
 	private def mkDynProg_ReadSomeBins: RIO[ZDynDBExec, Unit] = {
 		val (maxLevels, maxBins) = (3, 10)
+		val (covarKeyCnt, covarDepth) = (6, 2)
+		val meatKeyOrder : Ordering[EntryKey] = Ordering.String
 		println("println START mkDynProg_ReadSomeBins")
-		val forBlock: ZIO[ZDynDBExec, Throwable, Unit] = for {
+		val forBlock: ZIO[ZDynDBExec, Throwable, String] = for {
 			// First line of for comp is special because it eagerly creates our first Zio
 			meatCache <- myMCM.makeMeatyItemCacheOp
 			meatyPairChnk <- myBTEL.loadBinTreeEagerly(meatCache)(fixedScenPrms, maxLevels, maxBins)
 			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.loadBinTreeEagerly-meatyPairChnk size=${meatyPairChnk.size}, data=${meatyPairChnk}")
 			cstts <- meatCache.cacheStats
 			_ <- ZIO.log(s"CacheStats (hits,misses,size) = ${cstts}")
-			rootBinNode <- myBTLL.loadBinTreeLazily(meatCache)(fixedScenPrms, maxLevels, maxBins)
+			rootBinNode <- myBTLL.loadBinTreeLazily(meatCache, meatKeyOrder)(fixedScenPrms, maxLevels, maxBins)
 			_ <- ZIO.log(s"loadBinTreeLazily.rootBinNode = ${rootBinNode}")
+			keysOfInterest <- myVDTH.chooseSomeKeys(ZRandom.RandomLive)(rootBinNode, covarKeyCnt)
+			_ <- ZIO.log(s"chooseSomeKeys = ${keysOfInterest}")
+			statMatrix <- myVDTH.computeCovars(rootBinNode)(keysOfInterest, covarDepth)
+			_ <- ZIO.log(s"computeCovars.rootBinNode = ${statMatrix}")
 		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_ReadSomeBins.forBlock may be ignored") // .map to produce the output ZIO
 		println("println END mkDynProg_ReadSomeBins")
 		forBlock.unit
 	}
-/*	def logCacheStats(meatCache: MeatyItemCache) = {
-		val cchSttsOp = meatCache.cacheStats()
-		val (hits, misses, size) = cacheStats.hi
-	}
-*/
+
 	// standalone test runner for just the tagNum generator step
 	def dumpTagInfoStrm: UIO[Chunk[((BinTagInfo, BinNumInfo), Long)]] = {
-		val ps = myGenCtx.myGenTN.genTagInfoStrm(500, 7).zipWithIndex.take(300)
+		val ps = myGenCtx.myGenTN.genTagInfoStrm(fixedScenPrms.getBinFlav)(500, 7).zipWithIndex.take(300)
 		val psOp = ps.debug.runCollect
 		psOp
 	}
