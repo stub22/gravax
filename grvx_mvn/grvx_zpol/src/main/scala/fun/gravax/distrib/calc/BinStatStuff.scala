@@ -1,11 +1,13 @@
 package fun.gravax.distrib.calc
 
 import fun.gravax.distrib.gen.KnowsGenTypes
-import fun.gravax.distrib.struct.{BinDataXformer, BinNumInfo, BinTagInfo, BinTypes}
+import fun.gravax.distrib.struct.{BinDataXformer, BinMassInfo, BinNumInfo, BinTagInfo, BinTypes}
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, NonEmptyChunk, UIO}
 
 private trait BinStatStuff
+
+case class DBinStatClz(tagInfo: BinTagInfo, massInfo: BinMassInfo, statRow : BinTypes.StatRow)
 
 trait BinSummaryCalc extends KnowsGenTypes  {
 	val myMeatKeyOrder = Ordering.String
@@ -29,48 +31,61 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 			assert(combo.size == parentTagNums.size, s"combo.size ${combo.size} != parentTagNums.size ${parentTagNums.size}")
 			// Could make this a stream to
 			// combo.foreach(row =>
-			val aggregateRowChunk: Chunk[(BinTagInfo, BinNumInfo, DBinWt, StatRow)] = combo.map(row => {
+			val aggregateRowChunk: Chunk[(BinTagInfo, BinNumInfo, DBinRelWt, StatRow)] = combo.map(row => {
 				val (tagInfo, numInfo, (ptag, rsltChnk)) = row
 				// Ensure that the parent binTags match up as expected.
 				assert(tagInfo.binTag == ptag, s"tagInfo.binTag ${tagInfo.binTag} != ptag ${ptag}")
-				val (aggWt, aggStatRow) = combineWeightMeansAndVars(rsltChnk)
-				val outTup = (tagInfo, numInfo, aggWt, aggStatRow)
+				val (aggVwt, aggStatRow) = combineWeightMeansAndVars(rsltChnk)
+				val outTup = (tagInfo, numInfo, aggVwt, aggStatRow)
 				outTup
 			})
 			aggregateRowChunk
 		})
 		aggUIO
 	}
-	def combineWeightMeansAndVars(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (DBinWt, StatRow) = {
-		val binDatChunk : IndexedSeq[DBinDat] = baseGenRsltsToDBinDats(baseRsltSeq)
-		myBinStatCalcs.aggregateWeightsMeansAndVars(binDatChunk)
+	def combineWeightMeansAndVars(baseRsltSeq : IndexedSeq[BinStoreRslt]) : (VagueWt, StatRow) = {
+		val binStatSeq : IndexedSeq[DBinStatClz] = baseGenRsltsToDBinStats(baseRsltSeq)
+		myBinStatCalcs.aggregateWeightsMeansAndVars(binStatSeq)
 	}
-	private def baseGenRsltsToDBinDats(baseRsltSeq : IndexedSeq[BinStoreRslt]) : IndexedSeq[DBinDat] = {
-		val (taggedDBDs, ekeys) = baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
-		taggedDBDs.map(_._3)
+	private def baseGenRsltsToDBinStats(baseRsltSeq : IndexedSeq[BinStoreRslt]) : IndexedSeq[DBinStatClz] = {
+		val (taggedBinStats, ekeys) = baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
+		// taggedDBDs.map(_._3)
+		taggedBinStats
 	}
-	def combineVirtRsltsToWMV(virtRsltSeq : IndexedSeq[VirtRsltRow]) : (DBinWt, StatRow)  = {
-		val dbdSeq : IndexedSeq[DBinDat] = virtRsltSeq.map(vrr => {
-			val (tagInfo, numInfo, binWt, statRow) = vrr
-			val binIdHmm = -999 // tagInfo.binTag
-			val dbd = (binIdHmm.toString, binWt, statRow )
-			dbd
+	def combineVirtRsltsToWMV(virtRsltSeq : IndexedSeq[VirtRsltRow]) : (VagueWt, StatRow)  = {
+		val dbdSeq : IndexedSeq[DBinStatClz] = virtRsltSeq.map(vrr => {
+			val (tagInfo, numInfo, binMass, statRow) = vrr
+			// val binIdHmm = -999 // tagInfo.binTag
+			// val dbd = (binIdHmm.toString, binMass, statRow )
+			val massInfo = BinMassInfo(binMass, None, None)
+			val dbscInst = DBinStatClz(tagInfo, massInfo, statRow)
+			// dbd
+			dbscInst
 		})
 		myBinStatCalcs.aggregateWeightsMeansAndVars(dbdSeq)
 	}
 	// type BinStoreRslt = (BinSpec, PrimaryKey, Option[Item])
 	private def baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) :
-				(IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[EntryKey]) = {
+		//		(IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[EntryKey]) = {
+			(IndexedSeq[DBinStatClz], IndexedSeq[EntryKey]) = {
 		val binSpecs = baseRsltSeq.map(_._1)
 		val firstMeat = binSpecs.head._4
 
 		val keySeq : IndexedSeq[BinTypes.EntryKey] = firstMeat.allKeysSorted(myMeatKeyOrder)
-		val binDatSeq : IndexedSeq[(ParentTag, BinTag, DBinDat)] = binSpecs.map(binSpec => {
+		val binDatSeq_OLDE : IndexedSeq[(ParentTag, BinTag, DBinDat)] = binSpecs.map(binSpec => {
 			val dbd : DBinDat = myBDX.binSpecToDBD(binSpec, keySeq)
 			val tagInfo : BinTagInfo = binSpec._1
 			(tagInfo.parentTag, tagInfo.binTag, dbd)
+
 		})
-		(binDatSeq, keySeq)
+		val binStatSeq : IndexedSeq[DBinStatClz] = binSpecs.map(binSpec => {
+			val (tagInfo, numInfo, massInfo, binMeat) = binSpec
+			val statRow = binMeat.mkStatRow(keySeq)
+			val dbscInst = DBinStatClz(tagInfo, massInfo, statRow)
+			dbscInst
+		})
+		// (binDatSeq_OLDE, keySeq)
+		(binStatSeq, keySeq)
 	}
 
 }

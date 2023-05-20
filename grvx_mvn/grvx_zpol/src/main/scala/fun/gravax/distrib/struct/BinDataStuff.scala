@@ -1,6 +1,6 @@
 package fun.gravax.distrib.struct
 
-import fun.gravax.distrib.calc.KnowsDistribTypes
+import fun.gravax.distrib.calc.{DBinStatClz, KnowsDistribTypes}
 import zio.{Task, ZIO}
 
 import scala.collection.immutable.{Map => SMap}
@@ -30,23 +30,37 @@ trait KnowsStatTupleShapes extends KnowsBinTagShapes with KnowsDistKeyShapes {
 	type StatRow = IndexedSeq[StatEntry]   // For some set of keySyms, in some useful order that is not specified by type.
 	type StatMap = SMap[EntryKey, StatEntry]
 
+	type DBinMass = BigDecimal
+	type DBinRelWt = BigDecimal
+	type DBinAbsWt = BigDecimal
+	type VagueWt = BigDecimal	// VagueWt is usable in calcs where mass-vs-wt doesn't matter.
+
 	type EntryExpects = (EntryKey, EntryMean, ExpectSquare)
-	type WtExpectsRow = (DBinWt, IndexedSeq[EntryExpects])
+	type VwtExpectsRow = (VagueWt, IndexedSeq[EntryExpects])
 
 	type DBinID = BinTag
-	type DBinWt = BigDecimal
-	type DBinDat = (DBinID, DBinWt, StatRow) // Does NOT contain covariances.
+
+	type DBinDatTup = (DBinID, DBinRelWt, StatRow) // Does NOT contain covariances.
+	// One advantage of using class (vs. tup) is we can search the code for usages of individual fields.
+
+	type DBinDat = DBinDatTup
 
 	type DBinMatrix = IndexedSeq[DBinDat]
 
+	type DBinStatMatrix = IndexedSeq[DBinStatClz]
+
 	// Weighted expected squared value and mean
-	type WtdSqrAndMean = (BigDecimal, BigDecimal)
+	type VwtdSqrAndMean = (BigDecimal, BigDecimal)
 
 	type KindaCrazy[X[_]] = List[X[String]]
+
+
 
 }
 
 object BinTypes extends KnowsStatTupleShapes
+
+
 
 // Generally we don't store Covariances in bins.
 // Note that bins may be wide (100s of assets) and full covariance takes order-squared space.
@@ -59,14 +73,17 @@ trait BinData extends KnowsStatTupleShapes {
 	def getBinTagTxt : BinTag
 	def getParentTagTxt : BinTag
 	def getBinFlavor : BinFlavor // TODO: Make enum-ish
-	def getRelWt : DBinWt
+	// def getRelWt : DBinRelWt
 	// def getAbsWt : BigDecimal
-	def getMass : DBinWt
+	def getMass : DBinRelWt
 
 	// protected def getStatMap : StatMap
 
 	// Called from BinNode
 	def mkStatRow(keySeq : IndexedSeq[EntryKey]) : Task[StatRow]
+
+	def getDBSC(keySeq : IndexedSeq[EntryKey]) : Task[DBinStatClz]
+
 
 	// Called from BinNode, but only by unused val  myFullBinDat
 	def allKeysSorted(meatKeyOrder : Ordering[String]) : Task[Seq[EntryKey]]
@@ -99,11 +116,18 @@ trait BinDataUsingInfo extends BinData {
 
 	override def getBinFlavor: BinFlavor = myTagInfo.binFlavor
 
-	override def getMass: DBinWt = myMassInfo.binMass
+	override def getMass: DBinRelWt = myMassInfo.binMass
 
-	override def getRelWt: DBinWt = myMassInfo.relWt_opt.get
+	// override def getRelWt: DBinRelWt = myMassInfo.relWt_opt.get
 
 	override def mkStatRow(keySeq: IndexedSeq[EntryKey]): Task[StatRow] = getMeatInfoOp.map(_.mkStatRow(keySeq))
+
+	override def getDBSC(keySeq: IndexedSeq[EntryKey]): Task[DBinStatClz] = {
+		val statRowTask = mkStatRow(keySeq)
+		statRowTask.map(statRow => {
+			DBinStatClz(myTagInfo, myMassInfo, statRow)
+		})
+	}
 
 	override def allKeysSorted(meatKeyOrder : Ordering[EntryKey]) : Task[Seq[EntryKey]] = getMeatInfoOp.map(_.allKeysSorted(meatKeyOrder))
 

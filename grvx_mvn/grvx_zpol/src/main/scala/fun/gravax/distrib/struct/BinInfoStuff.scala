@@ -1,7 +1,7 @@
 package fun.gravax.distrib.struct
 
 import fun.gravax.distrib.binstore.KnowsBinItem
-import fun.gravax.distrib.calc.KnowsDistribTypes
+import fun.gravax.distrib.calc.{DBinStatClz, KnowsDistribTypes}
 import fun.gravax.distrib.gen.KnowsBinTupTupTypes
 import zio.{IO, Task, ZIO}
 import zio.dynamodb.PrimaryKey
@@ -15,11 +15,14 @@ case class BinFullKeyInfo(tblNm : String, scenPartKey : String, compoundSortKey 
 
 case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
 case class BinTagInfo(binTag : BinTypes.BinTag, parentTag : BinTypes.BinTag, binFlavor : BinTypes.BinFlavor) // levelNum, siblingNum
-case class BinMassInfo(binMass : BigDecimal, relWt_opt : Option[BigDecimal], absWt_opt : Option[BigDecimal] = None)
+case class BinMassInfo(binMass : BinTypes.DBinMass, relWt_opt : Option[BinTypes.DBinRelWt], absWt_opt : Option[BinTypes.DBinAbsWt] = None)
 
 // TODO: add these index numbers to persistent store?
 
 case class BinNumInfo(binNum : Int, parentNum : Int, maxKids : Int, levelNum : Int, siblingNum : Int)
+
+
+
 
 // Seems we cannot use abstract types (of our self-type, or inherited) in constructor parameters.
 // If we make an outer trait scope then those names are available, or we can refer to members of an object.
@@ -36,6 +39,7 @@ case class BinMeatInfo(meatMap : BinTypes.StatMap) extends KnowsDistribTypes {
 		keySet.toSeq.sorted(meatKeyOrder).toIndexedSeq
 	}
 }
+
 
 abstract class BinDataCore(myScenID : String, myTimeDat : BinTimeInfo, myTagDat : BinTagInfo) extends BinDataUsingInfo {
 	override def getScenarioID: String = myScenID
@@ -54,6 +58,8 @@ case class EzBinData(scenID : String, timeDat : BinTimeInfo, myTagInf : BinTagIn
 	override protected def getMeatInfoOp :  Task[BinMeatInfo] = ZIO.succeed(myMeatInf)
 
 	override protected def getMassInfo: BinMassInfo = myMassDat
+
+
 }
 
 trait CacheBackedBinData extends BinDataUsingInfo with KnowsBinTupTupTypes {

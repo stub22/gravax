@@ -1,6 +1,6 @@
 package fun.gravax.distrib.calc
 
-import fun.gravax.distrib.struct.KnowsStatTupleShapes
+import fun.gravax.distrib.struct.{KnowsStatTupleShapes}
 
 private trait DistribCalcStuff
 
@@ -11,15 +11,15 @@ trait KnowsDistribTypes extends KnowsStatTupleShapes {
 	type UnwtCovRow = IndexedSeq[UnwtCovPair]
 
 	// ._2 entry in some bin (having wt _1) has covariances ._3 (w.r.t. GLOBAL mean, already known).
-	type BinEntryMidCalc = (DBinWt, StatEntry, UnwtCovRow)
-	type BinEntryMidNarr = (DBinWt, StatEntry)
+	type BinEntryMidCalc = (VagueWt, StatEntry, UnwtCovRow)
+	type BinEntryMidNarr = (VagueWt, StatEntry)
 
 	// type DownsideUCR = IndexedSeq[UnwtCovPair]
-	type WtCov = BigDecimal
-	type WtCovTup = (EntryKey, EntryKey, WtCov)
-	type WtCovRow = IndexedSeq[WtCovTup]
+	type VwtCov = BigDecimal
+	type VwtCovTup = (EntryKey, EntryKey, VwtCov)
+	type VwtCovRow = IndexedSeq[VwtCovTup]
 
-	type StatTriMatrix = IndexedSeq[(StatEntry, WtCovRow)]
+	type StatTriMatrix = IndexedSeq[(StatEntry, VwtCovRow)]
 }
 trait StatEntryOps extends KnowsDistribTypes {
 	val zeroBD = BigDecimal("0.0")
@@ -40,21 +40,21 @@ trait StatEntryOps extends KnowsDistribTypes {
 		val entryExp : EntryExpects = (entKey, entMean, expSq)
 		entryExp
 	}
-	def wtdExpSqrAndMean(weight : DBinWt, entry : StatEntry) : WtdSqrAndMean = {
+	def wtdExpSqrAndMean(vwt : VagueWt, entry : StatEntry) : VwtdSqrAndMean = {
 		val expSqr = expectedSquare(entry)
 		val entMean = entry._2
-		(weight.*(expSqr), weight.*(entMean))
+		(vwt.*(expSqr), vwt.*(entMean))
 	}
 
 	// Weighted expect-rows (which use the same entry-keys in same order) are monoidally combinable using this op.
 	// (Technically are only using their semigroup property, because we don't have a reason to use zero-rows, yet).
-	// Output weight is sum of input weights.
+	// Output vwt is sum of input weights.
 	// Output expects-row is weighted avg of input expects rows.
 	// Input and output rows should have same entry-keys in same order. (Enforced by assertion).
-	def combineWeightedExpectationRows(rowA : WtExpectsRow, rowB : WtExpectsRow) : WtExpectsRow = {
-		val (wtA, expEntsA) = rowA
-		val (wtB, expEntsB) = rowB
-		val wtSum = wtA.+(wtB)
+	def combineWeightedExpectationRows(rowA : VwtExpectsRow, rowB : VwtExpectsRow) : VwtExpectsRow = {
+		val (vwtA, expEntsA) = rowA
+		val (vwtB, expEntsB) = rowB
+		val vwtSum = vwtA.+(vwtB)
 		assert(expEntsA.size == expEntsB.size)
 		val joinedEnts: IndexedSeq[(EntryExpects, EntryExpects)] = expEntsA.zip(expEntsB)
 		val mergedExpects : IndexedSeq[EntryExpects] = joinedEnts.map(tup => {
@@ -62,39 +62,42 @@ trait StatEntryOps extends KnowsDistribTypes {
 			val (keyA, meanA, expSqA) = eeA
 			val (keyB, meanB, expSqB) = eeB
 			assert(keyA == keyB)
-			val wtSumMean = wtA.*(meanA).+(wtB.*(meanB))
-			val wtSumExpSq = wtA.*(expSqA).+(wtB.*(expSqB))
-			val outMean = wtSumMean./(wtSum)
-			val outExpSq = wtSumExpSq./(wtSum)
+			val wtSumMean = vwtA.*(meanA).+(vwtB.*(meanB))
+			val wtSumExpSq = vwtA.*(expSqA).+(vwtB.*(expSqB))
+			val outMean = wtSumMean./(vwtSum)
+			val outExpSq = wtSumExpSq./(vwtSum)
 			val outKey = keyA
 			val outExpects = (outKey, outMean, outExpSq)
 			outExpects
 		})
-		val outRow = (wtSum, mergedExpects)
+		val outRow = (vwtSum, mergedExpects)
 		outRow
 	}
 }
 trait BinStatCalcs extends KnowsDistribTypes {
 	val myStatEntryOps = new StatEntryOps {}
 
-	// type BinRDat = (DBinWt, StatRow)
-	def aggregateWeightsMeansAndVars(binDats : Iterable[DBinDat]) : (DBinWt, StatRow) = {
-		val weightedExpects : WtExpectsRow = reduceWeightedExpectations(binDats)
-		val (rowWt, eeSeq) = weightedExpects
+	// type BinRDat = (DBinRelWt, StatRow)
+	def aggregateWeightsMeansAndVars(binStats : Iterable[DBinStatClz]) : (VagueWt, StatRow) = {
+		val weightedExpects : VwtExpectsRow = reduceWeightedExpectations(binStats)
+		val (rowVwt, eeSeq) = weightedExpects
 		val statRow : StatRow = eeSeq.map(ee => myStatEntryOps.entryFromExpects(ee))
-		(rowWt, statRow)
+		(rowVwt, statRow)
 	}
-	def reduceWeightedExpectations(binDats : Iterable[DBinDat]) : WtExpectsRow = {
-		val inBinRows: Iterable[WtExpectsRow] = binDats.map(binDat => {
-			val(binId, binWt, statRow) = binDat
+	private def reduceWeightedExpectations(binStats : Iterable[DBinStatClz]) : VwtExpectsRow = {
+		val inBinRows: Iterable[VwtExpectsRow] = binStats.map(binStat => {
+			// val(binId, binWt, statRow) = binDat
+			val binMass = binStat.massInfo.binMass
+			val statRow = binStat.statRow
 			val expectsSeq : IndexedSeq[EntryExpects] = statRow.map(stEnt => {
 				val (entKey, entMean, entVar) = stEnt
 				val expSq = myStatEntryOps.expectedSquare(stEnt)
 				val ee : EntryExpects = (entKey, entMean, expSq)
 				ee
 			})
-			val wtExpRow = (binWt, expectsSeq)
-			wtExpRow
+			val vagueWtInThisCaseIsMass = binMass
+			val vwtExpRow = (vagueWtInThisCaseIsMass, expectsSeq)
+			vwtExpRow
 		})
 		inBinRows.reduce((werA, werB) => myStatEntryOps.combineWeightedExpectationRows(werA, werB))
 	}
@@ -104,11 +107,11 @@ trait BinStatCalcs extends KnowsDistribTypes {
 		val firstEntryKey : EntryKey = statTupsForOneEntry.head._2._1
 
 		// TODO:  Confirm that Seq[BigDecimal].sum works correctly.
-		val sumOfWeights : DBinWt = statTupsForOneEntry.map(_._1).sum
+		val sumOfWeights : DBinRelWt = statTupsForOneEntry.map(_._1).sum
 
-		val wtSquaresAndMeans: Seq[WtdSqrAndMean] = statTupsForOneEntry.map(wep => myStatEntryOps.wtdExpSqrAndMean(wep._1, wep._2))
+		val wtSquaresAndMeans: Seq[VwtdSqrAndMean] = statTupsForOneEntry.map(wep => myStatEntryOps.wtdExpSqrAndMean(wep._1, wep._2))
 
-		val summedPairs: WtdSqrAndMean = wtSquaresAndMeans.reduce((pair1, pair2) => (pair1._1 + pair2._1, pair1._2 + pair2._2))
+		val summedPairs: VwtdSqrAndMean = wtSquaresAndMeans.reduce((pair1, pair2) => (pair1._1 + pair2._1, pair1._2 + pair2._2))
 		val (sumOfWtdSqrs, sumOfWtdMeans) = summedPairs
 		assert(sumOfWtdMeans == storedRootEntryMean) // Expecting this to fail, then we will go deeper in 'numerology'
 		val squaredMeanCanned = storedRootEntryMean.pow(2)
@@ -146,17 +149,17 @@ trait BinStatCalcs extends KnowsDistribTypes {
 		})
 		(wt, localEntry, covShortRow)
 	}
-	// type WtCovTup = (EntryKey, EntryKey, WtCov)
+	// type VwtCovTup = (EntryKey, EntryKey, VwtCov)
 	// wtEntStatTups tells the covariance row for each bins.  We do the weighted sum of those covariance rows.
 	// TODO:  Derive the emptyShortRowWtCov from wtEntStatTups.head
-	def finishShortCovRow(wtEntStatTups: IndexedSeq[(DBinWt, StatEntry, UnwtCovRow)], emptyShortRowWtCov : WtCovRow): WtCovRow = {
+	def finishShortCovRow(wtEntStatTups: IndexedSeq[(DBinRelWt, StatEntry, UnwtCovRow)], emptyShortRowWtCov : VwtCovRow): VwtCovRow = {
 		// Total up the input rows to produce a single row of covariances - all the covariances for entry.
-		// val emptyShortRowWtCov : WtCovRow = covPartnerEntIdx.map(cpeidx => (ekey, keySyms(cpeidx), zeroBD))
-		val totalShortCovRow : WtCovRow = wtEntStatTups.foldLeft(emptyShortRowWtCov)((prevSumRow, wtStatTup) => {
-			val rowWt = wtStatTup._1 // This weight came from the bin corresponding to this row
+		// val emptyShortRowWtCov : VwtCovRow = covPartnerEntIdx.map(cpeidx => (ekey, keySyms(cpeidx), zeroBD))
+		val totalShortCovRow : VwtCovRow = wtEntStatTups.foldLeft(emptyShortRowWtCov)((prevSumRow, wtStatTup) => {
+			val rowWt = wtStatTup._1 // This vwt came from the bin corresponding to this row
 			val covShortRow: UnwtCovRow = wtStatTup._3
-			val comb: IndexedSeq[(WtCovTup, UnwtCovPair)] = prevSumRow.zip(covShortRow)
-			val summedShortRow : WtCovRow = comb.map(comboPair => {
+			val comb: IndexedSeq[(VwtCovTup, UnwtCovPair)] = prevSumRow.zip(covShortRow)
+			val summedShortRow : VwtCovRow = comb.map(comboPair => {
 				val (prevSumTup, nxtInPair) = comboPair
 				val nxtInWeighted = nxtInPair._2.*(rowWt)
 				val nxtSum = prevSumTup._3.+(nxtInWeighted)

@@ -31,7 +31,7 @@ trait KnowsGenTypes extends KnowsBinItem with KnowsDistribTypes with KnowsBinTup
 	type LevelNum = Int
 	type LevelTagNumChnk = NonEmptyChunk[(BinTagInfo, BinNumInfo)]
 
-	type VirtRsltRow = (BinTagInfo, BinNumInfo, DBinWt, StatRow)
+	type VirtRsltRow = (BinTagInfo, BinNumInfo, VagueWt, StatRow)
 
 	type BaseRsltPair = (GoodTagNumBlk, Chunk[BinStoreRslt])
 }

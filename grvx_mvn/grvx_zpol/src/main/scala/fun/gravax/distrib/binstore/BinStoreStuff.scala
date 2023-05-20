@@ -11,7 +11,7 @@ private trait BinStoreStuff
 
 trait BinStoreApi extends KnowsBinItem { bsa =>
 	val binTblNm = "distro-bin"
-	val (flg_doCreate, flg_doDelete) = (false, false)
+	val (flg_createTbl, flg_deleteTbl) = (false, false)
 
 	val myFBI = new FromBinItem {}
 	val myTBI = new ToBinItem {
@@ -21,13 +21,13 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 
 	def maybeCreateBinTable: RIO[ZDynDBExec, Unit] = {
 		println("println maybeCreateBinTable START")
-		if (flg_doCreate) {
+		if (flg_createTbl) {
 			ZDynDBQry.createTable(binTblNm, binKeySchm, ZDyn.BillingMode.PayPerRequest)(
 				scenAttr, sortKeyAttr).execute *> ZIO.log(s"Created table ${binTblNm}")
 		} else ZIO.succeed()
 	}
 
-	def maybeDeleteBinTable: RIO[ZDynDBExec, Unit] = if (flg_doDelete) {
+	def maybeDeleteBinTable: RIO[ZDynDBExec, Unit] = if (flg_deleteTbl) {
 		ZDynDBQry.deleteTable(binTblNm).execute *> ZIO.log(s"Deleted table ${binTblNm}")
 	}  else ZIO.succeed()
 
@@ -49,7 +49,7 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 	}
 }
 
-// Fractional weight fields impose extra costs.  We need to know the total mass (of the distribution, == sum of all leaf bins)
+// Fractional vwt fields impose extra costs.  We need to know the total mass (of the distribution, == sum of all leaf bins)
 // before we can complete writing any bins.  Otherwise we have to make a second pass after finding parent weights.
 trait BinStoreCmdBuilder extends KnowsGenTypes {
 	val myTBI : ToBinItem

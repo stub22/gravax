@@ -7,6 +7,7 @@ import zio.stream.{UStream, ZStream}
 private trait BinTransformStuff
 
 trait BinDataXformer extends KnowsGenTypes  {
+
 	def binSpecToDBD(bbSpec : BinSpec, keySyms: IndexedSeq[EntryKey]) : DBinDat = {
 		val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
 		val statRow = binMeat.mkStatRow(keySyms)
@@ -14,7 +15,7 @@ trait BinDataXformer extends KnowsGenTypes  {
 		val dbd = (binIdHmm.toString, massInfo.binMass, statRow )
 		dbd
 	}
-	def aggStatsToBinSpecStrm(aggStats : IndexedSeq[(BinTagInfo, BinNumInfo, DBinWt, StatRow)]) : UStream[BinSpec] = {
+	def aggStatsToBinSpecStrm(aggStats : IndexedSeq[(BinTagInfo, BinNumInfo, DBinRelWt, StatRow)]) : UStream[BinSpec] = {
 		val aggStStrm = ZStream.fromIterable(aggStats)
 		val binSpecStrm = aggStStrm.map(aggStatTup => {
 			val (tagInfo, numInfo, binWt, statRow) = aggStatTup
@@ -32,7 +33,7 @@ trait BinDataXformer extends KnowsGenTypes  {
 		val entryKVs: Seq[(EntryKey, StatEntry)] = statRow.map(stEnt => (stEnt._1, stEnt))
 		entryKVs.toMap
 	}
-	// def aggInfToBinSpec(aggTup : (BinTagInfo, DBinWt, StatRow)) : BinSpec = {	??? 	}
+	// def aggInfToBinSpec(aggTup : (BinTagInfo, DBinRelWt, StatRow)) : BinSpec = {	??? 	}
 }
 
 

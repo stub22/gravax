@@ -15,7 +15,7 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	}
 	protected def getFlg_doFullTableCycle : Boolean = false	// write data, optionally create/delete table
 	lazy val myBinStore = new BinStoreApi {
-		override val (flg_doCreate, flg_doDelete) = (false, false)
+		override val (flg_createTbl, flg_deleteTbl) = (false, false)
 	}
 	/*******************************************************************************/
 	val myBinWalker = new BinWalker {
@@ -42,14 +42,14 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	/*******************************************************************************/
 
 	override def run: Task[Unit] = {
-		val program = if (getFlg_doFullTableCycle)	mkDynProg_WriteThenReadOneBin
+		val program = if (getFlg_doFullTableCycle)	mkDynProg_WriteThenReadOneDistrib
 		else mkDynProg_ReadSomeBins
 
 		myDynLayerSetup.wireDynamoTask(program)
 	}
 
 	// Also may create and delete tables, mix margaritas, fix wagons
-	private def mkDynProg_WriteThenReadOneBin: RIO[ZDynDBExec, Unit] = {
+	private def mkDynProg_WriteThenReadOneDistrib: RIO[ZDynDBExec, Unit] = {
 		val dumStore = new StoreDummyItems {}
 		println("println START mkDynProg_WriteThenReadOneBin")
 		val forBlock: ZIO[ZDynDBExec, Throwable, String] = for {

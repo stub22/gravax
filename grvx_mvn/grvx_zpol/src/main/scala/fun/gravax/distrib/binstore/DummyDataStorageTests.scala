@@ -40,7 +40,7 @@ trait StoreDummyItems extends BinStoreApi {
 		val meatInfo = BinMeatInfo(meatInfoMap)
 
 		val skelBinItem = myTBI.mkBinItemSkel(scen, timeObs, timePred, timeCalc)
-		val fleshyBI = myTBI.fleshOutBinItem(skelBinItem, binSeqNum, parentBinSeqNum, binMass, binRelWeight) // , binAbsWeight, )
+		val fleshyBI = myTBI.fleshOutBinItem(skelBinItem, binSeqNum, parentBinSeqNum, binFlav, binMass, binRelWeight) // , binAbsWeight, )
 
 		val meatyBI = myTBI.addMeatToBinItem(fleshyBI, meatInfo)
 		val fullBI = myTBI.fillBinSortKey(meatyBI)

@@ -1,6 +1,7 @@
 package fun.gravax.distrib.calc
 
 import fun.gravax.distrib.struct.{KnowsStatTupleShapes, VecDistrib}
+import zio.Task
 
 private trait ReturnsCalcStuff
 
@@ -25,12 +26,14 @@ trait HoldingOptimizer extends KnowsStatTupleShapes {
 		val availAssetSeq = availAssets.toIndexedSeq
 		// Expected portfolio return will be dot-product of our portfolio asset weights with these mean asset returns.
 		// This is a purely linear calculation, with a single number as result.
-		val rootDBD_op = maRetDist.projectRootBin(availAssetSeq)
-		rootDBD_op.map(rootDBD => {
+		val rootBinStat_op: Task[DBinStatClz] = maRetDist.projectRootBin(availAssetSeq)
+		rootBinStat_op.map(rootStat => {
 
-			val (rootBinID, rootBinWt, rootBinRow) = rootDBD
+			// val (rootBinID, rootBinWt, rootBinRow) = rootDBD
+			val rootMass = rootStat.massInfo.binMass
+			val rootBinTag = rootStat.tagInfo.binTag
 			val bd1 = BigDecimal("1.0")
-			assert (rootBinWt == bd1)
+			// assert (rootBinWt == bd1)
 			// Computing the portfolio variance is more complicated.  Each child bin represents some PART of the total
 			// distribution (but the support of the bins may be overlapping).  For a given set of portfolio asset weights,
 			// the variance will be the expected squared difference over all possible outcomes.  This can be treated as
@@ -41,7 +44,7 @@ trait HoldingOptimizer extends KnowsStatTupleShapes {
 			// Our method is more accurate when the bins are mostly disjoint.  We can try to improve by asking for
 			// additional information with the bins.
 			// Note that Sortino ratio emphasizes the downside variance, whereas Sharpe treats all variance equally.
-			val childDBDs : Seq[maRetDist.DBinDat] = maRetDist.projectChildBins(rootBinID, availAssetSeq)
+			val childDBDs : Seq[maRetDist.DBinDat] = maRetDist.projectChildBins(rootBinTag, availAssetSeq)
 			// Now we need either
 			// 1) An iterative algorithm, e.g. gradient descent.
 			// 2) A gaussian approximation using covariances (which turns optimization into a matrix-inverse problem).
@@ -69,7 +72,7 @@ trait HoldingOptimizer extends KnowsStatTupleShapes {
 			// For example, if the bin contains very-large-diff outliers they will be under-represented in this variance.
 			// Maybe if variance is >= 1 this estim turns out to be a lower bound, but if var < 1 it's an upper bound?
 			// However if the client proceeds to use additional layers of the BinDat it can get a more precise estimate.
-			val binWt: DBinWt = binDat._2
+			val binWt: DBinRelWt = binDat._2
 			val weightedEDSq = binWt.*(estimDiffSq)
 			weightedEDSq
 		})

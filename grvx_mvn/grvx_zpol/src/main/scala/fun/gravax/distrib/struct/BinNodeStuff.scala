@@ -1,5 +1,6 @@
 package fun.gravax.distrib.struct
 
+import fun.gravax.distrib.calc.DBinStatClz
 import zio.{Task, UIO, ZIO}
 import zio.stream.{UStream, ZStream}
 
@@ -22,9 +23,20 @@ trait BinNode extends VecDistribFragment  {
 	override def projectShallowStatRow(keySyms: IndexedSeq[EntryKey]): Task[StatRow] = getBinData.mkStatRow(keySyms)
 
 
-	def projectToDBD_op(orderedSyms : IndexedSeq[EntryKey]) : Task[DBinDat] = {
+	private def projectToDBD_op_OLDE(orderedSyms : IndexedSeq[EntryKey]) : Task[DBinDat] = {
 		val projStatRowOp = projectShallowStatRow(orderedSyms)
-		projStatRowOp.map(psrow => (getBinData.getBinTagTxt, getBinData.getRelWt, psrow))
+		// projStatRowOp.map(psrow => (getBinData.getBinTagTxt, getBinData.getRelWt, psrow))
+		???
+	}
+	def projectToDBSC_op(orderedSyms : IndexedSeq[EntryKey]) : Task[DBinStatClz] = {
+		getBinData.getDBSC(orderedSyms)
+		/*
+		val projStatRowOp = projectShallowStatRow(orderedSyms)
+		projStatRowOp.map(psrow => {
+
+			(getBinData.getBinTagTxt, getBinData.getMass, psrow))
+		}
+		 */
 	}
 
 	def allKeysSorted : Task[Seq[EntryKey]] = {
@@ -39,18 +51,20 @@ trait BinNode extends VecDistribFragment  {
 	// should sum to 1.0.
 	// This is the complete dataset for the depth-order (as in "nth-order") approximation to the distribution.
 	// TODO: Add a stream-oriented version of this algo.
-	def projectAndCollectBins(orderedSyms : IndexedSeq[EntryKey], queryDepth : Int) : Task[DBinMatrix] = {
+	def projectAndCollectBins(orderedSyms : IndexedSeq[EntryKey], queryDepth : Int) : Task[DBinStatMatrix] = {
 		// TODO:  Check queryDepth <= maxDepth, else throw
 		if ((queryDepth == 0) || getKids.isEmpty) {
-			projectToDBD_op(orderedSyms).map(oneBin => IndexedSeq(oneBin))
+			val statRowOp = projectToDBSC_op(orderedSyms)
+			statRowOp.map(oneBinStat => IndexedSeq(oneBinStat))
+			// projectToDBD_op(orderedSyms).map(oneBin => IndexedSeq(oneBin))
 		} else {
 			// Recursively descend until we reach queryDepth.  Only bins from that depth will be aggregated here,
 			// except when subtrees don't extend that far we will get the interim summary bins (the .isEmpty case above)
 			val kidStream: UStream[BinNode] = ZStream.fromIterable(getKids)
-			val kidBinStream: ZStream[Any, Throwable, DBinDat] = kidStream.flatMap(childNode => {
+			val kidBinStream: ZStream[Any, Throwable, DBinStatClz] = kidStream.flatMap(childNode => {
 				val childMatrixOp = childNode.projectAndCollectBins(orderedSyms, queryDepth - 1)
 				val streamOfOneMatrix = ZStream.fromZIO(childMatrixOp)
-				val streamOfDBDs: ZStream[Any, Throwable, DBinDat] = streamOfOneMatrix.flatMap(matrix => ZStream.fromIterable(matrix))
+				val streamOfDBDs: ZStream[Any, Throwable, DBinStatClz] = streamOfOneMatrix.flatMap(matrix => ZStream.fromIterable(matrix))
 				streamOfDBDs
 			})
 			val out = kidBinStream.runCollect

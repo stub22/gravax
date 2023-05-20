@@ -67,7 +67,7 @@ trait FromBinItem extends FromItem with KnowsBinItem with KnowsBinTupTupTypes {
 	def extractBinData(itm : Item) : BinData = {
 		val sceneID = extractSceneID(itm)
 		val timeData = extractTimeInfo(itm)
-		val seqInfo = extractSeqInfo(itm)
+		val seqInfo = extractTagInfo(itm)
 		val massInfo = extractMassInfo(itm)
 		val meatInfo = extractMeat(itm)
 		val binDat = EzBinData(sceneID, timeData, seqInfo, massInfo, meatInfo)
@@ -75,7 +75,7 @@ trait FromBinItem extends FromItem with KnowsBinItem with KnowsBinTupTupTypes {
 	}
 	def extractBinScalars(itm : Item) : BinScalarInfoTup = {
 		val timeData = extractTimeInfo(itm)
-		val seqInfo = extractSeqInfo(itm)
+		val seqInfo = extractTagInfo(itm)
 		val massInfo = extractMassInfo(itm)
 		(timeData, seqInfo, massInfo)
 	}
@@ -90,7 +90,7 @@ trait FromBinItem extends FromItem with KnowsBinItem with KnowsBinTupTupTypes {
 		timeInfo
 	}
 
-	def extractSeqInfo(itm: Item) : BinTagInfo = {
+	def extractTagInfo(itm: Item) : BinTagInfo = {
 		val binSeqNum =  fetchOrThrow[String](itm, FLDNM_BIN_TAG)
 		val parentSeqNum =  fetchOrThrow[String](itm, FLDNM_PARENT_TAG)
 		val binFlavor = fetchOrThrow[String](itm, FLDNM_BIN_FLAVOR)
@@ -152,11 +152,12 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 		val comboItem = Item(comboMap)
 		comboItem
 	}
-	def fleshOutBinItem(binWithSceneAndTimes : Item, binSeqNum : String, parentBinSeqNum : String,
+	def fleshOutBinItem(binWithSceneAndTimes : Item, binSeqNum : String, parentBinSeqNum : String, binFlav : String,
 						binMass : BigDecimal, binRelWeight : BigDecimal): Item = {   // binAbsWeight : BigDecimal
 		val addMap = SMap[String, AttributeValue](
 			FLDNM_BIN_TAG -> AttributeValue(binSeqNum),
 			FLDNM_PARENT_TAG -> AttributeValue(parentBinSeqNum),
+			FLDNM_BIN_FLAVOR -> AttributeValue(binFlav),
 			FLDNM_BIN_MASS -> AttributeValue(binMass),
 			FLDNM_BIN_REL_WEIGHT -> AttributeValue(binRelWeight)
 			// FLDNM_BIN_ABS_WEIGHT -> AttributeValue(binAbsWeight),
