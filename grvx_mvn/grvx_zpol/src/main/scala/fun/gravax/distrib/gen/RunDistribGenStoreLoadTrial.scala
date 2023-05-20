@@ -1,7 +1,7 @@
 package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, DynLayerSetup, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
-import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, BinTreeEagerLoader, BinTreeLazyLoader, BinTreeLoader, VecDistTestHelper}
+import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, BinDataEagerLoader, BinTreeLazyLoader, BinTreeLoader, VecDistTestHelper}
 import zio.cache.CacheStats
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom}
@@ -24,7 +24,7 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	val myMCM = new MeatCacheMaker {
 		override protected def getBinWalker: BinWalker = myBinWalker
 	}
-	val myBTEL = new BinTreeEagerLoader {
+	val myBTEL = new BinDataEagerLoader {
 		override protected def getBinWalker: BinWalker = myBinWalker
 	}
 	val myBTLL = new BinTreeLazyLoader {
@@ -69,9 +69,6 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 			_ <- ZIO.log(s"extractBinScalarsFromQRsltItems result: ${bdChnk}")
 			meatyBinItems <- myBinWalker.fetchMeatyBinItems(fixedScenPrms, bdChnk)
 			_ <- ZIO.log(s"fetchMeatyBinItems result: ${meatyBinItems}")
-			meatCache <- myMCM.makeMeatyItemCacheOp
-			//		shamWowRslt <- myBinWalker.shamWow(fixedScenPrms, bdChnk)
-			//		_ <- ZIO.log(s"shamWow result: ${shamWowRslt}")
 			_ <- myBinStore.maybeDeleteBinTable
 		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_WriteThenReadOneBin.forBlock may be ignored") // .map to produce the output ZIO
 		println("println END mkDynProg_WriteThenReadOneBin")
@@ -85,8 +82,8 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 		val forBlock: ZIO[ZDynDBExec, Throwable, String] = for {
 			// First line of for comp is special because it eagerly creates our first Zio
 			meatCache <- myMCM.makeMeatyItemCacheOp
-			meatyPairChnk <- myBTEL.loadBinTreeEagerly(meatCache)(fixedScenPrms, maxLevels, maxBins)
-			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.loadBinTreeEagerly-meatyPairChnk size=${meatyPairChnk.size}, data=${meatyPairChnk}")
+			meatyPairChnk <- myBTEL.loadBinContentsEagerly(meatCache)(fixedScenPrms, maxLevels, maxBins)
+			_ <- ZIO.log(s"mkDynProg_ReadSomeBins.loadBinContentsEagerly-meatyPairChnk size=${meatyPairChnk.size}, data=${meatyPairChnk}")
 			cstts <- meatCache.cacheStats
 			_ <- ZIO.log(s"CacheStats (hits,misses,size) = ${cstts}")
 			rootBinNode <- myBTLL.loadBinTreeLazily(meatCache, meatKeyOrder)(fixedScenPrms, maxLevels, maxBins)

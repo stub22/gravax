@@ -2,7 +2,7 @@ package fun.gravax.distrib.calc
 
 import fun.gravax.distrib.struct.{KnowsStatTupleShapes, VecDistrib}
 
-private trait DistroCalcStuff
+private trait ReturnsCalcStuff
 
 
 trait HoldingOptimizer extends KnowsStatTupleShapes {

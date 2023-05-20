@@ -90,10 +90,11 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 	// One way to do this is to proceed recursively from the unfinished-root.
 
 	// To wire up the parentNode we need to pass a promise and make the operation effectful, which makes the recursive
-	// call a little more elaborate.
-	private def buildBinSubtree(meatCache : MeatyItemCache, meatKeyOrder : Ordering[EntryKey])(scenParms: ScenarioParams, maxLevels : Int)
-								(skelNodeMap : SMap[BinTag, SkelNode], topTag : BinTag,
-								 parentNodeOptPromise: Promise[Nothing, Option[BinNode]]): UIO[BinNode] = {
+	// call a little more elaborate.  An alternative method could be to nest our node-creation inside another object
+	// which passes in a method referring to a lazy val.  https://blog.rockthejvm.com/immutable-doubly-linked-list-scala/
+	private def buildBinSubtree(meatCache : MeatyItemCache, meatKeyOrder : Ordering[EntryKey])
+				(scenParms: ScenarioParams, maxLevels : Int)(skelNodeMap : SMap[BinTag, SkelNode], topTag : BinTag,
+				 parentNodeOptPromise: Promise[Nothing, Option[BinNode]]): UIO[BinNode] = {
 
 		// .make  Makes a new promise to be completed by the fiber creating the promise.
 
@@ -101,6 +102,7 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 		val kidTags: Seq[BinTag] = topSkelNode.kids
 		val binNodeOptPromiseMkr: UIO[Promise[Nothing, Option[BinNode]]] = Promise.make[Nothing, Option[BinNode]]
 		val kidTagStrm = ZStream.fromIterable(kidTags)
+
 	  	val recursiveOp : UIO[(Seq[BinNode],Promise[Nothing, Option[BinNode]])] = binNodeOptPromiseMkr.flatMap(binNodeOptPromise => {
 			// Under cats we could use .traverse to turn Seq[UIO] into UIO[Seq], but...
 			// https://stackoverflow.com/questions/67301065/zio-transform-seqzio-to-zioseq
@@ -120,15 +122,17 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 			val node = new BinNode {
 				override protected def getBinData: BinData = topBinDat
 
-				override protected def getParent_opt: UIO[Option[BinNode]] = parentNodeOptPromise.await
+				override protected def getParentOptOp: UIO[Option[BinNode]] = parentNodeOptPromise.await
 
 				override protected def getKids: Iterable[BinNode] = kidSubtrees
 
 				override protected def getMeatKeyOrdering: Ordering[EntryKey] = meatKeyOrder
 
+				// FIXME: immediate toString() cannot show parent because it wants to run now.
+				// Make a toString op
 				override def toString: String = {
 					val kidTxt = getKids.mkString("%%%")
-					s"\nbuildBinSubtree.BinNode[binData=${getBinData}, parentOpt=${getParent_opt}, kids=${kidTxt}]"
+					s"\nbuildBinSubtree.BinNode[binData=${getBinData}, kids=${kidTxt}]" // parentOpt=${getParentOptOp}
 				}
 			}
 			val promiseFinishOp: UIO[Boolean] = binNodeOptPromise.succeed(Some(node))
@@ -155,8 +159,8 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 	}
 }
 
-trait BinTreeEagerLoader extends BinTreeLoader {
-	def loadBinTreeEagerly(meatCache : MeatyItemCache)(scenParms: ScenarioParams, maxLevels : Int, maxBins : Int):
+trait BinDataEagerLoader extends BinTreeLoader {
+	def loadBinContentsEagerly(meatCache : MeatyItemCache)(scenParms: ScenarioParams, maxLevels : Int, maxBins : Int):
 	RIO[ZDynDBExec, Chunk[(BinScalarInfoTup, BinMeatInfo)]] = {
 
 		val tupStrm = scalarTupStream(scenParms, maxLevels, maxBins)

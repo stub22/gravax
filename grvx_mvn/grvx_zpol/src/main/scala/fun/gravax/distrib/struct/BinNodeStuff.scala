@@ -5,11 +5,13 @@ import zio.stream.{UStream, ZStream}
 
 private trait BinNodeStuff
 
-
 trait BinNode extends VecDistribFragment  {
 	protected def getBinData : BinData
-	protected def getParent_opt : UIO[Option[BinNode]]
 	protected def getKids : Iterable[BinNode]
+	// Parent isn't strictly necessary but we included as an exercise.  Value arrives async from a promise.
+	// It is impossible to have immutable doubly-linked tree data with both parents and kids supplied eagerly,
+	// since one has to be constructed before the other!
+	protected def getParentOptOp : UIO[Option[BinNode]]
 	protected def getMeatKeyOrdering : Ordering[EntryKey]
 
 	// Assume meatKeys are same across all bins
@@ -19,11 +21,6 @@ trait BinNode extends VecDistribFragment  {
 	// Will throw on failed lookup
 	override def projectShallowStatRow(keySyms: IndexedSeq[EntryKey]): Task[StatRow] = getBinData.mkStatRow(keySyms)
 
-	// Useful?  This just repackages the info from getBinData, with the keys in our given ordering.
-	/* private lazy val myFullBinDat : DBinDat = {
-		val keysInOrder = getBinData.allKeysSorted(getMeatKeyOrdering)
-		projectToDBD_op(keysInOrder)
-	}*/
 
 	def projectToDBD_op(orderedSyms : IndexedSeq[EntryKey]) : Task[DBinDat] = {
 		val projStatRowOp = projectShallowStatRow(orderedSyms)
@@ -56,14 +53,8 @@ trait BinNode extends VecDistribFragment  {
 				val streamOfDBDs: ZStream[Any, Throwable, DBinDat] = streamOfOneMatrix.flatMap(matrix => ZStream.fromIterable(matrix))
 				streamOfDBDs
 			})
-			val out = kidBinStream.runCollect //  .map(chnk => chnk)
+			val out = kidBinStream.runCollect
 			out
-				// ZStream.fromZIO())
-			// val fs = kidBinStream.flatten
-		//	val bmtrx: Iterable[DBinDat] = getKids.flatMap(childNode =>
-		//		childNode.projectAndCollectBins(orderedSyms, queryDepth - 1)
-		//	)
-		//	bmtrx.toIndexedSeq
 		}
 	}
 }
