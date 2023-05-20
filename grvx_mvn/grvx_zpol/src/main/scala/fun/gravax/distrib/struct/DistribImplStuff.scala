@@ -47,13 +47,15 @@ trait VecDistrib extends VecDistribFragment {
 
 }
 
-// Assume meatKeys are same across all bins
+// Assume meatKeys are same across all bins.
+// TODO:  We need protection against lopsided trees, especially incomplete groups of immediate siblings which can lead to WRONG answers.
+// Incomplete sibling groups can arise when the tree load was truncated by numBins.
 class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 	// override def getFullKeySymSet: Set[EntryKey] = rootBN.getFullKeySymSet
 
 	override def projectShallowStatRow(keySyms: IndexedSeq[EntryKey]): Task[StatRow] = rootBN.projectShallowStatRow(keySyms)
 
-	// Produces same result with another level of wrapper that includes binID and relWeight (which must be 1.0?)
+	// Produces same result, inside the DBinStatClz wrapper
 	override def projectRootBin(keySyms: IndexedSeq[EntryKey]): Task[DBinStatClz] = rootBN.projectToDBSC_op(keySyms)
 
 	// 1 level  => only the marginal self-variances stored in the root bin
@@ -76,10 +78,14 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 		// Stored mean and statistics of the root bin
 		// We always get
 		val rootStatRow_op: Task[StatRow] = projectShallowStatRow(keySyms)
-		val projectedDeepBins_op: Task[DBinStatMatrix] = rootBN.projectAndCollectBins(keySyms, maxLevels)
+		val rootMass = rootBN.getDirectMass
+		val queryDepth = maxLevels - 1 // Our root counts as "level 1".  Query depth is number of levels to dig beyond root.
+
+		val projectedDeepBins_op: Task[DBinStatMatrix] = rootBN.projectAndCollectBins(keySyms, queryDepth)
 		val bothOp: Task[(IndexedSeq[(EntryKey, EntryMean, EntryVar)], DBinStatMatrix)] = rootStatRow_op.zip(projectedDeepBins_op)
 		bothOp.flatMap(pair => {
 			val (rootStatRow, projectedDeepBinStats) = pair
+			println(s"deepBinStats.size=${projectedDeepBinStats.size}, rootStatRow=${rootStatRow}")
 			val storedRootMeanVec: IndexedSeq[EntryMean] = rootStatRow.map(_._2)
 			val storedRootVarVec: IndexedSeq[EntryVar] = rootStatRow.map(_._3)
 			val fullStatOut : StatTriMatrix = if (maxLevels == 1) {
@@ -116,14 +122,13 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 					// INNER-looping:  We iterate over the deep-expanded bin sequence, computing one of these tuples for
 					// each bin found at maxLevels. Each output tuple contains stats and one short-row of covars, for one bin.
 					val wtEntStatTups: IndexedSeq[BinEntryMidCalc] = deepBinIdx.map(bidx => {
-						// Recall that projectedDeepBins is a cached array. This step is array.apply(), not a method call.
+						// Recall that projectedDeepBinStats is a cached array. This step is array.apply(), not a method call.
 						val binStat = projectedDeepBinStats(bidx)
 						// Do the gritty estimation of variance for focus entry (binStat/eidx) and covariance for short-row
 						// of partner entries.  Those covariances require the global mean for both entries.
 						myBinStatCalcs.beginCovXprod(binStat, eidx, keySyms, storedRootMeanVec)
 					})
 
-					// val totalShortCovRow : VwtCovRow = finishShortCovRow()
 					// Total up the input rows to produce a single row of covariances - all the covariances for entry
 					// Hmm, if covPartnerEntIdx is EMPTY, then emptyShortRowWtCov will be empty.
 					val outShortCovRow = if (covPartnerEntIdx.isEmpty) IndexedSeq() else {
@@ -134,8 +139,11 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 
 					val narrowerStatTups: IndexedSeq[BinEntryMidNarr]= wtEntStatTups.map(wideTup => (wideTup._1, wideTup._2))
 
-					val pmav = myBinStatCalcs.calcAggregateMeanAndVar(narrowerStatTups, storedRootEntryMean)
-					assert(pmav._3 == storedRootEntryVar)
+					val pmav : StatEntry = myBinStatCalcs.calcAggregateMeanAndVar(narrowerStatTups, storedRootEntryMean, rootMass)
+					val (aggKey, aggMean, aggVar) = pmav
+					val rootVarTolerance = BigDecimal("0.0000001")
+					myBinStatCalcs.assertEqualWithinTolerance("aggVar", aggVar, "storedRootVar", storedRootEntryVar, rootVarTolerance )
+					// assert(pmav._3 == storedRootEntryVar)
 
 					// JDK9+ has sqrt on BigDecimal. From Scala 2.13 we may have to use Spire or access the Java object, or ...
 					// val pooledStdDev = pooledVar.sqrt(mc)
@@ -146,6 +154,8 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 				})
 
 			val weightedAvgOfBinMeans: Seq[EntryMean] = outStatsPerKey.map(_._1._2)
+			// myBinStatCalcs.assertEqualWithinTolerance("weightedAvgOfBinMeans", weightedAvgOfBinMeans, "storedRootVar", storedRootEntryVar, rootVarTolerance )
+			// TODO: Rather than comparing two collections, compare elementwise and find highest discrepancy
 			assert(weightedAvgOfBinMeans == storedRootMeanVec)
 			outStatsPerKey
 		}

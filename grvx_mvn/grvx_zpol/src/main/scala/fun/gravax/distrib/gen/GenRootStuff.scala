@@ -142,7 +142,7 @@ class GenAndStoreModule(myBinStore : BinStoreApi, myGenCtx : GenCtx) extends Kno
 			_ <- ZIO.succeed(myGenCtx.myGenBD.OLDE_computeParentMasses(brPair._2))
 			combStat <- ZIO.succeed(myGenCtx.myBinSumCalc.combineWeightMeansAndVars(brPair._2))
 			_ <- ZIO.log(s"Got combined stats: ${combStat}")
-			// combineStatsPerParent : UIO[Chunk[(BinTagInfo, DBinRelWt, StatRow)]]
+			// combineStatsPerParent : UIO[Chunk[(BinTagInfo, BinRelWt, StatRow)]]
 			parentStats <- myGenCtx.myBinSumCalc.combineStatsPerParent(brPair._2, brPair._1.getVirtLevelsChnk.last._2)
 			_ <- ZIO.log(s"Got parent stats: ${parentStats}")
 			pcomb <-   ZIO.succeed(myGenCtx.myBinSumCalc.combineVirtRsltsToWMV(parentStats))

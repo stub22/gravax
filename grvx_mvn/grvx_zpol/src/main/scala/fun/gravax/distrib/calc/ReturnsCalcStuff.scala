@@ -72,7 +72,7 @@ trait HoldingOptimizer extends KnowsStatTupleShapes {
 			// For example, if the bin contains very-large-diff outliers they will be under-represented in this variance.
 			// Maybe if variance is >= 1 this estim turns out to be a lower bound, but if var < 1 it's an upper bound?
 			// However if the client proceeds to use additional layers of the BinDat it can get a more precise estimate.
-			val binVwt: DBinRelWt = binStat.massInfo.binMass // binDat._2
+			val binVwt: BinRelWt = binStat.massInfo.binMass // binDat._2
 			val weightedEDSq = binVwt.*(estimDiffSq)
 			weightedEDSq
 		})

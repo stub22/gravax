@@ -18,7 +18,6 @@ trait KnowsBinTagShapes {
 }
 trait KnowsStatTupleShapes extends KnowsBinTagShapes with KnowsDistKeyShapes {
 
-
 	// Building up data-types this way (vs. by traits) is ... extensional and sorta constructivist / algebraic.
 	type EntryKey = String
 	type EntryValue = BigDecimal
@@ -30,18 +29,22 @@ trait KnowsStatTupleShapes extends KnowsBinTagShapes with KnowsDistKeyShapes {
 	type StatRow = IndexedSeq[StatEntry]   // For some set of keySyms, in some useful order that is not specified by type.
 	type StatMap = SMap[EntryKey, StatEntry]
 
-	type DBinMass = BigDecimal
-	type DBinRelWt = BigDecimal
-	type DBinAbsWt = BigDecimal
-	type VagueWt = BigDecimal	// VagueWt is usable in calcs where mass-vs-wt doesn't matter.
+	type BinMass = BigDecimal
+	type BinRelWt = BigDecimal
+	type BinAbsWt = BigDecimal
+
+	// VagueWt is usable in calcs where mass-vs-wt doesn't matter.
+	// The name/prefix Vwt indicates that VagueWt is used in calculating/building that type/instance.
+	type VagueWt = BigDecimal
 
 	type EntryExpects = (EntryKey, EntryMean, ExpectSquare)
 	type VwtExpectsRow = (VagueWt, IndexedSeq[EntryExpects])
 
 	type DBinID = BinTag
 
-	// One advantage of using class (vs. tup) is we can search the code for usages of individual fields.
-	// type DBinDatTup = (DBinID, DBinRelWt, StatRow) // Does NOT contain covariances.
+	// DBinDat is now replaced by DBinStatClz (case class)
+	// An advantage of using class (vs. tup) is we can search the code for usages of individual fields.
+	// type DBinDatTup = (DBinID, BinRelWt, StatRow) // Does NOT contain covariances.
 	// type DBinDat = DBinDatTup
 	// type DBinMatrix = IndexedSeq[DBinDat]
 
@@ -52,13 +55,9 @@ trait KnowsStatTupleShapes extends KnowsBinTagShapes with KnowsDistKeyShapes {
 
 	type KindaCrazy[X[_]] = List[X[String]]
 
-
-
 }
 
 object BinTypes extends KnowsStatTupleShapes
-
-
 
 // Generally we don't store Covariances in bins.
 // Note that bins may be wide (100s of assets) and full covariance takes order-squared space.
@@ -71,9 +70,9 @@ trait BinData extends KnowsStatTupleShapes {
 	def getBinTagTxt : BinTag
 	def getParentTagTxt : BinTag
 	def getBinFlavor : BinFlavor // TODO: Make enum-ish
-	// def getRelWt : DBinRelWt
+	// def getRelWt : BinRelWt
 	// def getAbsWt : BigDecimal
-	def getMass : DBinRelWt
+	def getMass : BinMass
 
 	// protected def getStatMap : StatMap
 
@@ -114,9 +113,9 @@ trait BinDataUsingInfo extends BinData {
 
 	override def getBinFlavor: BinFlavor = myTagInfo.binFlavor
 
-	override def getMass: DBinRelWt = myMassInfo.binMass
+	override def getMass: BinMass = myMassInfo.binMass
 
-	// override def getRelWt: DBinRelWt = myMassInfo.relWt_opt.get
+	// override def getRelWt: BinRelWt = myMassInfo.relWt_opt.get
 
 	override def mkStatRow(keySeq: IndexedSeq[EntryKey]): Task[StatRow] = getMeatInfoOp.map(_.mkStatRow(keySeq))
 

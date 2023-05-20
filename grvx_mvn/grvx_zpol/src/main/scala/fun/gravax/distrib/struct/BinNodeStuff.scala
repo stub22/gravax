@@ -15,6 +15,7 @@ trait BinNode extends VecDistribFragment  {
 	protected def getParentOptOp : UIO[Option[BinNode]]
 	protected def getMeatKeyOrdering : Ordering[EntryKey]
 
+	def getDirectMass = getBinData.getMass
 	// Assume meatKeys are same across all bins
 	// override def getFullKeySymSet : Set[EntryKey] = getBinData.getStatMap.keySet
 

@@ -31,7 +31,7 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 			assert(combo.size == parentTagNums.size, s"combo.size ${combo.size} != parentTagNums.size ${parentTagNums.size}")
 			// Could make this a stream to
 			// combo.foreach(row =>
-			val aggregateRowChunk: Chunk[(BinTagInfo, BinNumInfo, DBinRelWt, StatRow)] = combo.map(row => {
+			val aggregateRowChunk: Chunk[(BinTagInfo, BinNumInfo, BinRelWt, StatRow)] = combo.map(row => {
 				val (tagInfo, numInfo, (ptag, rsltChnk)) = row
 				// Ensure that the parent binTags match up as expected.
 				assert(tagInfo.binTag == ptag, s"tagInfo.binTag ${tagInfo.binTag} != ptag ${ptag}")

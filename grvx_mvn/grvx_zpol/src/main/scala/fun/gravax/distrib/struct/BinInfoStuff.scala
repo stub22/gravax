@@ -15,7 +15,7 @@ case class BinFullKeyInfo(tblNm : String, scenPartKey : String, compoundSortKey 
 
 case class BinTimeInfo(obsTime : String, predTime : String, calcTime : String)
 case class BinTagInfo(binTag : BinTypes.BinTag, parentTag : BinTypes.BinTag, binFlavor : BinTypes.BinFlavor) // levelNum, siblingNum
-case class BinMassInfo(binMass : BinTypes.DBinMass, relWt_opt : Option[BinTypes.DBinRelWt], absWt_opt : Option[BinTypes.DBinAbsWt] = None)
+case class BinMassInfo(binMass : BinTypes.BinMass, relWt_opt : Option[BinTypes.BinRelWt], absWt_opt : Option[BinTypes.BinAbsWt] = None)
 
 // TODO: add these index numbers to persistent store?
 
