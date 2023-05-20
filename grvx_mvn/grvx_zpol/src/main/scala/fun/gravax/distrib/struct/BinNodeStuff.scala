@@ -22,21 +22,8 @@ trait BinNode extends VecDistribFragment  {
 	// Will throw on failed lookup
 	override def projectShallowStatRow(keySyms: IndexedSeq[EntryKey]): Task[StatRow] = getBinData.mkStatRow(keySyms)
 
-
-	private def projectToDBD_op_OLDE(orderedSyms : IndexedSeq[EntryKey]) : Task[DBinDat] = {
-		val projStatRowOp = projectShallowStatRow(orderedSyms)
-		// projStatRowOp.map(psrow => (getBinData.getBinTagTxt, getBinData.getRelWt, psrow))
-		???
-	}
 	def projectToDBSC_op(orderedSyms : IndexedSeq[EntryKey]) : Task[DBinStatClz] = {
 		getBinData.getDBSC(orderedSyms)
-		/*
-		val projStatRowOp = projectShallowStatRow(orderedSyms)
-		projStatRowOp.map(psrow => {
-
-			(getBinData.getBinTagTxt, getBinData.getMass, psrow))
-		}
-		 */
 	}
 
 	def allKeysSorted : Task[Seq[EntryKey]] = {

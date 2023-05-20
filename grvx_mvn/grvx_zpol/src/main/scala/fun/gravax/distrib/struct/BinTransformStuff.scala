@@ -8,13 +8,6 @@ private trait BinTransformStuff
 
 trait BinDataXformer extends KnowsGenTypes  {
 
-	def binSpecToDBD(bbSpec : BinSpec, keySyms: IndexedSeq[EntryKey]) : DBinDat = {
-		val (tagInfo, numInfo, massInfo, binMeat) = bbSpec
-		val statRow = binMeat.mkStatRow(keySyms)
-		val binIdHmm = -999 // tagInfo.binTag
-		val dbd = (binIdHmm.toString, massInfo.binMass, statRow )
-		dbd
-	}
 	def aggStatsToBinSpecStrm(aggStats : IndexedSeq[(BinTagInfo, BinNumInfo, DBinRelWt, StatRow)]) : UStream[BinSpec] = {
 		val aggStStrm = ZStream.fromIterable(aggStats)
 		val binSpecStrm = aggStStrm.map(aggStatTup => {

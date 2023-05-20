@@ -128,11 +128,11 @@ trait BinStatCalcs extends KnowsDistribTypes {
 		val aggregateEntry : StatEntry = (firstEntryKey, sumOfWtdMeans, pooledVar )
 		aggregateEntry
 	}
-	def beginCovXprod(dbd : DBinDat, eidx : Int, keySyms: IndexedSeq[EntryKey], storedRootMeanVec: IndexedSeq[EntryMean]): BinEntryMidCalc = {
+	def beginCovXprod(binStat : DBinStatClz, eidx : Int, keySyms: IndexedSeq[EntryKey], storedRootMeanVec: IndexedSeq[EntryMean]): BinEntryMidCalc = {
 
 		val covPartnerEntIdx: IndexedSeq[Int] = eidx + 1 to keySyms.size - 1
-		val wt = dbd._2
-		val statRow = dbd._3
+		val vwt = binStat.massInfo.binMass
+		val statRow = binStat.statRow
 		val localEntry = statRow(eidx)
 		val localMean = localEntry._2
 		// Naive formulation of "Excess" i.e. the deviation of this bin-mean from the global-mean.
@@ -147,7 +147,7 @@ trait BinStatCalcs extends KnowsDistribTypes {
 			val localCovar = localExc.*(coLocalExc) // Covariance estimated for key-pair within this bin
 			(coentKey, localCovar)
 		})
-		(wt, localEntry, covShortRow)
+		(vwt, localEntry, covShortRow)
 	}
 	// type VwtCovTup = (EntryKey, EntryKey, VwtCov)
 	// wtEntStatTups tells the covariance row for each bins.  We do the weighted sum of those covariance rows.

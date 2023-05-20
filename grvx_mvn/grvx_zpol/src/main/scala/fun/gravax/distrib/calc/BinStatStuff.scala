@@ -48,43 +48,32 @@ trait BinSummaryCalc extends KnowsGenTypes  {
 		myBinStatCalcs.aggregateWeightsMeansAndVars(binStatSeq)
 	}
 	private def baseGenRsltsToDBinStats(baseRsltSeq : IndexedSeq[BinStoreRslt]) : IndexedSeq[DBinStatClz] = {
-		val (taggedBinStats, ekeys) = baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq)
-		// taggedDBDs.map(_._3)
+		val (taggedBinStats, ekeys) = baseGenRsltsToDBinStatsAndEKeys(baseRsltSeq)
 		taggedBinStats
 	}
 	def combineVirtRsltsToWMV(virtRsltSeq : IndexedSeq[VirtRsltRow]) : (VagueWt, StatRow)  = {
 		val dbdSeq : IndexedSeq[DBinStatClz] = virtRsltSeq.map(vrr => {
 			val (tagInfo, numInfo, binMass, statRow) = vrr
-			// val binIdHmm = -999 // tagInfo.binTag
-			// val dbd = (binIdHmm.toString, binMass, statRow )
 			val massInfo = BinMassInfo(binMass, None, None)
 			val dbscInst = DBinStatClz(tagInfo, massInfo, statRow)
-			// dbd
 			dbscInst
 		})
 		myBinStatCalcs.aggregateWeightsMeansAndVars(dbdSeq)
 	}
 	// type BinStoreRslt = (BinSpec, PrimaryKey, Option[Item])
-	private def baseGenRsltsToTaggedDBinDatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) :
-		//		(IndexedSeq[(ParentTag, BinTag, DBinDat)], IndexedSeq[EntryKey]) = {
-			(IndexedSeq[DBinStatClz], IndexedSeq[EntryKey]) = {
+	private def baseGenRsltsToDBinStatsAndEKeys(baseRsltSeq : IndexedSeq[BinStoreRslt]) :
+				(IndexedSeq[DBinStatClz], IndexedSeq[EntryKey]) = {
 		val binSpecs = baseRsltSeq.map(_._1)
 		val firstMeat = binSpecs.head._4
 
 		val keySeq : IndexedSeq[BinTypes.EntryKey] = firstMeat.allKeysSorted(myMeatKeyOrder)
-		val binDatSeq_OLDE : IndexedSeq[(ParentTag, BinTag, DBinDat)] = binSpecs.map(binSpec => {
-			val dbd : DBinDat = myBDX.binSpecToDBD(binSpec, keySeq)
-			val tagInfo : BinTagInfo = binSpec._1
-			(tagInfo.parentTag, tagInfo.binTag, dbd)
 
-		})
 		val binStatSeq : IndexedSeq[DBinStatClz] = binSpecs.map(binSpec => {
 			val (tagInfo, numInfo, massInfo, binMeat) = binSpec
 			val statRow = binMeat.mkStatRow(keySeq)
 			val dbscInst = DBinStatClz(tagInfo, massInfo, statRow)
 			dbscInst
 		})
-		// (binDatSeq_OLDE, keySeq)
 		(binStatSeq, keySeq)
 	}
 

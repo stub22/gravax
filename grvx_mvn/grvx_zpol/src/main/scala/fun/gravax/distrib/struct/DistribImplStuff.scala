@@ -37,13 +37,13 @@ trait VecDistrib extends VecDistribFragment {
 
 	// Project all data of the distribution for the given keys only, into a new instance of this type.
 	// We COULD use this to scope the project/marginal operations and simplify the other signatures.
-	def projectMarginalDistrib_DoWeNeedThis(keySyms : Seq[EntryKey]) : VecDistrib = ???
+	// def projectMarginalDistrib_DoWeNeedThis(keySyms : Seq[EntryKey]) : VecDistrib = ???
 
 	// Pull out the data of the root bin for the given keys (only)
 	def projectRootBin(keySyms : IndexedSeq[EntryKey]) : Task[DBinStatClz]
 
 	// Pull out the data of all direct children of the given bin, for the given keys only.
-	def projectChildBins(parentBinID : DBinID, keySyms : IndexedSeq[EntryKey]) : Seq[DBinDat] = ???
+	def projectChildBins(parentBinID : DBinID, keySyms : IndexedSeq[EntryKey]) : Task[IndexedSeq[DBinStatClz]] = ???
 
 }
 
@@ -118,10 +118,9 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 					val wtEntStatTups: IndexedSeq[BinEntryMidCalc] = deepBinIdx.map(bidx => {
 						// Recall that projectedDeepBins is a cached array. This step is array.apply(), not a method call.
 						val binStat = projectedDeepBinStats(bidx)
-						val dbd: (DBinID, DBinRelWt, StatRow) = ???
-						// Do the gritty estimation of variance for focus entry (dbd/eidx) and covariance for short-row
+						// Do the gritty estimation of variance for focus entry (binStat/eidx) and covariance for short-row
 						// of partner entries.  Those covariances require the global mean for both entries.
-						myBinStatCalcs.beginCovXprod(dbd, eidx, keySyms, storedRootMeanVec)
+						myBinStatCalcs.beginCovXprod(binStat, eidx, keySyms, storedRootMeanVec)
 					})
 
 					// val totalShortCovRow : VwtCovRow = finishShortCovRow()

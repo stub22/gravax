@@ -44,7 +44,7 @@ trait HoldingOptimizer extends KnowsStatTupleShapes {
 			// Our method is more accurate when the bins are mostly disjoint.  We can try to improve by asking for
 			// additional information with the bins.
 			// Note that Sortino ratio emphasizes the downside variance, whereas Sharpe treats all variance equally.
-			val childDBDs : Seq[maRetDist.DBinDat] = maRetDist.projectChildBins(rootBinTag, availAssetSeq)
+			val childStatsOp : Task[IndexedSeq[DBinStatClz]] = maRetDist.projectChildBins(rootBinTag, availAssetSeq)
 			// Now we need either
 			// 1) An iterative algorithm, e.g. gradient descent.
 			// 2) A gaussian approximation using covariances (which turns optimization into a matrix-inverse problem).
@@ -58,12 +58,12 @@ trait HoldingOptimizer extends KnowsStatTupleShapes {
 	}
 
 
-	def calcVariance(meanRet : AnnRet, assetWeights : Seq[HoldWt], binDats : Seq[DBinDat])
+	def calcVariance(meanRet : AnnRet, assetWeights : Seq[HoldWt], binStats : Seq[DBinStatClz])
 
 	// TODO:  Make this expression differentiable in the asset weights, so that we can use gradient descent.
-	def estimVariance(meanRet : AnnRet, assetWeights : Seq[HoldWt], binDats : Seq[DBinDat]) : AnnRetVar = {
-		val weightedSquaredDevs : Seq[AnnRetVar] = binDats.map(binDat => {
-			val binRow: StatRow = binDat._3
+	def estimVariance(meanRet : AnnRet, assetWeights : Seq[HoldWt], binDats : Seq[DBinStatClz]) : AnnRetVar = {
+		val weightedSquaredDevs : Seq[AnnRetVar] = binDats.map(binStat => {
+			val binRow: StatRow = binStat.statRow // binDat._3
 			val binARs : Seq[AssetRet] = binRow
 			val estimRetForBin = calcReturnAtVec(assetWeights, binARs)
 			val estimDiff = estimRetForBin - meanRet
@@ -72,8 +72,8 @@ trait HoldingOptimizer extends KnowsStatTupleShapes {
 			// For example, if the bin contains very-large-diff outliers they will be under-represented in this variance.
 			// Maybe if variance is >= 1 this estim turns out to be a lower bound, but if var < 1 it's an upper bound?
 			// However if the client proceeds to use additional layers of the BinDat it can get a more precise estimate.
-			val binWt: DBinRelWt = binDat._2
-			val weightedEDSq = binWt.*(estimDiffSq)
+			val binVwt: DBinRelWt = binStat.massInfo.binMass // binDat._2
+			val weightedEDSq = binVwt.*(estimDiffSq)
 			weightedEDSq
 		})
 		val summedWSDs = weightedSquaredDevs.reduce((ltSum, rtSum) => ltSum.+(rtSum))

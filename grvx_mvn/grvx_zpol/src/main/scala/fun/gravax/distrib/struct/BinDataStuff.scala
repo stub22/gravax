@@ -40,12 +40,10 @@ trait KnowsStatTupleShapes extends KnowsBinTagShapes with KnowsDistKeyShapes {
 
 	type DBinID = BinTag
 
-	type DBinDatTup = (DBinID, DBinRelWt, StatRow) // Does NOT contain covariances.
 	// One advantage of using class (vs. tup) is we can search the code for usages of individual fields.
-
-	type DBinDat = DBinDatTup
-
-	type DBinMatrix = IndexedSeq[DBinDat]
+	// type DBinDatTup = (DBinID, DBinRelWt, StatRow) // Does NOT contain covariances.
+	// type DBinDat = DBinDatTup
+	// type DBinMatrix = IndexedSeq[DBinDat]
 
 	type DBinStatMatrix = IndexedSeq[DBinStatClz]
 
