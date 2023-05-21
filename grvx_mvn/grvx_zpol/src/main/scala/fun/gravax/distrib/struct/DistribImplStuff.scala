@@ -83,7 +83,7 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 
 		val projectedDeepBins_op: Task[DBinStatMatrix] = rootBN.projectAndCollectBins(keySyms, queryDepth)
 		val bothOp: Task[(IndexedSeq[(EntryKey, EntryMean, EntryVar)], DBinStatMatrix)] = rootStatRow_op.zip(projectedDeepBins_op)
-		bothOp.flatMap(pair => {
+		val matrixTask: Task[StatTriMatrix] = bothOp.map(pair => {
 			val (rootStatRow, projectedDeepBinStats) = pair
 			println(s"deepBinStats.size=${projectedDeepBinStats.size}, rootStatRow=${rootStatRow}")
 			val storedRootMeanVec: IndexedSeq[EntryMean] = rootStatRow.map(_._2)
@@ -151,17 +151,17 @@ class VecDistribBinnedImpl(rootBN : BinNode) extends VecDistrib {
 
 					val outStat: StatEntry = pmav  // (ekey, sumOfWtdMeans, pooledVar)
 					(outStat, outShortCovRow) // should be same as the stored stat (for this key) in the parent bin.
-				})
+				}) // end of outStatsPerKey
 
-			val weightedAvgOfBinMeans: Seq[EntryMean] = outStatsPerKey.map(_._1._2)
-			// myBinStatCalcs.assertEqualWithinTolerance("weightedAvgOfBinMeans", weightedAvgOfBinMeans, "storedRootVar", storedRootEntryVar, rootVarTolerance )
-			// TODO: Rather than comparing two collections, compare elementwise and find highest discrepancy
-			assert(weightedAvgOfBinMeans == storedRootMeanVec)
-			outStatsPerKey
-		}
-		fullStatOut
-		???
-		})
+				val aggBinMeans: Seq[EntryMean] = outStatsPerKey.map(_._1._2)
+				println(s"aggBinMeans=${aggBinMeans}")
+				println(s"storedRootMeanVec=${storedRootMeanVec}")
+				myBinStatCalcs.assertNumSeqsRoughlyEqual("aggBinMeans", aggBinMeans, "storedRootMeanVec", storedRootMeanVec, myBinStatCalcs.myEqTolerance)
+				outStatsPerKey
+			} // end of else
+			fullStatOut // result of bothOp.map(pair => {
+		}) // end of matrixTask
+		matrixTask
 	}
 }
 

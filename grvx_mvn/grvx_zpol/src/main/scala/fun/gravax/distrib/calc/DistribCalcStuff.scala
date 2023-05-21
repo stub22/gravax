@@ -108,12 +108,19 @@ trait BinStatCalcs extends KnowsDistribTypes {
 		val absDiff = a.-(b).abs
 		absDiff.compareTo(tol) < 0
 	}
-	def notEqualMsg(name01 : String, num01 : BigDecimal, name02 : String, num02 : BigDecimal, tol : BigDecimal) = {
+	def notEqualMsg(name01 : String, num01 : BigDecimal, name02 : String, num02 : BigDecimal, tol : BigDecimal) : String = {
 		val absDiff = num01.-(num02).abs
 		s"${name01}=${num01} != ${num02}=${name02}, absDiff=${absDiff} >= ${tol}=tolerance"
 	}
 	def assertEqualWithinTolerance(name01 : String, num01 : BigDecimal, name02 : String, num02 : BigDecimal, tol : BigDecimal) = {
 		assert(equalWithinTolerance(num01, num02, tol), notEqualMsg(name01, num01, name02, num02, tol))
+	}
+	def assertNumSeqsRoughlyEqual(name01 : String, numSeq01 : Seq[BigDecimal], name02 : String, numSeq02 : Seq[BigDecimal], tol : BigDecimal) = {
+		val numTups = numSeq01.zip(numSeq02).zipWithIndex
+		numTups.foreach(tup => {
+			val ((num01, num02), idx) = tup
+			assertEqualWithinTolerance(s"${name01}_${idx}", num01, s"${name02}_${idx}", num02, tol)
+		})
 	}
 	def calcAggregateMeanAndVar(statTupsForOneEntry: IndexedSeq[BinEntryMidNarr], storedRootEntryMean: EntryMean, storedRootMass : BinMass): StatEntry = {
 		// TODO:  Assert prove all entryKeys equal, or factor out.
@@ -149,7 +156,7 @@ trait BinStatCalcs extends KnowsDistribTypes {
 		// JDK9+ has sqrt on BigDecimal. From Scala 2.13 we may have to use Spire or access the Java object, or ...
 		// val pooledStdDev = pooledVar.sqrt(mc)
 		// val jbd = pooledVar.underlying() // Gets the Java BD
-		val aggregateEntry : StatEntry = (firstEntryKey, sumOfWtdMeans, pooledVar )
+		val aggregateEntry : StatEntry = (firstEntryKey, aggMean, pooledVar )
 		aggregateEntry
 	}
 	def beginCovXprod(binStat : DBinStatClz, eidx : Int, keySyms: IndexedSeq[EntryKey], storedRootMeanVec: IndexedSeq[EntryMean]): BinEntryMidCalc = {

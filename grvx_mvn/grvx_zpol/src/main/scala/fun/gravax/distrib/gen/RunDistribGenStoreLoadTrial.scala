@@ -91,7 +91,7 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 			keysOfInterest <- myVDTH.chooseSomeKeys(ZRandom.RandomLive)(rootBinNode, covarKeyCnt)
 			_ <- ZIO.log(s"chooseSomeKeys = ${keysOfInterest}")
 			statMatrix <- myVDTH.computeCovars(rootBinNode)(keysOfInterest, covarDepth)
-			_ <- ZIO.log(s"computeCovars.rootBinNode = ${statMatrix}")
+			_ <- ZIO.log(s"computeCovars.statMatrix = ${statMatrix}")
 		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_ReadSomeBins.forBlock may be ignored") // .map to produce the output ZIO
 		println("println END mkDynProg_ReadSomeBins")
 		forBlock.unit
