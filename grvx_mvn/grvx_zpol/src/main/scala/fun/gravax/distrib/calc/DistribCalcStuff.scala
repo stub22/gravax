@@ -181,12 +181,16 @@ trait BinStatCalcs extends KnowsDistribTypes {
 		(vwt, localEntry, covShortRow)
 	}
 	// type VwtCovTup = (EntryKey, EntryKey, VwtCov)
+	// type VwtCovRow = IndexedSeq[VwtCovTup]
 	// wtEntStatTups tells the covariance row for each bins.  We do the weighted sum of those covariance rows.
 	// TODO:  Derive the emptyShortRowWtCov from wtEntStatTups.head
 	def finishShortCovRow(wtEntStatTups: IndexedSeq[(VagueWt, StatEntry, UnwtCovRow)], emptyShortRowWtCov : VwtCovRow): VwtCovRow = {
 		// Total up the input rows to produce a single row of covariances - all the covariances for entry.
 		// val emptyShortRowWtCov : VwtCovRow = covPartnerEntIdx.map(cpeidx => (ekey, keySyms(cpeidx), zeroBD))
-		val totalShortCovRow : VwtCovRow = wtEntStatTups.foldLeft(emptyShortRowWtCov)((prevSumRow, wtStatTup) => {
+		val initTotalMass = myStatEntryOps.zeroBD
+		val initResultPair = (emptyShortRowWtCov, initTotalMass)
+		val (totalShortCovRow, totalMass) : (VwtCovRow, BinMass) = wtEntStatTups.foldLeft(initResultPair)((prevRsltPair, wtStatTup) => {
+			val (prevSumRow, prevWtSum) = prevRsltPair
 			val rowWt = wtStatTup._1 // This vwt came from the bin corresponding to this row
 			val covShortRow: UnwtCovRow = wtStatTup._3
 			val comb: IndexedSeq[(VwtCovTup, UnwtCovPair)] = prevSumRow.zip(covShortRow)
@@ -196,9 +200,17 @@ trait BinStatCalcs extends KnowsDistribTypes {
 				val nxtSum = prevSumTup._3.+(nxtInWeighted)
 				(prevSumTup._1, prevSumTup._2, nxtSum)
 			})
-			summedShortRow
+			val nxtWtSum = prevWtSum.+(rowWt)
+			(summedShortRow, nxtWtSum)
 		})
-		totalShortCovRow
+		println(s"totalMass=${totalMass}, unnormShortCovRow=${totalShortCovRow}")
+		val aggShortCovRow = totalShortCovRow.map(covTup => {
+			val covSum = covTup._3
+			val aggCov = covSum./(totalMass)
+			(covTup._1, covTup._2, aggCov)
+		})
+		println(s"aggShortCovRow=${aggShortCovRow}")
+		aggShortCovRow
 	}
 }
 trait TooManyTypes {
