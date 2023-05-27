@@ -7,6 +7,8 @@ import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.lambda.LambdaClient
 import software.amazon.awssdk.services.lambda.model.InvokeRequest
 
+import java.util
+
 private trait LambdaClientTrial
 
 /*
@@ -22,12 +24,15 @@ object RunZaxlamClientTrials {
 		println(s"Got howdyRslt: ${howdyRsltTxt}")
 		val helloRsltTxt = lamInvk.runHello("apple", "banana")
 		println(s"Got helloRslt: ${helloRsltTxt}")
+
+		lamInvk.runMappy
 	}
 }
 trait LambdaInvoker {
-	val funcPrefix_zaxLamFuncs = "arn:aws:lambda:us-west-2:693649829226:function:"
-	val funcNm_Hello : String = funcPrefix_zaxLamFuncs + "HelloZaxlam_007" //  "arn:aws:lambda:us-west-2:693649829226:function:HelloZaxlam_007" // args(0)
-	val funcNm_Howdy : String = funcPrefix_zaxLamFuncs + "howdyZaxlam_007" // "arn:aws:lambda:us-west-2:693649829226:function:howdyZaxlam_007"
+	val funcPrefix_zaxLamFuncs_OLDE = "arn:aws:lambda:us-west-2:693649829226:function:"
+	val funcNm_Hello : String = funcPrefix_zaxLamFuncs_OLDE + "HelloZaxlam_007" //  "arn:aws:lambda:us-west-2:693649829226:function:HelloZaxlam_007" // args(0)
+	val funcNm_Howdy : String = funcPrefix_zaxLamFuncs_OLDE + "howdyZaxlam_007" // "arn:aws:lambda:us-west-2:693649829226:function:howdyZaxlam_007"
+	val funcNm_Mappy = "arn:aws:lambda:us-west-2:693649829226:function:MappyZaxlamFunc102"
 	val region  = Region.US_WEST_2
 	val credProv = ProfileCredentialsProvider.create
 	val awsLambda = LambdaClient.builder.region(region).credentialsProvider(credProv).build
@@ -52,6 +57,18 @@ trait LambdaInvoker {
 		runFunc(funcNm_Hello, inJSON)
 	}
 
+	def runMappy : Unit = {
+		import scala.jdk.CollectionConverters._
+		val inJSON: JSONObject = new JSONObject()
+		inJSON.put("color", "green")
+		inJSON.put("flavor", "salty")
+		inJSON.put("height", 420.5)
+		val jnkList = List[Object](14 : java.lang.Integer, "hey", -75.2f : java.lang.Float)
+		val jlj: util.List[Object] = jnkList.asJava
+		inJSON.put("stuffy", jlj)
+		val outDumpTxt = runFunc(funcNm_Mappy, inJSON)
+		println(s"runMappy.outDumpTxt = ${outDumpTxt}")
+	}
 	def runFunc(funcNm : String, inJsonObj : JSONObject): String = {
 		val jsonBlobTxt = inJsonObj.toString()
 		println(s"LambdaInvoker.runFunc built jsonBlobTxt: ${jsonBlobTxt}")

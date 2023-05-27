@@ -82,6 +82,27 @@
             <artifactId>json</artifactId>
             <version>20230227</version>
         </dependency>
+
+        <!-- Bring in zpol to get our zio + dynamodb-client features -->
+        <dependency>
+            <groupId>fun.gravax</groupId>
+            <artifactId>gravax.zpol</artifactId>
+            <version>${gravax.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.github.mjakubowski84</groupId>
+                    <artifactId>parquet4s-core_${scalver.suffix}</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.datasketches</groupId>
+                    <artifactId>datasketches-java</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
     </dependencies>
 
     <repositories>
@@ -136,6 +157,7 @@
                             <artifactSet>
                                 <excludes>
                                     <exclude>org.scalatest:*</exclude>
+                                    <exclude>org.apache.hadoop:*</exclude>
                                 </excludes>
                             </artifactSet>
                         </configuration>

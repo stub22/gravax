@@ -1,6 +1,6 @@
 package fun.gravax.zaxlam.plain
 
-import com.amazonaws.services.lambda.runtime.{Context, LambdaLogger, RequestHandler}
+import com.amazonaws.services.lambda.runtime.{ClientContext, CognitoIdentity, Context, LambdaLogger, RequestHandler}
 
 import java.util.{List => JList, Map => JMap}
 import scala.collection.immutable.{Map => SMap}
@@ -13,11 +13,39 @@ private trait EasierLambdaStuff
 trait HandlerMon {
 	def dumpCtx(lamLog: LambdaLogger, ctx: Context) : Unit = {
 		lamLog.log(s"HandlerMon.dumpCtx got ctx: ${ctx}\n")
-
+		val ident: CognitoIdentity = ctx.getIdentity
+		lamLog.log(s"HandlerMon.dumpCtx got cognito-identity: ${ident}\n")
+		if (ident != null) {
+			val identId = ident.getIdentityId
+			val poolId = ident.getIdentityPoolId
+			lamLog.log(s"HandlerMon.dumpCtx getIdentityId=${identId}, getIdentityPoolId=${poolId}\n")
+			// lamLog
+		}
+		val cliCtx: ClientContext = ctx.getClientContext
+		lamLog.log(s"HandlerMon.dumpCtx got client-context: ${cliCtx}\n")
+		if (cliCtx != null) {
+			val cliCli = cliCtx.getClient
+			lamLog.log(s"HandlerMon.dumpCtx got cli-cli: ${cliCli}\n")
+			val cliCust = cliCtx.getCustom
+			lamLog.log(s"HandlerMon.dumpCtx got cli-custom: ${cliCust}\n")
+			val cliEnv = cliCtx.getEnvironment
+			lamLog.log(s"HandlerMon.dumpCtx got cli-env: ${cliCust}\n")
+		}
+		val rqID = ctx.getAwsRequestId
+		val funcArn = ctx.getInvokedFunctionArn
+		val funcName = ctx.getFunctionName
+		val funcVers = ctx.getFunctionVersion
+		lamLog.log(s"HandlerMon.dumpCtx got awsRqId=${rqID}, funcArn=${funcArn}, funcNm=${funcName}, funcVers=${funcVers}\n")
+		val memLimit: Int = ctx.getMemoryLimitInMB
+		val remainTime: Int = ctx.getRemainingTimeInMillis
+		val logGrpNm = ctx.getLogGroupName
+		val logStrmNm = ctx.getLogStreamName
+		lamLog.log(s"HandlerMon.dumpCtx got memLimit=${memLimit}, remainTime=${remainTime}, logGrpNm=${logGrpNm}, logStrmNm=${logStrmNm}\n")
 	}
 	def dumpEnv(lamLog: LambdaLogger) : Unit = {
+		// The env includes AWS secret keys so this is a security risk.
 		val envJMap: JMap[String, String] = System.getenv()
-		lamLog.log(s"HandlerMon.dumpEnv got envJMap: ${envJMap}\n")
+		// lamLog.log(s"HandlerMon.dumpEnv got envJMap: ${envJMap}\n")
 	}
 	def dumpEntityWithTypeInfo(lamLog: LambdaLogger, entityName : String, entityData : Any) : Unit = {
 		if (entityData == null) {
@@ -118,21 +146,43 @@ class DeeperZaxlam() extends AxLamHandler[JMap[String,InboundDat], JMap[String,Z
 		outJMap
 	}
 }
+
+
 // Using AnyRef because AWS Lambda decoder will always pass Objects/boxed types.
 class MappyZaxlam() extends AxLamHandler[JMap[String, AnyRef], JMap[String, AnyRef]] {
 	override protected def handleRq(inJMap: JMap[String, AnyRef], ctx: Context): JMap[String, AnyRef] = {
-		val inSMap: SMap[String, AnyRef] = inJMap.asScala.toMap
-		val envJMap: JMap[String, String] = System.getenv()
-		val envSMap: SMap[String, String] = envJMap.asScala.toMap
+		// DANGER: SysEnv may contain AWS keys and other info we don't want to accidentally log, print, return, store, ...
+		// val envJMap: JMap[String, String] = System.getenv()
+		// val envSMap: SMap[String, String] = envJMap.asScala.toMap
+
 		// The output JSON serializer wants to see JAVA mutable maps and Lists
-		val outSMap = SMap[String, AnyRef]("INPUT_JMAP" -> inJMap, "ENV_JMAP" -> envJMap)
-		val outJMap: JMap[String, AnyRef] = outSMap.asJava
+		val inSMap: SMap[String, AnyRef] = deepConvertJMapToSMap(inJMap)
+		val outSMap = lambdaScala(inSMap)
+		val outJMap: JMap[String, AnyRef] = deepConvertSMapToJMap(outSMap)
 		outJMap
 	}
-	// def lambdaWork(inSMap : SMap[String, Any]) = ???
+
+	def deepConvertJMapToSMap(jMap : JMap[String, AnyRef]) : SMap[String, AnyRef] = {
+		// FIXME: This step does not deep-convert any JMaps or JLists lurking in the values.
+		val shallowSMap: SMap[String, AnyRef] = jMap.asScala.toMap
+		shallowSMap
+	}
+	def deepConvertSMapToJMap(sMap : SMap[String, AnyRef]) : JMap[String, AnyRef] = {
+		// FIXME: This step does not deep-convert any SMaps or SLists lurking in the values.
+		val shallowJMap = sMap.asJava
+		shallowJMap
+	}
+	val MAPKEY_ECHO_MAP = "ECHO_MAP"
+	// Override this method to do something useful.
+	protected def lambdaScala(inSMap : SMap[String, AnyRef]) : SMap[String, AnyRef] = {
+		val echoedInputJMap = deepConvertSMapToJMap(inSMap)
+		val dummyOutSMap = SMap[String, AnyRef](MAPKEY_ECHO_MAP -> echoedInputJMap) // , "ENV_JMAP" -> envJMap)
+		dummyOutSMap
+	}
 }
 
 /*
+
 Dumping list: List(13.2, huzzah, 9)
 someDat.toString=13.2, clzInf=java.lang.Double Not a map or list: 13.2
 someDat.toString=huzzah, clzInf=java.lang.String Not a map or list: huzzah

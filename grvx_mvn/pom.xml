@@ -37,6 +37,8 @@
 
 		<axmgc.groupId>org.appdapter</axmgc.groupId>
 		<axmgc.version>2.0.0-SNAPSHOT</axmgc.version>
+
+        <gravax.version>1.0.0-SNAPSHOT</gravax.version>
     </properties>
 
     <modules>

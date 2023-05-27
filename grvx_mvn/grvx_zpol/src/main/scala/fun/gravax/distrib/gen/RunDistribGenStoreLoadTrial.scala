@@ -1,14 +1,48 @@
 package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, DynLayerSetup, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
-import fun.gravax.distrib.struct.{BinNumInfo, BinTagInfo, BinDataEagerLoader, BinTreeLazyLoader, BinTreeLoader, VecDistTestHelper}
+import fun.gravax.distrib.gen.RunDistribGenStoreLoadTrial.myTaskMaker
+import fun.gravax.distrib.struct.{BinDataEagerLoader, BinNumInfo, BinTagInfo, BinTreeLazyLoader, BinTreeLoader, VecDistTestHelper}
 import zio.cache.CacheStats
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom}
-
+import zio.{Runtime => ZRuntime, Unsafe => ZUnsafe}
 import java.net.URI
 
-object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
+object RunDistribGenStoreLoadTrial extends ZIOAppDefault {
+
+	lazy val myTaskMaker = new DistribGenStoreLoadTrial {}
+
+	override def run: Task[Unit] = {
+		val task = myTaskMaker.mkTask
+		task
+	}
+}
+
+object RunDistribGenStoreLoadTrialFromMain {
+	// import zio._
+	lazy val myTaskMaker = new DistribGenStoreLoadTrial {}
+	def main(args: Array[String]): Unit = {
+		println("RunDistribGenStoreLoadTrialFromMain.println says hello!")
+		val task = myTaskMaker.mkTask
+		UnsafeTaskRunner.doRunNow(task)
+		println("RunDistribGenStoreLoadTrialFromMain.println says byebye!")
+	}
+}
+
+object UnsafeTaskRunner {
+	def doRunNow(task : Task[Unit]) : Unit = {
+		println(s"======================= UnsafeTaskRunner START, inputTask=${task}")
+		val zioRuntime = ZRuntime.default
+		println(s"UnsafeTaskRunner zioRuntime=${zioRuntime}")
+		ZUnsafe.unsafe { implicit unsafeThingy =>
+			zioRuntime.unsafe.run(task).getOrThrowFiberFailure()
+		}
+		println("======================== UnsafeTaskRunner END")
+	}
+}
+
+trait DistribGenStoreLoadTrial extends KnowsGenTypes {
 	// 4 booleans
 	private lazy val myDynLayerSetup = new DynLayerSetup {
 		override def getFlg_useLocalDB = true // true if local-only, false if remote AW$
@@ -41,8 +75,8 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault with KnowsGenTypes {
 	}
 	/*******************************************************************************/
 
-	override def run: Task[Unit] = {
-		val program = if (getFlg_doFullTableCycle)	mkDynProg_WriteThenReadOneDistrib
+	def mkTask: Task[Unit] = {
+		val program: RIO[ZDynDBExec, Unit] = if (getFlg_doFullTableCycle)	mkDynProg_WriteThenReadOneDistrib
 		else mkDynProg_ReadSomeBins
 
 		myDynLayerSetup.wireDynamoTask(program)
