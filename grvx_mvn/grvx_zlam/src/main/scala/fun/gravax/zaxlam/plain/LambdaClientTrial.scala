@@ -1,5 +1,6 @@
 package fun.gravax.zaxlam.plain
 
+
 import org.json.JSONObject
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider
 import software.amazon.awssdk.core.SdkBytes
@@ -17,7 +18,14 @@ https://github.com/awsdocs/aws-doc-sdk-examples/blob/main/javav2/example_code/la
  */
 
 object RunZaxlamClientTrials {
+	val flg_doKludgeInstead = true
 	def main(args: Array[String]): Unit = {
+		if (flg_doKludgeInstead) {
+			kludgyDBKlient
+		} else doLambaInvokerStuff
+
+	}
+	def doLambaInvokerStuff : Unit = {
 		val lamInvk = new LambdaInvoker {}
 		val howdyArgTxt = "input txt from LambdaInvoker.runHowdy"
 		val howdyRsltTxt = lamInvk.runHowdy(howdyArgTxt)
@@ -26,6 +34,18 @@ object RunZaxlamClientTrials {
 		println(s"Got helloRslt: ${helloRsltTxt}")
 
 		lamInvk.runMappy
+	}
+
+	def kludgyDBKlient: Unit = {
+		// Useful to test that zpol DB functionality works when we are NOT inside a lambda.  (indicating dependencies are OK).
+		import fun.gravax.distrib.gen.DistribGenStoreLoadTrial
+		import fun.gravax.distrib.gen.UnsafeTaskRunner
+		val locDbFlgOpt = Some(true)
+		lazy val myTaskMaker = new DistribGenStoreLoadTrial(locDbFlgOpt)
+		println("kludgyDBKlient.println says hello!")
+		val task = myTaskMaker.mkTask
+		UnsafeTaskRunner.doRunNow(task)
+		println("kludgyDBKlient.println says byebye!")
 	}
 }
 trait LambdaInvoker {
@@ -59,14 +79,24 @@ trait LambdaInvoker {
 
 	def runMappy : Unit = {
 		import scala.jdk.CollectionConverters._
+		import java.lang.Integer
 		val inJSON: JSONObject = new JSONObject()
 		inJSON.put("color", "green")
 		inJSON.put("flavor", "salty")
 		inJSON.put("height", 420.5)
-		val jnkList = List[Object](14 : java.lang.Integer, "hey", -75.2f : java.lang.Float)
+		val num77 = 77 : Integer
+		val float99 = -99.3225f : java.lang.Float
+		val subMapS = Map[String,Object]("subIntNum" -> num77, "subFloatNum" ->  float99)
+		val subMapJ = subMapS.asJava
+		val jnkList = List[Object](14 : java.lang.Integer, "hey", -75.2f : java.lang.Float, subMapJ)
 		val jlj: util.List[Object] = jnkList.asJava
-		inJSON.put("stuffy", jlj)
+		inJSON.put("spluffy", jlj)
+		val emptyMapS = Map[String,Object]()
+		val emptyMapJ = emptyMapS.asJava
+		inJSON.put("emptyMap", emptyMapJ)
 		val outDumpTxt = runFunc(funcNm_Mappy, inJSON)
+		// put accepts java Objects, util.Collection, util.Map
+
 		println(s"runMappy.outDumpTxt = ${outDumpTxt}")
 	}
 	def runFunc(funcNm : String, inJsonObj : JSONObject): String = {

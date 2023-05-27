@@ -85,7 +85,7 @@ trait HandlerMon {
 		sMap.foreach(kvPair => {
 			val (entryKey, entryValue) = kvPair
 			// lamLog.log(s"key class is ${entryKey.getClass.getName}, value class is ${entryValue.getClass.getName}\n")
-			// lamLog.log(s"handleRq.inSMap(${entryKey})=${entryValue}\n")
+			// lamLog.log(s"handleRq.inZSMap(${entryKey})=${entryValue}\n")
 			if ((entryKey != null) && (entryValue != null)) {
 				entryKey match {
 					case ekeyStrng: java.lang.String => dumpEntityWithTypeInfo(lamLog, ekeyStrng, entryValue)
@@ -200,7 +200,7 @@ HandlerMon.dumpCtx got ctx: lambdainternal.api.LambdaContext@6ed3ef1
 
 key class is java.lang.String
 value class is java.util.Collections$UnmodifiableMap
-handleRq.inSMap(ENV_JMAP)
+handleRq.inZSMap(ENV_JMAP)
 
 
 */

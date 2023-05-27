@@ -185,9 +185,11 @@ trait BinDataEagerLoader extends BinTreeLoader {
 		val strmWithMeat: ZStream[ZDynDBExec, Throwable, (BinScalarInfoTup, BinMeatInfo)] = binScInfTupStrm.mapZIO(binfTup => {
 			val (timeInf, tagInf, massInf) = binfTup
 			val binKeyInfo = scenParms.mkFullBinKey(timeInf, tagInf)
+			println(s"joinMeatToBinScalars made binKeyInfo to pass to cache: ${binKeyInfo}")
 			val meatFetchOp : Task[Option[BinMeatInfo]] = meatCache.get(binKeyInfo)
 			// By calling optMeat.get, we insist that myMeatInf-fetch must work, otherwise this stream should fail.
 			val pairedWithMeatOp: Task[(BinScalarInfoTup, BinMeatInfo)] = meatFetchOp.map(optMeat => (binfTup, optMeat.get))
+			// pairedWithMeatOp.tap // (pair => println("Got"))
 			pairedWithMeatOp
 		})
 		strmWithMeat

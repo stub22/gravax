@@ -11,7 +11,7 @@ import java.net.URI
 
 object RunDistribGenStoreLoadTrial extends ZIOAppDefault {
 
-	lazy val myTaskMaker = new DistribGenStoreLoadTrial {}
+	lazy val myTaskMaker = new DistribGenStoreLoadTrial()
 
 	override def run: Task[Unit] = {
 		val task = myTaskMaker.mkTask
@@ -21,7 +21,8 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault {
 
 object RunDistribGenStoreLoadTrialFromMain {
 	// import zio._
-	lazy val myTaskMaker = new DistribGenStoreLoadTrial {}
+	val locDbFlgOpt = Some(true)
+	lazy val myTaskMaker = new DistribGenStoreLoadTrial(locDbFlgOpt)
 	def main(args: Array[String]): Unit = {
 		println("RunDistribGenStoreLoadTrialFromMain.println says hello!")
 		val task = myTaskMaker.mkTask
@@ -42,10 +43,10 @@ object UnsafeTaskRunner {
 	}
 }
 
-trait DistribGenStoreLoadTrial extends KnowsGenTypes {
+class DistribGenStoreLoadTrial(flgLocDbOpt : Option[Boolean] = None) extends KnowsGenTypes {
 	// 4 booleans
 	private lazy val myDynLayerSetup = new DynLayerSetup {
-		override def getFlg_useLocalDB = true // true if local-only, false if remote AW$
+		override def getFlg_useLocalDB = flgLocDbOpt.getOrElse(super.getFlg_useLocalDB) // true if local-only, false if remote AW$
 	}
 	protected def getFlg_doFullTableCycle : Boolean = false	// write data, optionally create/delete table
 	lazy val myBinStore = new BinStoreApi {
