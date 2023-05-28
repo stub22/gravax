@@ -16,25 +16,26 @@ private trait DynLayerStuff
 // ZDynDBExec is a trait defining this single method:
 //  def execute[A](atomicQuery : ZDynDBQry[_, A]) : zio.ZIO[scala.Any, scala.Throwable, A]
 
-trait DynLayerSetup {
+class DynLayerSetup(flg_localDb : Boolean, flg_fromDocker : Boolean) {
 
+	private val localDynDbSetup = new LocalDynamoDB {
+		override protected def getFlg_connFromDocker: Boolean = flg_fromDocker
+	}
+	private val localDynLayer: TaskLayer[ZDynDBExec] = localDynDbSetup.getLayer
 
-	val localDynLayer: TaskLayer[ZDynDBExec] = LocalDynamoDB.layer
-
-	val dfltNettyClient: ZLayer[Any, Throwable, HttpClient] = znetty.NettyHttpClient.default
+	private val dfltNettyClient: ZLayer[Any, Throwable, HttpClient] = znetty.NettyHttpClient.default
 
 	// Note that AwsConfig is different from CommonAwsConfig
-	val dfltAwsConf: ZLayer[HttpClient, Nothing, AwsConfig] = zconfig.AwsConfig.default
-	val otherAwsConf_UNUSED: ZLayer[HttpClient with CommonAwsConfig, Nothing, AwsConfig] = zconfig.AwsConfig.configured()
+	private val dfltAwsConf: ZLayer[HttpClient, Nothing, AwsConfig] = zconfig.AwsConfig.default
+	private val otherAwsConf_UNUSED: ZLayer[HttpClient with CommonAwsConfig, Nothing, AwsConfig] = zconfig.AwsConfig.configured()
 
-	val zdbLyr: ZLayer[AwsConfig, Throwable, ZDynDb] = ZDynDb.live
-	val zdbExecLyr: URLayer[ZDynDb, ZDynDBExec] = ZDynDBExec.live
+	private val zdbLyr: ZLayer[AwsConfig, Throwable, ZDynDb] = ZDynDb.live
+	private val zdbExecLyr: URLayer[ZDynDb, ZDynDBExec] = ZDynDBExec.live
 
 	// Relies on default settings for credentials and config, such as ~/aws/
-	val dfltAwsDynLayer: ZLayer[Any, Throwable, ZDynDBExec] = dfltNettyClient >>> dfltAwsConf >>> zdbLyr >>> zdbExecLyr
+	private val dfltAwsDynLayer: ZLayer[Any, Throwable, ZDynDBExec] = dfltNettyClient >>> dfltAwsConf >>> zdbLyr >>> zdbExecLyr
 
-	protected def getFlg_useLocalDB : Boolean = true // Override to
-	private lazy val myFlg_useLocalDB = getFlg_useLocalDB
+	private lazy val myFlg_useLocalDB = flg_localDb
 
 	def wireDynamoTask(program : RIO[ZDynDBExec, Unit]) : Task[Unit] = {
 		val taskDBLayer : TaskLayer[ZDynDBExec] = if (myFlg_useLocalDB) localDynLayer else dfltAwsDynLayer

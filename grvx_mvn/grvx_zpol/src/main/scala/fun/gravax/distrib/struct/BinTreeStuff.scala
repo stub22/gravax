@@ -162,10 +162,11 @@ trait BinTreeLazyLoader extends BinTreeLoader {
 trait BinDataEagerLoader extends BinTreeLoader {
 	def loadBinContentsEagerly(meatCache : MeatyItemCache)(scenParms: ScenarioParams, maxLevels : Int, maxBins : Int):
 	RIO[ZDynDBExec, Chunk[(BinScalarInfoTup, BinMeatInfo)]] = {
-
+		println(s"println.loadBinContentsEagerly BEGIN")
 		val tupStrm = scalarTupStream(scenParms, maxLevels, maxBins)
 		val meatyPairStrm =  joinMeatToBinScalars(meatCache)(scenParms, maxLevels)(tupStrm)
 		val meatyPairChnk: ZIO[ZDynDBExec, Throwable, Chunk[(BinScalarInfoTup, BinMeatInfo)]] = meatyPairStrm.runCollect
+		println(s"println.loadBinContentsEagerly END, returning chunk-ZIO: ${meatyPairChnk}")
 		meatyPairChnk
 
 		// At this point we can look at the Tags to determine how many levels we are working with.
@@ -182,16 +183,18 @@ trait BinDataEagerLoader extends BinTreeLoader {
 						ZStream[ZDynDBExec, Throwable, (BinScalarInfoTup, BinMeatInfo)] = {
 		// During this stream run, we force all myMeatInf to be loaded.
 		// TODO:  Enforce maxLevels.
+		println(s"println.joinMeatToBinScalars-OUTER BEGIN")
 		val strmWithMeat: ZStream[ZDynDBExec, Throwable, (BinScalarInfoTup, BinMeatInfo)] = binScInfTupStrm.mapZIO(binfTup => {
 			val (timeInf, tagInf, massInf) = binfTup
 			val binKeyInfo = scenParms.mkFullBinKey(timeInf, tagInf)
-			println(s"joinMeatToBinScalars made binKeyInfo to pass to cache: ${binKeyInfo}")
+			println(s"println.joinMeatToBinScalars-insideMapZIO made binKeyInfo to pass to cache: ${binKeyInfo}")
 			val meatFetchOp : Task[Option[BinMeatInfo]] = meatCache.get(binKeyInfo)
 			// By calling optMeat.get, we insist that myMeatInf-fetch must work, otherwise this stream should fail.
 			val pairedWithMeatOp: Task[(BinScalarInfoTup, BinMeatInfo)] = meatFetchOp.map(optMeat => (binfTup, optMeat.get))
 			// pairedWithMeatOp.tap // (pair => println("Got"))
 			pairedWithMeatOp
 		})
+		println(s"println.joinMeatToBinScalars-OUTER END")
 		strmWithMeat
 	}
 }

@@ -1,6 +1,5 @@
 package fun.gravax.zaxlam.plain
 
-
 import org.json.JSONObject
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider
 import software.amazon.awssdk.core.SdkBytes
@@ -20,6 +19,8 @@ https://github.com/awsdocs/aws-doc-sdk-examples/blob/main/javav2/example_code/la
 object RunZaxlamClientTrials {
 	val flg_doKludgeInstead = true
 	def main(args: Array[String]): Unit = {
+		val sls = new SomeLoggingStuff{}
+		sls.printSomeMsgs
 		if (flg_doKludgeInstead) {
 			kludgyDBKlient
 		} else doLambaInvokerStuff

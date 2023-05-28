@@ -3,10 +3,12 @@ package fun.gravax.distrib.gen
 import fun.gravax.distrib.binstore.{BinStoreApi, BinWalker, DynLayerSetup, LocalDynamoDB, MeatCacheMaker, StoreDummyItems, ToBinItem}
 import fun.gravax.distrib.gen.RunDistribGenStoreLoadTrial.myTaskMaker
 import fun.gravax.distrib.struct.{BinDataEagerLoader, BinNumInfo, BinTagInfo, BinTreeLazyLoader, BinTreeLoader, VecDistTestHelper}
+import org.slf4j.LoggerFactory
 import zio.cache.CacheStats
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom}
 import zio.{Runtime => ZRuntime, Unsafe => ZUnsafe}
+
 import java.net.URI
 
 object RunDistribGenStoreLoadTrial extends ZIOAppDefault {
@@ -45,9 +47,10 @@ object UnsafeTaskRunner {
 
 class DistribGenStoreLoadTrial(flgLocDbOpt : Option[Boolean] = None) extends KnowsGenTypes {
 	// 4 booleans
-	private lazy val myDynLayerSetup = new DynLayerSetup {
-		override def getFlg_useLocalDB = flgLocDbOpt.getOrElse(super.getFlg_useLocalDB) // true if local-only, false if remote AW$
-	}
+	private val flgLocDb = flgLocDbOpt.getOrElse(true) // true if local-only, false if remote AW$
+	private val flgFromDocker = true
+	private lazy val myDynLayerSetup = new DynLayerSetup(flgLocDb, flgFromDocker)
+
 	protected def getFlg_doFullTableCycle : Boolean = false	// write data, optionally create/delete table
 	lazy val myBinStore = new BinStoreApi {
 		override val (flg_createTbl, flg_deleteTbl) = (false, false)
@@ -74,13 +77,18 @@ class DistribGenStoreLoadTrial(flgLocDbOpt : Option[Boolean] = None) extends Kno
 	val fixedScenPrms = new PhonyFixedScenarioParams {
 		override def getTgtTblNm: BinTag = myBinStore.binTblNm
 	}
+
+	private val myS4JLog = LoggerFactory.getLogger(this.getClass)
 	/*******************************************************************************/
 
 	def mkTask: Task[Unit] = {
+		myS4JLog.info("mkTask START")
 		val program: RIO[ZDynDBExec, Unit] = if (getFlg_doFullTableCycle)	mkDynProg_WriteThenReadOneDistrib
 		else mkDynProg_ReadSomeBins
 
-		myDynLayerSetup.wireDynamoTask(program)
+		val wiredTask = myDynLayerSetup.wireDynamoTask(program)
+		myS4JLog.info("mkTask END")
+		wiredTask
 	}
 
 	// Also may create and delete tables, mix margaritas, fix wagons
@@ -114,6 +122,7 @@ class DistribGenStoreLoadTrial(flgLocDbOpt : Option[Boolean] = None) extends Kno
 		val (covarKeyCnt, covarDepth) = (6, 2)
 		val meatKeyOrder : Ordering[EntryKey] = Ordering.String
 		println("println START mkDynProg_ReadSomeBins")
+		myS4JLog.info("slf4j mkDynProg_ReadSomeBins START")
 		val forBlock: ZIO[ZDynDBExec, Throwable, String] = for {
 			// First line of for comp is special because it eagerly creates our first Zio
 			meatCache <- myMCM.makeMeatyItemCacheOp
@@ -129,6 +138,7 @@ class DistribGenStoreLoadTrial(flgLocDbOpt : Option[Boolean] = None) extends Kno
 			_ <- ZIO.log(s"computeCovars.statMatrix = ${statMatrix}")
 		} yield ("This result from RunDistribGenStoreLoadTrial.mkDynProg_ReadSomeBins.forBlock may be ignored") // .map to produce the output ZIO
 		println("println END mkDynProg_ReadSomeBins")
+		myS4JLog.info("slf4j mkDynProg_ReadSomeBins END")
 		forBlock.unit
 	}
 

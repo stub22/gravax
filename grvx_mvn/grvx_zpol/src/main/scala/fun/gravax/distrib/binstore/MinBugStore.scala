@@ -101,7 +101,8 @@ object MinBugStore extends ZIOAppDefault {
 
 	override def run: Task[Unit] = {
 		val program = mkProgram
-		val dbExecLayer: TaskLayer[ZDynDBExec] = LocalDynamoDB.layer
+		val locDynDbSetup = new LocalDynamoDB {}
+		val dbExecLayer: TaskLayer[ZDynDBExec] = locDynDbSetup.getLayer
 		program.provide(dbExecLayer)
 	}
 
