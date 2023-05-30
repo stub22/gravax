@@ -35,41 +35,41 @@ trait ZaxlamMapReadHelper extends  ZaxTypes {
 		eith
 	}
 }
-
-// Happy comes after Mappy, until we pick a better name.
-class HappyZaxlam extends MappyZaxlam with ZaxTypes {
+trait KnowsHappyVocab {
 	val MAPKEY_HAPPY_CMD = "command"
+	val HCMD_QUERY_BIN_DATA  = "QRY_BIN_DAT"
 	val MAPKEY_QRY_FLG = "qryFlg"
 	val myDfltQryFlg = true
 
 	val MAPKEY_ERR_TXT = "errTxt"
 	val MAPKEY_RESULT_DAT = "rsltDat"
 	val MAPKEY_DBCMD_OUT = "dbCmdOut"
+}
+
+// Happy comes after Mappy, until we pick a better name.
+class HappyZaxlam extends MappyZaxlam with ZaxTypes with KnowsHappyVocab {
+
 
 	val myMRH = new ZaxlamMapReadHelper {}
 
-	override protected def lambdaScala(inZSMap : ZaxSMap) : ZaxSMap = {
+	override def lambdaScala(inZSMap : ZaxSMap) : ZaxSMap = {
 		val cmdOpt = inZSMap.get(MAPKEY_HAPPY_CMD)
-		val cmdOutSMap = cmdOpt.fold[ZaxSMap](Map())(cmdTxt => {
+		val cmdOutSMap = cmdOpt.fold[ZaxSMap](errMapForNoCmdTxt)(cmdTxt => {
 			cmdTxt match {
-				case "QRY_BIN_DAT" => {
-					val qfEith: Either[ZaxErr, Option[ZaxFlag]] = myMRH.getFlag(inZSMap, MAPKEY_QRY_FLG)
-
-					val dbOpRslt : ZaxResult = qfEith match {
-						case Left(err) => Left(err)
-						case Right(flgOpt) => {
-							val flg = flgOpt.getOrElse(myDfltQryFlg)
-							println(s"Resolved query-local flag-opt ${flgOpt} to ${flg}")
-							val dbRslt = doCrazyDbStuff(flg)
-							dbRslt
-						}
-					}
-					println(s"Crazy dbQuery result is: ${dbOpRslt}")
-					val dbOpOutMap : ZaxSMap = dbOpRslt match {
+				case HCMD_QUERY_BIN_DATA => {
+					val qryOpRslt = doQueryOp(inZSMap)
+					println(s"Crazy dbQuery result is: ${qryOpRslt}")
+					val dbOpOutMap : ZaxSMap = qryOpRslt match {
 						case Left(err) => errToMap(err)
 						case Right(winMap) => winMap
 					}
 					dbOpOutMap
+				}
+				case other => {
+					val errTxt = s"HappyZaxlam.lambdaScala did not find a match for cmdTxt: ${cmdTxt}"
+					val err = (cmdOpt, errTxt)
+					println (errTxt)
+					errToMap(err)
 				}
 			}
 		})
@@ -79,25 +79,46 @@ class HappyZaxlam extends MappyZaxlam with ZaxTypes {
 		val dummyOutSMap = SMap[String, AnyRef](MAPKEY_ECHO_MAP -> echoJMap, MAPKEY_DBCMD_OUT -> cmdOutJMap) // , "ENV_JMAP" -> envJMap)
 		dummyOutSMap
 	}
-	lazy val myDbAdapter = new ZaxlamDbAdapter {}
-	def doCrazyDbStuff(qflg : Boolean) : ZaxResult = {
-		myDbAdapter.goCrazy
+	protected def errMapForNoCmdTxt : ZaxSMap = {
+		val errTxt = s"No cmdTxt found in input"
+		val err = (None, errTxt)
+		errToMap(err)
+	}
+	protected def doQueryOp(inZSMap : ZaxSMap) : ZaxResult = fakeQueryOp(inZSMap)
+
+	private def fakeQueryOp(inZSMap : ZaxSMap) : ZaxResult = {
+		val qfEith: Either[ZaxErr, Option[ZaxFlag]] = myMRH.getFlag(inZSMap, MAPKEY_QRY_FLG)
+
+		val dbOpRslt : ZaxResult = qfEith match {
+			case Left(err) => Left(err)
+			case Right(flgOpt) => {
+				val flg = flgOpt.getOrElse(myDfltQryFlg)
+				println(s"Resolved query-local flag-opt ${flgOpt} to ${flg}")
+				val dbRslt = doCrazyDbStuff(flg)
+				dbRslt
+			}
+		}
+		dbOpRslt
+	}
+	private lazy val myDbAdapter = new ZaxlamDbAdapter {}
+	private def doCrazyDbStuff(qflg : Boolean) : ZaxResult = {
+		val noRsltAvail: Unit = myDbAdapter.goCrazy
 		val scaryNum = -700 : JInt
 		val fakeRMap = SMap[String,AnyRef](MAPKEY_RESULT_DAT -> scaryNum)
 		Right(fakeRMap)
 	}
-	def errToMap(err : ZaxErr) : ZaxSMap = {
+	protected def errToMap(err : ZaxErr) : ZaxSMap = {
 		SMap(MAPKEY_ERR_TXT -> err._2)
 	}
 }
 trait ZaxlamDbAdapter {
 	import fun.gravax.distrib.gen.DistribGenStoreLoadTrial
 
-	val locDbFlgOpt = Some(true)
+	val locDbFlgOpt = Some(false)
 	lazy val myTaskMaker = new DistribGenStoreLoadTrial(locDbFlgOpt)
 
 	def goCrazy : Unit = {
-		val neatoDbTask = myTaskMaker.mkTask
+		val neatoDbTask = myTaskMaker.mkQuietDbTask
 		UnsafeTaskRunner.doRunNow(neatoDbTask)
 	}
 }

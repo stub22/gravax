@@ -31,11 +31,14 @@
             <version>${scala.version}</version>
         </dependency>
 
+       <!-- We tried a little bit of zio-lambda code, but for now we mostly use the aws-lambda API directly.
+            See deps below on com.amazonaws group      -->
         <dependency>
             <groupId>dev.zio</groupId>
             <artifactId>zio-lambda_2.13</artifactId>
             <version>1.0.2</version>
         </dependency>
+
 
         <dependency>
             <groupId>org.scalatest</groupId>

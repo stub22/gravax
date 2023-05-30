@@ -16,18 +16,18 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault {
 	lazy val myTaskMaker = new DistribGenStoreLoadTrial()
 
 	override def run: Task[Unit] = {
-		val task = myTaskMaker.mkTask
+		val task = myTaskMaker.mkQuietDbTask
 		task
 	}
 }
 
 object RunDistribGenStoreLoadTrialFromMain {
 	// import zio._
-	val locDbFlgOpt = Some(true)
+	val locDbFlgOpt = Some(false)
 	lazy val myTaskMaker = new DistribGenStoreLoadTrial(locDbFlgOpt)
 	def main(args: Array[String]): Unit = {
 		println("RunDistribGenStoreLoadTrialFromMain.println says hello!")
-		val task = myTaskMaker.mkTask
+		val task = myTaskMaker.mkQuietDbTask
 		UnsafeTaskRunner.doRunNow(task)
 		println("RunDistribGenStoreLoadTrialFromMain.println says byebye!")
 	}
@@ -35,59 +35,78 @@ object RunDistribGenStoreLoadTrialFromMain {
 
 object UnsafeTaskRunner {
 	def doRunNow(task : Task[Unit]) : Unit = {
-		println(s"======================= UnsafeTaskRunner START, inputTask=${task}")
+		doRunTaskNow(task)
+/*		println(s"======================= UnsafeTaskRunner START, inputTask=${task}")
 		val zioRuntime = ZRuntime.default
 		println(s"UnsafeTaskRunner zioRuntime=${zioRuntime}")
 		ZUnsafe.unsafe { implicit unsafeThingy =>
 			zioRuntime.unsafe.run(task).getOrThrowFiberFailure()
 		}
 		println("======================== UnsafeTaskRunner END")
+ */
+	}
+	def doRunTaskNow[Rslt](task : Task[Rslt]) : Rslt = {
+		println(s"======================= UnsafeTaskRunner START, inputTask=${task}")
+		val zioRuntime = ZRuntime.default
+		println(s"UnsafeTaskRunner zioRuntime=${zioRuntime}")
+		val r : Rslt = ZUnsafe.unsafe { implicit unsafeThingy =>
+			zioRuntime.unsafe.run(task).getOrThrowFiberFailure()
+		}
+		println("======================== UnsafeTaskRunner END")
+		r
 	}
 }
 
-class DistribGenStoreLoadTrial(flgLocDbOpt : Option[Boolean] = None) extends KnowsGenTypes {
+trait DistribConsumer {
+	protected  lazy val myBinStore = makeBinStore
+	protected def makeBinStore : BinStoreApi
+
+	protected lazy val myBinWalker = new BinWalker {
+		override protected def getBinStoreApi: BinStoreApi = myBinStore
+	}
+	protected lazy val myMCM = new MeatCacheMaker {
+		override protected def getBinWalker: BinWalker = myBinWalker
+	}
+	protected lazy val myBTEL = new BinDataEagerLoader {
+		override protected def getBinWalker: BinWalker = myBinWalker
+	}
+	protected lazy val myBTLL = new BinTreeLazyLoader {
+		override protected def getBinWalker: BinWalker = myBinWalker
+	}
+	protected lazy val myVDTH = new VecDistTestHelper{}
+
+}
+
+class DistribGenStoreLoadTrial(flgLocDbOpt : Option[Boolean] = None) extends KnowsGenTypes with DistribConsumer {
 	// 4 booleans
 	private val flgLocDb = flgLocDbOpt.getOrElse(true) // true if local-only, false if remote AW$
 	private val flgFromDocker = true
 	private lazy val myDynLayerSetup = new DynLayerSetup(flgLocDb, flgFromDocker)
 
 	protected def getFlg_doFullTableCycle : Boolean = false	// write data, optionally create/delete table
-	lazy val myBinStore = new BinStoreApi {
+	override protected def makeBinStore = new BinStoreApi {
 		override val (flg_createTbl, flg_deleteTbl) = (false, false)
 	}
 	/*******************************************************************************/
-	val myBinWalker = new BinWalker {
-		override protected def getBinStoreApi: BinStoreApi = myBinStore
-	}
-	val myMCM = new MeatCacheMaker {
-		override protected def getBinWalker: BinWalker = myBinWalker
-	}
-	val myBTEL = new BinDataEagerLoader {
-		override protected def getBinWalker: BinWalker = myBinWalker
-	}
-	val myBTLL = new BinTreeLazyLoader {
-		override protected def getBinWalker: BinWalker = myBinWalker
-	}
-	val myVDTH = new VecDistTestHelper{}
 
 	lazy val myGenCtx = new GenCtx {
 		override protected def getTBI: ToBinItem = myBinStore.myTBI
 	}
 	val myGenStoreModule = new GenAndStoreModule(myBinStore, myGenCtx)
 	val fixedScenPrms = new PhonyFixedScenarioParams {
-		override def getTgtTblNm: BinTag = myBinStore.binTblNm
+		override def getTgtTblNm: BinTag = myBinStore.myBinTblNm
 	}
 
 	private val myS4JLog = LoggerFactory.getLogger(this.getClass)
 	/*******************************************************************************/
-
-	def mkTask: Task[Unit] = {
-		myS4JLog.info("mkTask START")
+	// Quiet because it doesn't return anything
+	def mkQuietDbTask: Task[Unit] = {
+		myS4JLog.info("mkQuietDbTask START")
 		val program: RIO[ZDynDBExec, Unit] = if (getFlg_doFullTableCycle)	mkDynProg_WriteThenReadOneDistrib
 		else mkDynProg_ReadSomeBins
 
-		val wiredTask = myDynLayerSetup.wireDynamoTask(program)
-		myS4JLog.info("mkTask END")
+		val wiredTask = myDynLayerSetup.wireDynamoTask[Unit](program)
+		myS4JLog.info("mkQuietDbTask END")
 		wiredTask
 	}
 
@@ -149,5 +168,3 @@ class DistribGenStoreLoadTrial(flgLocDbOpt : Option[Boolean] = None) extends Kno
 		psOp
 	}
 }
-
-// arn:aws:dynamodb:us-west-2:693649829226:table/distro-bin

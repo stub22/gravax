@@ -174,7 +174,8 @@ class MappyZaxlam() extends AxLamHandler[JMap[String, AnyRef], JMap[String, AnyR
 	}
 	val MAPKEY_ECHO_MAP = "ECHO_MAP"
 	// Override this method to do something useful.
-	protected def lambdaScala(inSMap : SMap[String, AnyRef]) : SMap[String, AnyRef] = {
+	// Public to make unit testing easier.
+	def lambdaScala(inSMap : SMap[String, AnyRef]) : SMap[String, AnyRef] = {
 		val echoedInputJMap = deepConvertSMapToJMap(inSMap)
 		val dummyOutSMap = SMap[String, AnyRef](MAPKEY_ECHO_MAP -> echoedInputJMap) // , "ENV_JMAP" -> envJMap)
 		dummyOutSMap

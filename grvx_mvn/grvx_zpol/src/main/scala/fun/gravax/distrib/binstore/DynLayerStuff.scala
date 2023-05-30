@@ -37,7 +37,7 @@ class DynLayerSetup(flg_localDb : Boolean, flg_fromDocker : Boolean) {
 
 	private lazy val myFlg_useLocalDB = flg_localDb
 
-	def wireDynamoTask(program : RIO[ZDynDBExec, Unit]) : Task[Unit] = {
+	def wireDynamoTask[Rslt](program : RIO[ZDynDBExec, Rslt]) : Task[Rslt] = {
 		val taskDBLayer : TaskLayer[ZDynDBExec] = if (myFlg_useLocalDB) localDynLayer else dfltAwsDynLayer
 		program.provide(taskDBLayer)
 	}

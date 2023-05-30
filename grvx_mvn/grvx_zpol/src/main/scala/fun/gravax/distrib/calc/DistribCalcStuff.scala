@@ -103,7 +103,7 @@ trait BinStatCalcs extends KnowsDistribTypes {
 	}
 	val myEqTolerance = BigDecimal("0.00000001")
 
-	val myRootMassTol = BigDecimal("0.001")
+	val myRootMassTol = BigDecimal("0.002") // Needs to be proportional to num bins?
 	private def equalWithinTolerance(a : BigDecimal, b : BigDecimal, tol : BigDecimal) : Boolean =  {
 		val absDiff = a.-(b).abs
 		absDiff.compareTo(tol) < 0

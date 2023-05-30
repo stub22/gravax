@@ -17,7 +17,7 @@ https://github.com/awsdocs/aws-doc-sdk-examples/blob/main/javav2/example_code/la
  */
 
 object RunZaxlamClientTrials {
-	val flg_doKludgeInstead = true
+	val flg_doKludgeInstead = false
 	def main(args: Array[String]): Unit = {
 		val sls = new SomeLoggingStuff{}
 		sls.printSomeMsgs
@@ -44,7 +44,7 @@ object RunZaxlamClientTrials {
 		val locDbFlgOpt = Some(true)
 		lazy val myTaskMaker = new DistribGenStoreLoadTrial(locDbFlgOpt)
 		println("kludgyDBKlient.println says hello!")
-		val task = myTaskMaker.mkTask
+		val task = myTaskMaker.mkQuietDbTask
 		UnsafeTaskRunner.doRunNow(task)
 		println("kludgyDBKlient.println says byebye!")
 	}
