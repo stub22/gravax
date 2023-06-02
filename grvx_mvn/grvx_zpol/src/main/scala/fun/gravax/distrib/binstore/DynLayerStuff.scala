@@ -16,10 +16,10 @@ private trait DynLayerStuff
 // ZDynDBExec is a trait defining this single method:
 //  def execute[A](atomicQuery : ZDynDBQry[_, A]) : zio.ZIO[scala.Any, scala.Throwable, A]
 
-class DynLayerSetup(flg_localDb : Boolean, flg_fromDocker : Boolean) {
+class DynLayerSetup(flg_localDb : Boolean, flg_useDockerHostnm : Boolean) {
 
 	private val localDynDbSetup = new LocalDynamoDB {
-		override protected def getFlg_connFromDocker: Boolean = flg_fromDocker
+		override protected def getFlg_useDockerHostnm: Boolean = flg_useDockerHostnm
 	}
 	private val localDynLayer: TaskLayer[ZDynDBExec] = localDynDbSetup.getLayer
 

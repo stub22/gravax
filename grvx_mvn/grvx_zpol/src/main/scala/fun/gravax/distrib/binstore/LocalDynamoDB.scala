@@ -18,20 +18,27 @@ import java.net.URI
 // Can also use that to look at cloud data if
 
 trait LocalDynamoDB {
+	private val FAKE_ACCESS_KEY = "dummy"
+	private val FAKE_SECRET_KEY = "dummy"
+
+	// Works for a native-local DynamoDB instance when no docker is involved on either client or server side.
+	private val regularLocalUrlTxt = "http://localhost:8000"
+	// This hostname resolves to localhost, but only when docker is running. This host can be seen from inside+outside docker.
+	private val fromDockerUrlTxt = "http://host.docker.internal:8000"
+
+
 	private val commAwsConf = ZLayer.succeed(
 		zio.aws.core.config.CommonAwsConfig(
 			region = None,	// What is relation between this .region and the one below in ZDynDb.customized/builder?
-			credentialsProvider = StaticCredentialsProvider.create(AwsBasicCredentials.create("dummy", "dummy")),
+			credentialsProvider = StaticCredentialsProvider.create(AwsBasicCredentials.create(FAKE_ACCESS_KEY, FAKE_SECRET_KEY)),
 			endpointOverride = None,
 			commonClientConfig = None
 		)
 	)
 	private val dfltAwsConf = zio.aws.core.config.AwsConfig.default
-	private val regularLocalUrlTxt = "http://localhost:8000"
-	private val fromDockerUrlTxt = "http://host.docker.internal:8000"
 
-	protected def getFlg_connFromDocker : Boolean = false
-	private val localUrlTxt = if (getFlg_connFromDocker) fromDockerUrlTxt else regularLocalUrlTxt
+	protected def getFlg_useDockerHostnm : Boolean = false
+	private val localUrlTxt = if (getFlg_useDockerHostnm) fromDockerUrlTxt else regularLocalUrlTxt
 
 	// Note Region - does this wind up getting used for any configs in the localDB case?
 	private val dynamoDbLayer: ZLayer[Any, Throwable, ZDynDb] =

@@ -1,41 +1,18 @@
 package fun.gravax.zaxlam.plain
 
-import fun.gravax.distrib.gen.UnsafeTaskRunner
+import fun.gravax.distrib.gen.DbConnParams
+import fun.gravax.zaxlam.srvlss.UnsafeTaskRunner
+import fun.gravax.zaxlam.xform.{ZaxTypes, ZaxlamMapReadHelper}
 
-import java.util.{List => JList, Map => JMap}
-import java.lang.{Boolean => JBool, Integer => JInt, Double => JDoub}
+import java.lang.{Boolean => JBool, Double => JDoub, Integer => JInt}
 import scala.collection.immutable.{Map => SMap}
-
 
 private trait CommandInterpStuff
 
-trait ZaxTypes {
-	type ZaxSMap = SMap[String, AnyRef]
-	type ZaxFlag = Boolean
-	type ZaxErr = (AnyRef,String)
-	type ZaxResult=Either[ZaxErr,ZaxSMap]
-}
-trait ZaxlamMapReadHelper extends  ZaxTypes {
 
-	// 3 possibilities:  a) good value b) no value c) bad value
-	def getFlag(smap : ZaxSMap, key : String) : Either[ZaxErr, Option[ZaxFlag]] = {
-		val flgOpt : Option[AnyRef] = smap.get(key)
-		val eith = flgOpt match {
-			case None => Right(None)
-			case Some(jbool : JBool) => {
-				val sbool = jbool.booleanValue()
-				Right(Some(sbool))
-			}
-			case Some(other) => {
-				val otherDesc = if (other != null) s"other[clz=${other.getClass.getName}]='${other.toString}'" else "NULL"
-				Left(other, s"Expected ZaxFlag/Boolean at key=${key}, but got ${otherDesc}")
-			}
-
-		}
-		eith
-	}
-}
 trait KnowsHappyVocab {
+	val MAPKEY_HTTP_BODY = "body"
+
 	val MAPKEY_HAPPY_CMD = "command"
 	val HCMD_QUERY_BIN_DATA  = "QRY_BIN_DAT"
 	val MAPKEY_QRY_FLG = "qryFlg"
@@ -46,19 +23,31 @@ trait KnowsHappyVocab {
 	val MAPKEY_DBCMD_OUT = "dbCmdOut"
 }
 
+// TODO:  Fix the in-out mapping for HttpApi
+// TODO:  Fix the JMap <-> SMap nonsense
+
 // Happy comes after Mappy, until we pick a better name.
 class HappyZaxlam extends MappyZaxlam with ZaxTypes with KnowsHappyVocab {
-
 
 	val myMRH = new ZaxlamMapReadHelper {}
 
 	override def lambdaScala(inZSMap : ZaxSMap) : ZaxSMap = {
+		val bodyOpt: Option[AnyRef] = inZSMap.get(MAPKEY_HTTP_BODY)
+		println(s"HappyZaxlam.lambdaScala.println: bodyOpt=${bodyOpt}")
+		if (bodyOpt.isDefined) {
+			val bodyObj = bodyOpt.get
+			println(s"bodyClass = ${bodyObj.getClass}, body.toString=${bodyObj.toString}")
+			// odyClass = class java.lang.String, body.toString={"command" : "QRY_BIN_DAT"}
+		}
+		runHappyCommand(inZSMap)
+	}
+	def runHappyCommand(inZSMap : ZaxSMap) : ZaxSMap = {
 		val cmdOpt = inZSMap.get(MAPKEY_HAPPY_CMD)
 		val cmdOutSMap = cmdOpt.fold[ZaxSMap](errMapForNoCmdTxt)(cmdTxt => {
 			cmdTxt match {
 				case HCMD_QUERY_BIN_DATA => {
 					val qryOpRslt = doQueryOp(inZSMap)
-					println(s"Crazy dbQuery result is: ${qryOpRslt}")
+					println(s"doQueryOp result is: ${qryOpRslt}")
 					val dbOpOutMap : ZaxSMap = qryOpRslt match {
 						case Left(err) => errToMap(err)
 						case Right(winMap) => winMap
@@ -73,19 +62,22 @@ class HappyZaxlam extends MappyZaxlam with ZaxTypes with KnowsHappyVocab {
 				}
 			}
 		})
-		val cmdOutJMap = deepConvertSMapToJMap(cmdOutSMap)
-		val echoJMap = deepConvertSMapToJMap(inZSMap)
+		val cmdOutJMap =  myMapXformer.deepConvertSMapToJMap(cmdOutSMap)
+		val echoJMap = myMapXformer.deepConvertSMapToJMap(inZSMap)
 
-		val dummyOutSMap = SMap[String, AnyRef](MAPKEY_ECHO_MAP -> echoJMap, MAPKEY_DBCMD_OUT -> cmdOutJMap) // , "ENV_JMAP" -> envJMap)
-		dummyOutSMap
+		val happyOutSMap = SMap[String, AnyRef](MAPKEY_ECHO_MAP -> echoJMap, MAPKEY_DBCMD_OUT -> cmdOutJMap) // , "ENV_JMAP" -> envJMap)
+		happyOutSMap
 	}
 	protected def errMapForNoCmdTxt : ZaxSMap = {
 		val errTxt = s"No cmdTxt found in input"
 		val err = (None, errTxt)
 		errToMap(err)
 	}
+	// Override this method to do a useful DB query
 	protected def doQueryOp(inZSMap : ZaxSMap) : ZaxResult = fakeQueryOp(inZSMap)
 
+	// This op is kinda useless because it doesn't produce a result.
+	// We use it just as a unit test that "a DB op wired and ran", without any data correctness requirements.
 	private def fakeQueryOp(inZSMap : ZaxSMap) : ZaxResult = {
 		val qfEith: Either[ZaxErr, Option[ZaxFlag]] = myMRH.getFlag(inZSMap, MAPKEY_QRY_FLG)
 
@@ -94,15 +86,15 @@ class HappyZaxlam extends MappyZaxlam with ZaxTypes with KnowsHappyVocab {
 			case Right(flgOpt) => {
 				val flg = flgOpt.getOrElse(myDfltQryFlg)
 				println(s"Resolved query-local flag-opt ${flgOpt} to ${flg}")
-				val dbRslt = doCrazyDbStuff(flg)
+				val dbRslt = runQuietFakeDbOperation(flg)
 				dbRslt
 			}
 		}
 		dbOpRslt
 	}
 	private lazy val myDbAdapter = new ZaxlamDbAdapter {}
-	private def doCrazyDbStuff(qflg : Boolean) : ZaxResult = {
-		val noRsltAvail: Unit = myDbAdapter.goCrazy
+	private def runQuietFakeDbOperation(qflg : Boolean) : ZaxResult = {
+		val noRsltAvail: Unit = myDbAdapter.launchQuietDbTask() // Defaults to local DB access at host.docker.internal:8000
 		val scaryNum = -700 : JInt
 		val fakeRMap = SMap[String,AnyRef](MAPKEY_RESULT_DAT -> scaryNum)
 		Right(fakeRMap)
@@ -113,13 +105,16 @@ class HappyZaxlam extends MappyZaxlam with ZaxTypes with KnowsHappyVocab {
 }
 trait ZaxlamDbAdapter {
 	import fun.gravax.distrib.gen.DistribGenStoreLoadTrial
+	// Default from a lambda is to connect locally, and assume docker is running (because that's how we launch lambdas)
+	private val myDefaultConnParams = DbConnParams(true, true)
 
-	val locDbFlgOpt = Some(false)
-	lazy val myTaskMaker = new DistribGenStoreLoadTrial(locDbFlgOpt)
+	lazy private val myUnsafeRunner = new UnsafeTaskRunner {}
 
-	def goCrazy : Unit = {
-		val neatoDbTask = myTaskMaker.mkQuietDbTask
-		UnsafeTaskRunner.doRunNow(neatoDbTask)
+	def launchQuietDbTask(dbConnParams_opt: Option[DbConnParams] = None) : Unit = { // quiet => no result
+		val connParams = dbConnParams_opt.getOrElse(myDefaultConnParams)
+		val taskMaker = new DistribGenStoreLoadTrial(Some(connParams))
+		val quietDbTask = taskMaker.mkQuietDbTask
+		myUnsafeRunner.doRunUnitTaskNow(quietDbTask)
 	}
 }
 // TODO:
@@ -139,3 +134,28 @@ trait Match
 case class MatchTextExact(keyName : String, exactTextVal : String) extends Match
 
 trait Matchers
+
+/*
+
+https://github.com/aws-samples/aws-lambda-java-workshop/blob/main/labs/unicorn-location-api/UnicornLocationFunction/src/main/java/com/unicorn/location/UnicornPostLocationHandler.java
+
+import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
+import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
+
+public class UnicornPostLocationHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
+
+    public APIGatewayProxyResponseEvent handleRequest(final APIGatewayProxyRequestEvent input, final Context context) {
+
+        return new APIGatewayProxyResponseEvent()
+                .withStatusCode(200)
+                .withBody("This is supposed to be the Unicorn Location API at some point!");
+
+    }
+}
+
+https://github.com/aws/aws-lambda-java-libs/blob/main/aws-lambda-java-events/src/main/java/com/amazonaws/services/lambda/runtime/events/APIGatewayProxyRequestEvent.java
+
+
+// let requestJSON = JSON.parse(event.body);
+
+ */

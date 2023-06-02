@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory
 import zio.cache.CacheStats
 import zio.dynamodb.{DynamoDBExecutor => ZDynDBExec}
 import zio.{Chunk, RIO, Scope, Task, TaskLayer, UIO, URLayer, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, Random => ZRandom}
-import zio.{Runtime => ZRuntime, Unsafe => ZUnsafe}
+
 
 import java.net.URI
 
@@ -16,46 +16,25 @@ object RunDistribGenStoreLoadTrial extends ZIOAppDefault {
 	lazy val myTaskMaker = new DistribGenStoreLoadTrial()
 
 	override def run: Task[Unit] = {
+		// Since we are a compliant ZIO app, we can just return our Task to be run. (No need for "Unsafe" launch here).
 		val task = myTaskMaker.mkQuietDbTask
 		task
 	}
 }
-
+/*
 object RunDistribGenStoreLoadTrialFromMain {
 	// import zio._
 	val locDbFlgOpt = Some(false)
+	val myUnsafeRunner = new UnsafeTaskRunner{}
 	lazy val myTaskMaker = new DistribGenStoreLoadTrial(locDbFlgOpt)
 	def main(args: Array[String]): Unit = {
 		println("RunDistribGenStoreLoadTrialFromMain.println says hello!")
 		val task = myTaskMaker.mkQuietDbTask
-		UnsafeTaskRunner.doRunNow(task)
+		myUnsafeRunner.doRunUnitTaskNow(task)
 		println("RunDistribGenStoreLoadTrialFromMain.println says byebye!")
 	}
 }
-
-object UnsafeTaskRunner {
-	def doRunNow(task : Task[Unit]) : Unit = {
-		doRunTaskNow(task)
-/*		println(s"======================= UnsafeTaskRunner START, inputTask=${task}")
-		val zioRuntime = ZRuntime.default
-		println(s"UnsafeTaskRunner zioRuntime=${zioRuntime}")
-		ZUnsafe.unsafe { implicit unsafeThingy =>
-			zioRuntime.unsafe.run(task).getOrThrowFiberFailure()
-		}
-		println("======================== UnsafeTaskRunner END")
- */
-	}
-	def doRunTaskNow[Rslt](task : Task[Rslt]) : Rslt = {
-		println(s"======================= UnsafeTaskRunner START, inputTask=${task}")
-		val zioRuntime = ZRuntime.default
-		println(s"UnsafeTaskRunner zioRuntime=${zioRuntime}")
-		val r : Rslt = ZUnsafe.unsafe { implicit unsafeThingy =>
-			zioRuntime.unsafe.run(task).getOrThrowFiberFailure()
-		}
-		println("======================== UnsafeTaskRunner END")
-		r
-	}
-}
+*/
 
 trait DistribConsumer {
 	protected  lazy val myBinStore = makeBinStore
@@ -76,12 +55,12 @@ trait DistribConsumer {
 	protected lazy val myVDTH = new VecDistTestHelper{}
 
 }
-
-class DistribGenStoreLoadTrial(flgLocDbOpt : Option[Boolean] = None) extends KnowsGenTypes with DistribConsumer {
+case class DbConnParams(useLocal : Boolean, useDockerHostnm : Boolean)
+class DistribGenStoreLoadTrial(connParams_opt : Option[DbConnParams] = None) extends KnowsGenTypes with DistribConsumer {
 	// 4 booleans
-	private val flgLocDb = flgLocDbOpt.getOrElse(true) // true if local-only, false if remote AW$
-	private val flgFromDocker = true
-	private lazy val myDynLayerSetup = new DynLayerSetup(flgLocDb, flgFromDocker)
+	private val flgLocDb = connParams_opt.map(_.useLocal).getOrElse(true) // true if local-only, false if remote AW$
+	private val flgUseDockerHostname = connParams_opt.map(_.useDockerHostnm).getOrElse(false)
+	private lazy val myDynLayerSetup = new DynLayerSetup(flgLocDb, flgUseDockerHostname)
 
 	protected def getFlg_doFullTableCycle : Boolean = false	// write data, optionally create/delete table
 	override protected def makeBinStore = new BinStoreApi {

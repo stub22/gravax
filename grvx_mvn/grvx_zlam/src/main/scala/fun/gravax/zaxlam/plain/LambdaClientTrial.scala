@@ -1,5 +1,6 @@
 package fun.gravax.zaxlam.plain
 
+import fun.gravax.zaxlam.srvlss.UnsafeTaskRunner
 import org.json.JSONObject
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider
 import software.amazon.awssdk.core.SdkBytes
@@ -17,7 +18,7 @@ https://github.com/awsdocs/aws-doc-sdk-examples/blob/main/javav2/example_code/la
  */
 
 object RunZaxlamClientTrials {
-	val flg_doKludgeInstead = false
+	val flg_doKludgeInstead = true
 	def main(args: Array[String]): Unit = {
 		val sls = new SomeLoggingStuff{}
 		sls.printSomeMsgs
@@ -35,25 +36,28 @@ object RunZaxlamClientTrials {
 		println(s"Got helloRslt: ${helloRsltTxt}")
 
 		lamInvk.runMappy
+		lamInvk.runHappy
 	}
 
 	def kludgyDBKlient: Unit = {
-		// Useful to test that zpol DB functionality works when we are NOT inside a lambda.  (indicating dependencies are OK).
+		// Useful to test that zpol DB functionality works when we are NOT inside a lambda.
 		import fun.gravax.distrib.gen.DistribGenStoreLoadTrial
-		import fun.gravax.distrib.gen.UnsafeTaskRunner
+	// 	import fun.gravax.distrib.gen.UnsafeTaskRunner
 		val locDbFlgOpt = Some(true)
-		lazy val myTaskMaker = new DistribGenStoreLoadTrial(locDbFlgOpt)
+		lazy val aTaskMaker = new DistribGenStoreLoadTrial(None) // locDbFlgOpt)
 		println("kludgyDBKlient.println says hello!")
-		val task = myTaskMaker.mkQuietDbTask
-		UnsafeTaskRunner.doRunNow(task)
+		val task = aTaskMaker.mkQuietDbTask
+		val taskRunner = new UnsafeTaskRunner {}
+		taskRunner.doRunUnitTaskNow(task)
 		println("kludgyDBKlient.println says byebye!")
 	}
 }
-trait LambdaInvoker {
+trait LambdaInvoker extends KnowsHappyVocab {
 	val funcPrefix_zaxLamFuncs_OLDE = "arn:aws:lambda:us-west-2:693649829226:function:"
 	val funcNm_Hello : String = funcPrefix_zaxLamFuncs_OLDE + "HelloZaxlam_007" //  "arn:aws:lambda:us-west-2:693649829226:function:HelloZaxlam_007" // args(0)
 	val funcNm_Howdy : String = funcPrefix_zaxLamFuncs_OLDE + "howdyZaxlam_007" // "arn:aws:lambda:us-west-2:693649829226:function:howdyZaxlam_007"
 	val funcNm_Mappy = "arn:aws:lambda:us-west-2:693649829226:function:MappyZaxlamFunc102"
+	val funcNm_Happy = "arn:aws:lambda:us-west-2:693649829226:function:HappyZaxlamFunc102"
 	val region  = Region.US_WEST_2
 	val credProv = ProfileCredentialsProvider.create
 	val awsLambda = LambdaClient.builder.region(region).credentialsProvider(credProv).build
@@ -97,8 +101,13 @@ trait LambdaInvoker {
 		inJSON.put("emptyMap", emptyMapJ)
 		val outDumpTxt = runFunc(funcNm_Mappy, inJSON)
 		// put accepts java Objects, util.Collection, util.Map
-
 		println(s"runMappy.outDumpTxt = ${outDumpTxt}")
+	}
+	def runHappy : Unit = {
+		val inJSON: JSONObject = new JSONObject()
+		inJSON.put(MAPKEY_HAPPY_CMD, HCMD_QUERY_BIN_DATA)
+		val outDumpTxt = runFunc(funcNm_Happy, inJSON)
+		println(s"runHappy.outDumpTxt = ${outDumpTxt}")
 	}
 	def runFunc(funcNm : String, inJsonObj : JSONObject): String = {
 		val jsonBlobTxt = inJsonObj.toString()

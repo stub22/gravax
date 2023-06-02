@@ -1,8 +1,11 @@
 package fun.gravax.zaxlam.plain
 
+import com.amazonaws.services.lambda.runtime.events.{APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent}
 import com.amazonaws.services.lambda.runtime.{ClientContext, CognitoIdentity, Context, LambdaLogger, RequestHandler}
+import fun.gravax.zaxlam.xform.ZaxlamMapXformer
+import org.json.JSONObject
 
-import java.util.{List => JList, Map => JMap}
+import java.util.{List => JList, Map => JMap, HashMap => JHMap}
 import scala.collection.immutable.{Map => SMap}
 // import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -105,6 +108,15 @@ trait HandlerMon {
 		lstWithIdx.foreach(pair => dumpEntityWithTypeInfo(lamLog, s"lstElem[${pair._2}]", pair._1))
 	}
 }
+
+// These handler types are all based on Lambda's builtin ability to turn JSON into Java structures.
+// (However this automatic conversion does not happen automatically to the body of an ApiGateway request.)
+// Another way to go is to process the input + output as streams, by extending RequestStreamHandler.
+// void handleRequest(InputStream var1, OutputStream var2, Context var3) throws IOException;
+// Not sure if that form can legitimately be used to pass binary data and things other than JSON
+// (to/from a "direct" Lambda invocation), but seems possible. Within the GatewayProxy setup there is
+// explicit support for body encoding ... as base 64.
+
 trait AxLamHandler[In,Out] extends RequestHandler[In,Out] {
 	val myMon = new HandlerMon{}
 
@@ -150,37 +162,95 @@ class DeeperZaxlam() extends AxLamHandler[JMap[String,InboundDat], JMap[String,Z
 
 // Using AnyRef because AWS Lambda decoder will always pass Objects/boxed types.
 class MappyZaxlam() extends AxLamHandler[JMap[String, AnyRef], JMap[String, AnyRef]] {
+	protected val myMapXformer = new ZaxlamMapXformer {}
 	override protected def handleRq(inJMap: JMap[String, AnyRef], ctx: Context): JMap[String, AnyRef] = {
 		// DANGER: SysEnv may contain AWS keys and other info we don't want to accidentally log, print, return, store, ...
 		// val envJMap: JMap[String, String] = System.getenv()
 		// val envSMap: SMap[String, String] = envJMap.asScala.toMap
 
 		// The output JSON serializer wants to see JAVA mutable maps and Lists
-		val inSMap: SMap[String, AnyRef] = deepConvertJMapToSMap(inJMap)
+		val inSMap: SMap[String, AnyRef] = myMapXformer.deepConvertJMapToSMap(inJMap)
 		val outSMap = lambdaScala(inSMap)
-		val outJMap: JMap[String, AnyRef] = deepConvertSMapToJMap(outSMap)
+		val outJMap: JMap[String, AnyRef] = myMapXformer.deepConvertSMapToJMap(outSMap)
 		outJMap
 	}
 
-	def deepConvertJMapToSMap(jMap : JMap[String, AnyRef]) : SMap[String, AnyRef] = {
-		// FIXME: This step does not deep-convert any JMaps or JLists lurking in the values.
-		val shallowSMap: SMap[String, AnyRef] = jMap.asScala.toMap
-		shallowSMap
-	}
-	def deepConvertSMapToJMap(sMap : SMap[String, AnyRef]) : JMap[String, AnyRef] = {
-		// FIXME: This step does not deep-convert any SMaps or SLists lurking in the values.
-		val shallowJMap = sMap.asJava
-		shallowJMap
-	}
 	val MAPKEY_ECHO_MAP = "ECHO_MAP"
 	// Override this method to do something useful.
 	// Public to make unit testing easier.
-	def lambdaScala(inSMap : SMap[String, AnyRef]) : SMap[String, AnyRef] = {
-		val echoedInputJMap = deepConvertSMapToJMap(inSMap)
+	def lambdaScala(inSMap : SMap[String, AnyRef]) : SMap[String, AnyRef] = dummyLambdaScala(inSMap)
+
+	def dummyLambdaScala(inSMap : SMap[String, AnyRef]) : SMap[String, AnyRef] = {
+		val echoedInputJMap = myMapXformer.deepConvertSMapToJMap(inSMap)
 		val dummyOutSMap = SMap[String, AnyRef](MAPKEY_ECHO_MAP -> echoedInputJMap) // , "ENV_JMAP" -> envJMap)
 		dummyOutSMap
 	}
 }
+
+/*
+APIGatewayProxyRequestEvent and APIGatewayProxyResponseEvent
+Event classes:
+https://github.com/aws/aws-lambda-java-libs/blob/main/aws-lambda-java-events/src/main/java/com/amazonaws/services/lambda/runtime/events/APIGatewayProxyRequestEvent.java
+
+Example handler code:
+https://github.com/awsdocs/aws-doc-sdk-examples/blob/main/javav2/usecases/pam_source_files/src/main/java/com/example/photo/handlers/UploadHandler.java
+https://github.com/awsdocs/aws-doc-sdk-examples/blob/main/javav2/usecases/pam_source_files/src/main/java/com/example/photo/PhotoApplicationResources.java
+
+ */
+
+class GatewayProxyZaxlam extends AxLamHandler[APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent]() {
+	override protected def handleRq(inEvt: APIGatewayProxyRequestEvent, ctx: Context): APIGatewayProxyResponseEvent = {
+		println(s"ProxyZaxlam.handleRq got input event: ${inEvt}")
+		val inBody = inEvt.getBody
+		val inBodyJson = if ((inBody != null) && inBody.contains("{")) {
+			val inputJsonObj =  new JSONObject(inBody)
+			inputJsonObj
+		} else {
+			println(s"Input body does not appear to be JSON: ${inBody}")
+			new JSONObject()
+		}
+		println(s"inBodyJson=${inBodyJson}")
+		val outBodyTxt = mkDummyJsonResponseBodyTxt(inBodyJson)
+		val outEvt = mkSuccessResponseWithOpenCors(outBodyTxt)
+		outEvt
+	}
+	def mkDummyJsonResponseBodyTxt(inJson : JSONObject) : String = {
+		val respBodyJSON: JSONObject = new JSONObject()
+		respBodyJSON.put("amount", -99.0)
+		respBodyJSON.put("inputCopy", inJson)
+		respBodyJSON.toString()
+	}
+	val CONTENT_JSON = SMap[String,String]("Content-Type" -> "application/json")
+	val CORS_OPEN_SMAP = SMap[String,String]("Access-Control-Allow-Origin" -> "*")
+	val HEADERS_SMAP = CONTENT_JSON ++ CORS_OPEN_SMAP
+	val HEADERS_JMAP: JMap[String, String] = HEADERS_SMAP.asJava
+
+	def mkSuccessResponseWithOpenCors(bodyTxt : String) : APIGatewayProxyResponseEvent = {
+		val eventBuilder = new APIGatewayProxyResponseEvent();
+		val outEvent = eventBuilder.withStatusCode(200).withHeaders(HEADERS_JMAP)
+				.withBody(bodyTxt).withIsBase64Encoded(false)
+		outEvent
+	}
+}
+/*
+Example code uses Gson
+import com.google.gson.Gson;
+public static String toJson(Object src) {
+	return gson.toJson(src);
+
+public static final Map<String, String> CORS_HEADER_MAP = Map.of(
+		"Access-Control-Allow-Origin", "*");
+public static final Gson gson = new Gson();
+
+}
+public static APIGatewayProxyResponseEvent makeResponse(Object src) {
+	return new APIGatewayProxyResponseEvent()
+			.withStatusCode(200)
+			.withHeaders(CORS_HEADER_MAP)
+			.withBody(toJson(src))
+			.withIsBase64Encoded(false);
+}
+ */
 
 /*
 
