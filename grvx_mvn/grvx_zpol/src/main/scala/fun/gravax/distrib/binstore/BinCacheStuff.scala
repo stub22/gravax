@@ -14,8 +14,8 @@ private trait BinCacheStuff
 // https://zio.dev/reference/service-pattern/the-three-laws-of-zio-environment
 
 trait MeatCacheMaker extends KnowsBinTupTupTypes {
-	// We start by fetching just one bin-meat at a time.  For efficiency we might later want to cache+fetch blocks of
-	// meat for all children of a parent bin, or even larger blocks.
+	// We start by fetching just one bin-myMeatInf at a time.  For efficiency we might later want to cache+fetch blocks of
+	// myMeatInf for all children of a parent bin, or even larger blocks.
 
 	protected def getBinWalker : BinWalker
 	lazy private val myBinWalker = getBinWalker
@@ -42,7 +42,7 @@ trait MeatCacheMaker extends KnowsBinTupTupTypes {
 	}
 
 	def fetchMeatOp(miCache : MeatyItemCache, binKey : BinFullKeyInfo): IO[Throwable, Option[BinMeatInfo]] = {
-		// Hmm we don't want to make the same meat op over and over
+		// Hmm we don't want to make the same myMeatInf op over and over
 		// myMeatCache.flatMap(cget(binKey)
 		miCache.get(binKey)
 	}

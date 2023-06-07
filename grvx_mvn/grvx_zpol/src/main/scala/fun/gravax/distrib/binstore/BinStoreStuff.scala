@@ -10,8 +10,8 @@ import zio.{Chunk, RIO, ZIO, dynamodb => ZDyn}
 private trait BinStoreStuff
 
 trait BinStoreApi extends KnowsBinItem { bsa =>
-	val binTblNm = "distro-bin"
-	val (flg_doCreate, flg_doDelete) = (false, false)
+	val myBinTblNm = "distro-bin"
+	val (flg_createTbl, flg_deleteTbl) = (false, false)
 
 	val myFBI = new FromBinItem {}
 	val myTBI = new ToBinItem {
@@ -21,14 +21,14 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 
 	def maybeCreateBinTable: RIO[ZDynDBExec, Unit] = {
 		println("println maybeCreateBinTable START")
-		if (flg_doCreate) {
-			ZDynDBQry.createTable(binTblNm, binKeySchm, ZDyn.BillingMode.PayPerRequest)(
-				scenAttr, sortKeyAttr).execute *> ZIO.log(s"Created table ${binTblNm}")
+		if (flg_createTbl) {
+			ZDynDBQry.createTable(myBinTblNm, binKeySchm, ZDyn.BillingMode.PayPerRequest)(
+				scenAttr, sortKeyAttr).execute *> ZIO.log(s"Created table ${myBinTblNm}")
 		} else ZIO.succeed()
 	}
 
-	def maybeDeleteBinTable: RIO[ZDynDBExec, Unit] = if (flg_doDelete) {
-		ZDynDBQry.deleteTable(binTblNm).execute *> ZIO.log(s"Deleted table ${binTblNm}")
+	def maybeDeleteBinTable: RIO[ZDynDBExec, Unit] = if (flg_deleteTbl) {
+		ZDynDBQry.deleteTable(myBinTblNm).execute *> ZIO.log(s"Deleted table ${myBinTblNm}")
 	}  else ZIO.succeed()
 
 
@@ -39,7 +39,7 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 	}
 
 	def readBinData(binPK : PrimaryKey) : RIO[ZDynDBExec, Option[BinData]] = {
-		val op_itemFetch: RIO[ZDynDBExec,Option[Item]] = ZDynDBQry.getItem(binTblNm, binPK).execute
+		val op_itemFetch: RIO[ZDynDBExec,Option[Item]] = ZDynDBQry.getItem(myBinTblNm, binPK).execute
 		val op_binDatFetch = op_itemFetch.map(opt_itm_out => {
 			opt_itm_out.map(itm => {
 				myFBI.extractBinData(itm)
@@ -49,7 +49,7 @@ trait BinStoreApi extends KnowsBinItem { bsa =>
 	}
 }
 
-// Fractional weight fields impose extra costs.  We need to know the total mass (of the distribution, == sum of all leaf bins)
+// Fractional vwt fields impose extra costs.  We need to know the total mass (of the distribution, == sum of all leaf bins)
 // before we can complete writing any bins.  Otherwise we have to make a second pass after finding parent weights.
 trait BinStoreCmdBuilder extends KnowsGenTypes {
 	val myTBI : ToBinItem

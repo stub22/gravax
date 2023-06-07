@@ -2,7 +2,7 @@ package fun.gravax.distrib.gen
 
 import fun.gravax.distrib.binstore.{BinStoreApi, BinStoreCmdBuilder, BinStoreCmdXformer, KeyedCmdMaker, ToBinItem}
 import fun.gravax.distrib.calc.BinSummaryCalc
-import fun.gravax.distrib.struct.{BinDataXformer, BinMassInfo, BinMeatInfo, BinTagInfo, BinTimeInfo, OurKeyedCmdMkr}
+import fun.gravax.distrib.struct.{BinDataXformer, BinFullKeyInfo, BinMassInfo, BinMeatInfo, BinTagInfo, BinTimeInfo, OurKeyedCmdMkr}
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, RIO, UIO, ZIO, Random => ZRandom}
 
@@ -32,6 +32,13 @@ trait ScenarioParams extends KnowsGenTypes {
 	def exactSortKey(timeInf : BinTimeInfo, tagInf : BinTagInfo) = {
 		val sortKeyFields = List(timeInf.obsTime, timeInf.predTime, timeInf.calcTime, tagInf.binTag)
 		sortKeyFields.mkString(sortKeySep)
+	}
+
+	def mkFullBinKey(timeInf : BinTimeInfo, tagInf : BinTagInfo) : BinFullKeyInfo = {
+		val sortKey = exactSortKey(timeInf, tagInf)
+		val tblNm = getTgtTblNm
+		val scenID = getScenID
+		BinFullKeyInfo(tblNm, scenID, sortKey)
 	}
 }
 
@@ -116,8 +123,10 @@ class GenAndStoreModule(myBinStore : BinStoreApi, myGenCtx : GenCtx) extends Kno
 	// The full shape of the bin-tree numbering is also stored in RAM.
 	def genAndStoreBaseSqnc(scenParams : ScenarioParams, kcm : KeyedCmdMaker, bbg : BlockBaseGen): RIO[ZDynDBExec, BaseRsltPair] = {
 		val massyMeatStrm = myConfGen.mkMassyMeatStrm(scenParams)
+		val fixedFlavor = scenParams.getBinFlav
 		val keyedCmdMaker: KeyedCmdMaker = kcm //  myConfGen.ourKeyedCmdMaker
-		val bsgnOp = bbg.genAndStoreBaseLevelOnly(keyedCmdMaker, massyMeatStrm)
+
+		val bsgnOp = bbg.genAndStoreBaseLevelOnly(keyedCmdMaker, fixedFlavor)(massyMeatStrm)
 		bsgnOp
 	}
 	// Deterministic virtual levels using the baseResults.
@@ -133,7 +142,7 @@ class GenAndStoreModule(myBinStore : BinStoreApi, myGenCtx : GenCtx) extends Kno
 			_ <- ZIO.succeed(myGenCtx.myGenBD.OLDE_computeParentMasses(brPair._2))
 			combStat <- ZIO.succeed(myGenCtx.myBinSumCalc.combineWeightMeansAndVars(brPair._2))
 			_ <- ZIO.log(s"Got combined stats: ${combStat}")
-			// combineStatsPerParent : UIO[Chunk[(BinTagInfo, DBinWt, StatRow)]]
+			// combineStatsPerParent : UIO[Chunk[(BinTagInfo, BinRelWt, StatRow)]]
 			parentStats <- myGenCtx.myBinSumCalc.combineStatsPerParent(brPair._2, brPair._1.getVirtLevelsChnk.last._2)
 			_ <- ZIO.log(s"Got parent stats: ${parentStats}")
 			pcomb <-   ZIO.succeed(myGenCtx.myBinSumCalc.combineVirtRsltsToWMV(parentStats))

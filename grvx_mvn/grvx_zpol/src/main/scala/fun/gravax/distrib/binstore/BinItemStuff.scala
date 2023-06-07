@@ -37,7 +37,7 @@ trait KnowsBinItem {
 	// val FLDNM_ANN_RET_MEAN = "ann-ret-mean"
 
 	val FLDNM_BROKED_MEAT_MAP = "broked-map-of-lists"
-	val FLDNM_STRINGY_MEAT_MAP = "stringy-meat-map"
+	val FLDNM_STRINGY_MEAT_MAP = "stringy-myMeatInf-map"
 	val FLDNM_DOBLE_MAP = "meatMapOfMap" // Double-map structure containing the data of type ${bin-flavor}.
 	val SUBFLDNM_MEAN = "mean"
 	val SUBFLDNM_VAR = "var"
@@ -67,7 +67,7 @@ trait FromBinItem extends FromItem with KnowsBinItem with KnowsBinTupTupTypes {
 	def extractBinData(itm : Item) : BinData = {
 		val sceneID = extractSceneID(itm)
 		val timeData = extractTimeInfo(itm)
-		val seqInfo = extractSeqInfo(itm)
+		val seqInfo = extractTagInfo(itm)
 		val massInfo = extractMassInfo(itm)
 		val meatInfo = extractMeat(itm)
 		val binDat = EzBinData(sceneID, timeData, seqInfo, massInfo, meatInfo)
@@ -75,7 +75,7 @@ trait FromBinItem extends FromItem with KnowsBinItem with KnowsBinTupTupTypes {
 	}
 	def extractBinScalars(itm : Item) : BinScalarInfoTup = {
 		val timeData = extractTimeInfo(itm)
-		val seqInfo = extractSeqInfo(itm)
+		val seqInfo = extractTagInfo(itm)
 		val massInfo = extractMassInfo(itm)
 		(timeData, seqInfo, massInfo)
 	}
@@ -90,10 +90,11 @@ trait FromBinItem extends FromItem with KnowsBinItem with KnowsBinTupTupTypes {
 		timeInfo
 	}
 
-	def extractSeqInfo(itm: Item) : BinTagInfo = {
+	def extractTagInfo(itm: Item) : BinTagInfo = {
 		val binSeqNum =  fetchOrThrow[String](itm, FLDNM_BIN_TAG)
 		val parentSeqNum =  fetchOrThrow[String](itm, FLDNM_PARENT_TAG)
-		val seqInfo = BinTagInfo(binSeqNum, parentSeqNum)
+		val binFlavor = fetchOrThrow[String](itm, FLDNM_BIN_FLAVOR)
+		val seqInfo = BinTagInfo(binSeqNum, parentSeqNum, binFlavor)
 		seqInfo
 	}
 
@@ -106,7 +107,7 @@ trait FromBinItem extends FromItem with KnowsBinItem with KnowsBinTupTupTypes {
 	}
 
 	def extractMeat(itm: Item) : BinMeatInfo = {
-		val binFlavor = fetchOrThrow[String](itm, FLDNM_BIN_FLAVOR)
+
 		println(s"extractMeat.println: butchering item: ${itm}")
 		// Empirically thru IDE found this apparent way to extract a Map of Lists that is compliant with FromAttributeValue
 		//	val meatMap: SMap[String, Iterable[BigDecimal]] = fetchOrThrow[SMap[String,Iterable[BigDecimal]]](itm, FLDNM_MEAT_MAP)
@@ -123,7 +124,7 @@ trait FromBinItem extends FromItem with KnowsBinItem with KnowsBinTupTupTypes {
 			val semap = innerMapToStatEntry(ekey, innerStatMap)
 			(ekey, semap)
 		})
-		BinMeatInfo(binFlavor, mapOfStatMaps)
+		BinMeatInfo(mapOfStatMaps)
 	}
 	// Will throw (in the tuple-building .get calls) if either stat (mean or var) is missing.  Ignores any other stats.
 	def innerMapToStatEntry(ekey : String, inMap : SMap[String,BigDecimal]) :  BinTypes.StatEntry = {
@@ -151,11 +152,12 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 		val comboItem = Item(comboMap)
 		comboItem
 	}
-	def fleshOutBinItem(binWithSceneAndTimes : Item, binSeqNum : String, parentBinSeqNum : String,
+	def fleshOutBinItem(binWithSceneAndTimes : Item, binSeqNum : String, parentBinSeqNum : String, binFlav : String,
 						binMass : BigDecimal, binRelWeight : BigDecimal): Item = {   // binAbsWeight : BigDecimal
 		val addMap = SMap[String, AttributeValue](
 			FLDNM_BIN_TAG -> AttributeValue(binSeqNum),
 			FLDNM_PARENT_TAG -> AttributeValue(parentBinSeqNum),
+			FLDNM_BIN_FLAVOR -> AttributeValue(binFlav),
 			FLDNM_BIN_MASS -> AttributeValue(binMass),
 			FLDNM_BIN_REL_WEIGHT -> AttributeValue(binRelWeight)
 			// FLDNM_BIN_ABS_WEIGHT -> AttributeValue(binAbsWeight),
@@ -173,7 +175,8 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 	def addTagsToBinItem(partialBin : Item, tagInfo : BinTagInfo) : Item = {
 		val addMap = SMap[String, AttributeValue](
 			FLDNM_BIN_TAG -> AttributeValue(tagInfo.binTag),
-			FLDNM_PARENT_TAG -> AttributeValue(tagInfo.parentTag)
+			FLDNM_PARENT_TAG -> AttributeValue(tagInfo.parentTag),
+			FLDNM_BIN_FLAVOR -> AttributeValue(tagInfo.binFlavor)
 		)
 		combineMapWithItem(partialBin, addMap)
 	}
@@ -207,7 +210,7 @@ trait ToBinItem extends ToItem with KnowsBinItem {
 		val mmWithMaps: SMap[BinTypes.EntryKey, SMap[String, BigDecimal]] = mmap.map(kvPair => (kvPair._1, statEntryToMap(kvPair._2)))
 
 		val addMap = Map[String, AttributeValue](
-			FLDNM_BIN_FLAVOR -> AttributeValue(meatInfo.binFlavor),
+			// FLDNM_BIN_FLAVOR -> AttributeValue(meatInfo.binFlavor),
 		//	FLDNM_MEAT_MAP -> AttributeValue(mmWithLists),
 			FLDNM_DOBLE_MAP -> AttributeValue(mmWithMaps))
 

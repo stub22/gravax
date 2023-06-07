@@ -21,7 +21,7 @@ object MinBugStore extends ZIOAppDefault {
 	val TBLNM_BUGGY = "bug-juice"
 	val (flg_doCreateTable, flg_doDeleteTable) = (true, true)
 
-	// Data values for a single test record.  Here are the key values.
+	// TrifleRec values for a single test record.  Here are the key values.
 	val (partKey_01, sortKey_AA) = ("part_bug_01", "sort_bug_AA" )
 
 	// Here is a full item value, followed by the primaryKey for the same Item.
@@ -46,14 +46,14 @@ object MinBugStore extends ZIOAppDefault {
 	def putOneBugItem : RIO[ZDynDBExec, Unit] = {
 		val zpi: ZDynDBQry[Any, Option[Item]] = ZDynDBQry.putItem(TBLNM_BUGGY, bugItm01AA)
 		val zpiEx: ZIO[ZDynDBExec, Throwable, Option[Item]] = zpi.execute
-		zpiEx.flatMap(opt_itm_out => ZIO.log(s"s putOneBugItem[${TBLNM_BUGGY}] result: ${opt_itm_out}"))
+		zpiEx.flatMap(opt_itm_out => ZIO.log(s"putOneBugItem[${TBLNM_BUGGY}] result: ${opt_itm_out}"))
 	}
 
 	def getOneFullBugItem : RIO[ZDynDBExec, Unit] = {
 		// Plain .getItem works and returns all fields, as expected.
 		val zgi : ZDynDBQry[Any, Option[Item]] = ZDynDBQry.getItem(TBLNM_BUGGY, primaryKey01AA)
 		val zgiEx = zgi.execute
-		zgiEx.flatMap(opt_itm_out => ZIO.log(s"s getOneFullBugItem[${TBLNM_BUGGY}] result: ${opt_itm_out}"))
+		zgiEx.flatMap(opt_itm_out => ZIO.log(s"getOneFullBugItem[${TBLNM_BUGGY}] result: ${opt_itm_out}"))
 	}
 
 	def projExpr(expr: String) = {
@@ -101,7 +101,8 @@ object MinBugStore extends ZIOAppDefault {
 
 	override def run: Task[Unit] = {
 		val program = mkProgram
-		val dbExecLayer: TaskLayer[ZDynDBExec] = LocalDynamoDB.layer
+		val locDynDbSetup = new LocalDynamoDB {}
+		val dbExecLayer: TaskLayer[ZDynDBExec] = locDynDbSetup.getLayer
 		program.provide(dbExecLayer)
 	}
 

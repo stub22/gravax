@@ -63,7 +63,8 @@ object StudentZioDynamoDbExample extends ZIOAppDefault {
 		TaskLayer[+ROut] is a type alias for ZLayer[Any, Throwable, ROut]
 		type TaskLayer[+ROut] = ZLayer[Any, Throwable, ROut]
 		 */
-		val localDB_layer: TaskLayer[ZDynDBExec] = LocalDynamoDB.layer
+		val locDynDbSetup = new LocalDynamoDB {}
+		val localDB_layer: TaskLayer[ZDynDBExec] = locDynDbSetup.getLayer
 		mkProgram.provide(localDB_layer)
 	}
 }

@@ -6,7 +6,7 @@ import java.util.TimeZone
 import com.github.mjakubowski84.parquet4s.{ParquetIterable, ParquetReader, ParquetWriter, Path, RowParquetRecord, Value, ValueCodecConfiguration}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, INT32, INT64}
 import org.apache.parquet.schema.Type.Repetition.{OPTIONAL, REQUIRED}
-import org.apache.parquet.schema.{LogicalTypeAnnotation, MessageType, OriginalType, Types}
+import org.apache.parquet.schema.{LogicalTypeAnnotation, MessageType, Types}
 
 
 private trait WrapPrqt4S

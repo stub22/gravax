@@ -35,15 +35,15 @@ trait GenTagNumData extends KnowsGenTypes {
 
 		override def getBaseLevel: LevelTagNumChnk = baseLevel
 
-		override def getVirtLevelsChnk: Chunk[(DBinID, LevelTagNumChnk)] = virtLevels
+		override def getVirtLevelsChnk: Chunk[(Int, LevelTagNumChnk)] = virtLevels
 
 	}
 
 
 	// Our resulting op is currently pure and deterministic (no Random nums).
 	// But if someone changed the impl of genTagNumChunksForAllLevels...
-	def genBinTagNumBlock(rootSeqNum : Int,  rootKidCnt : Int, baseLevel : Int): UIO[BinTagNumBlock] = {
-		val taggyLevelChunkOp : UIO[Chunk[(Int, LevelTagNumChnk)]] = genTagNumChunksForAllLevels(rootSeqNum, rootKidCnt, baseLevel)
+	def genBinTagNumBlock(fixedFlavor : BinFlavor)(rootSeqNum : Int,  rootKidCnt : Int, baseLevel : Int): UIO[BinTagNumBlock] = {
+		val taggyLevelChunkOp : UIO[Chunk[(Int, LevelTagNumChnk)]] = genTagNumChunksForAllLevels(fixedFlavor)(rootSeqNum, rootKidCnt, baseLevel)
 
 		val levelTuplesOp = taggyLevelChunkOp.map(outerChnk => {
 			// We know based on how seqInfoStrm works that these inner pairs should happen to be in level-number order.
@@ -61,8 +61,8 @@ trait GenTagNumData extends KnowsGenTypes {
 	// (assuming that genTagInfoStrm is pure+deterministic).
 	// We need to capture that whole result as a single output step to ensure consistency of all the parent-tag-links
 	// between bins.
-	def genTagNumChunksForAllLevels(rootSeqNum : Int,  rootKidCnt : Int, maxLevels : Int): UIO[Chunk[(Int, LevelTagNumChnk)]] = {
-		val seqInfoStrm: UStream[(BinTagInfo, BinNumInfo)] = genTagInfoStrm(rootSeqNum, rootKidCnt)
+	def genTagNumChunksForAllLevels(fixedFlavor : BinFlavor)(rootSeqNum : Int,  rootKidCnt : Int, maxLevels : Int): UIO[Chunk[(Int, LevelTagNumChnk)]] = {
+		val seqInfoStrm: UStream[(BinTagInfo, BinNumInfo)] = genTagInfoStrm(fixedFlavor)(rootSeqNum, rootKidCnt)
 		val chnksByLevStrm: UStream[(Int, LevelTagNumChnk)] = seqInfoStrm.groupAdjacentBy(infoPair => infoPair._2.levelNum)
 		// runCollect collects ALL items from the input, so we truncate the input first.
 		chnksByLevStrm.take(maxLevels).runCollect
@@ -82,7 +82,7 @@ trait GenTagNumData extends KnowsGenTypes {
 
 	// Breadth-first traversal approach using a queue will work, at a reasonable memory cost.
 	// This impl is pure and deterministic - no random numbers here.  Result is always the same.
-	def genTagInfoStrm(rootSeqNum : Int, rootKidsCnt : Int) : UStream[(BinTagInfo, BinNumInfo)] = {
+	def genTagInfoStrm(fixedFlav : BinFlavor)(rootSeqNum : Int, rootKidsCnt : Int) : UStream[(BinTagInfo, BinNumInfo)] = {
 		// We want the largest-granularity entries to appear first
 		// root, child_01...child_N, grandchild_01-01...01-N...N-01..N-N, ggchild_01-01-01...
 		// state = (absIndex, Vector(posInLevel_1, posInLevel_2, ...))
@@ -173,8 +173,8 @@ trait GenTagNumData extends KnowsGenTypes {
 			val maxKids = genSt.maxKids
 			val numInfo = BinNumInfo(genSt.absIdx, parentNum, maxKids, levelNum, genSt.locIdx)
 			val chldTxt = genSt.absIdx.toString
-			val parTxt = genSt.parent_opt.fold("NO_PARENT")(prec => prec.seqNum.toString)
-			val tagInfo = BinTagInfo(chldTxt, parTxt)
+			val parTxt : String = genSt.parent_opt.fold(PTAG_NO_PARENT)(prec => prec.seqNum.toString)
+			val tagInfo = BinTagInfo(chldTxt, parTxt, fixedFlav)
 			(tagInfo, numInfo)
 		})
 	}

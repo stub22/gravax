@@ -1,7 +1,7 @@
 package fun.gravax.distrib.binstore
 
 import fun.gravax.distrib.gen.{KnowsBinTupTupTypes, ScenarioParams}
-import fun.gravax.distrib.struct.BinData
+import fun.gravax.distrib.struct.{BinData, BinFullKeyInfo}
 import zio.dynamodb.PartitionKeyExpression.PartitionKey
 import zio.dynamodb.ProjectionExpression.{$, Unknown}
 import zio.dynamodb.SortKeyExpression.SortKey
@@ -24,9 +24,10 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 	}
 
 	// Levels 1-3 require a total of 50 bins (1 + 7 + 7*6).  Level 4 is another 126 (= 42 * 3).
-	val maxBinKeyResultSize = 12 // Fetch first 3 levels plus a few more to test partiality robustness.
+	val myDfltMaxBinKeyResultSize = 12 // Fetch first 3 levels plus a few more to test partiality robustness.
 
-	def queryOp4BinScalars(scenParms: ScenarioParams): RIO[ZDynDBExec, (Chunk[Item], LastEvaluatedKey)]  = {
+	def queryOp4BinScalars(scenParms: ScenarioParams, maxRsltCnt : Int = myDfltMaxBinKeyResultSize) :
+				RIO[ZDynDBExec, (Chunk[Item], LastEvaluatedKey)] = {
 
 		val scalarFields = List(KEYNM_PART_SCENARIO, KEYNM_SORT_COMPOUND, FLDNM_TIME_OBS, FLDNM_TIME_PRED, FLDNM_TIME_CALC, FLDNM_BIN_TAG,
 		FLDNM_PARENT_TAG, FLDNM_BIN_FLAVOR, FLDNM_BIN_MASS, FLDNM_BIN_REL_WEIGHT, FLDNM_BIN_ABS_WEIGHT)
@@ -44,7 +45,7 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 		val tblNm = scenParms.getTgtTblNm
 		val scenID = scenParms.getScenID
 
-		val baseQry = ZDynDBQry.querySomeItem(tblNm, limit = maxBinKeyResultSize,  scalarProjList : _*)
+		val baseQry = ZDynDBQry.querySomeItem(tblNm, limit = maxRsltCnt,  scalarProjList : _*)
 		println(s"println baseQry=${baseQry}")
 		val partKeyExpr: PartitionKeyExpression = PartitionKey(KEYNM_PART_SCENARIO).===(scenID)
 		println(s"partKeyExpr = ${partKeyExpr}")
@@ -80,12 +81,19 @@ trait BinWalker extends KnowsBinItem with KnowsBinTupTupTypes {
 
 	def fetchOneMeatyBinItem(scenParms: ScenarioParams, binfTup : BinScalarInfoTup): ZDynDBQry[Any, Option[Item]]  = {
 		val (timeInf, tagInf, massInf) = binfTup
-		val sortKey = scenParms.exactSortKey(timeInf, tagInf)
-		val tblNm = scenParms.getTgtTblNm
-		val scenID = scenParms.getScenID
-		val itemPK = PrimaryKey(KEYNM_PART_SCENARIO -> scenID, KEYNM_SORT_COMPOUND -> sortKey)
-		val gitmQry: ZDynDBQry[Any, Option[Item]] = fetchOneMeatyBinItemAtPK(tblNm, itemPK)
+		// val sortKey = scenParms.exactSortKey(timeInf, tagInf)
+		// val tblNm = scenParms.getTgtTblNm
+		// val scenID = scenParms.getScenID
+		// val itemPK = PrimaryKey(KEYNM_PART_SCENARIO -> scenID, KEYNM_SORT_COMPOUND -> sortKey)
+		val binKeyInf = scenParms.mkFullBinKey(timeInf, tagInf) //  BinFullKeyInfo(tblNm, scenID, sortKey)
+		val gitmQry: ZDynDBQry[Any, Option[Item]] = fetchOneMeatyBinItemAtBinKey(binKeyInf)
 		gitmQry
+	}
+
+	def fetchOneMeatyBinItemAtBinKey(binKeyInfo : BinFullKeyInfo) : ZDynDBQry[Any, Option[Item]] = {
+		val tblNm = binKeyInfo.getTableName
+		val dynPK = binKeyInfo.getDynamoPK
+		fetchOneMeatyBinItemAtPK(tblNm, dynPK)
 	}
 
 	def fetchOneMeatyBinItemAtPK(tblNm : String, itemPK : PrimaryKey) : ZDynDBQry[Any, Option[Item]] = {
