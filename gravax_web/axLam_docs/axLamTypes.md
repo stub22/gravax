@@ -9,14 +9,17 @@ The following ingredients may be used in defining AxLam-Data types.
 
 In all cases the fields and type parameters used by these core types may only refer to other AxLam-Data types.  This property may be checked during a serialization, up to the ordinary limits inherent in Scala type erasure.  Using common AxLam facilities helps to ensure Core-compliance at compile time as well.
 
+0) General Proviso:  No mutable data
+  * no vars, no futures, no mutable collections, no hidden mutable data
+ 
 1) Scala 'type' operator, applied only to other AxLam-Core types
-
-These are completely erased at runtime.  We use them only as sugar.  But they are very useful as an organizing syntax.  Unlike macros they require no special considerations.
+  *These are completely erased at runtime.  We use them only as syntactic sugar. They are very useful as an organizing syntax.  
+  *Unlike macros they require no special considerations.
 
 2) Product types, isomorphic to cartesian products:
 
-  * tuples (of other AxLam-Core value)
-  * case classes (with field containing only AxLam-Core values)
+  * Tuples (of other AxLam-Core value)
+  * Case classes (with field containing only AxLam-Core values)
     * fields, defs, vals of these case classes may only reference AxLam-Core values
     * _tight_ case classes have no contents besides their matchable constructor fields
 
@@ -25,9 +28,10 @@ These are completely erased at runtime.  We use them only as sugar.  But they ar
   * All the related constructors:  Some, None, Left, Right
   * Sealed traits (which are usually implemented by neighboring case classes)
   * defs and vals may only reference AxLam-Core types
-  * when tightness is desirable, lazy vals should usually be avoided here
-  * bonus-tightness:  no vals at all
-  * mega-tightness : no defs either
+    * when tightness is desirable, lazy vals should usually be avoided here
+    * bonus-tightness:  no vals at all
+    * mega-tightness : no defs either
+  
 
 4) Immutable collections
   * Seq
@@ -36,7 +40,7 @@ These are completely erased at runtime.  We use them only as sugar.  But they ar
     * only Strings may be used as map keys in AxLam-Core.  
     * This restriction ensures that data translation to/from JSON is trivial
 
-5) Primitive value types, inheriting from AnyRef.  All values are "boxed".
+5) Primitive value types, inheriting from AnyRef.  All values are 'boxed'.
 
   * String
   * java.lang.Char, java.lang,Boolean
