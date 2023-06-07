@@ -9,21 +9,25 @@ The following ingredients may be used in defining AxLam-Data types.
 
 In all cases the fields and type parameters used by these core types may only refer to other AxLam-Data types.  This property may be checked during a serialization, up to the ordinary limits inherent in Scala type erasure.  Using common AxLam facilities helps to ensure Core-compliance at compile time as well.
 
-0) General Proviso:  No mutable data
+#### 0) General Provisos:  No mutable data, no macros, no gratuitous fanciness
   * no vars, no futures, no mutable collections, no hidden mutable data
+  * no macros
+  * avoid unnecessary imports
+  * extra-tightness : avoid implicits completely
  
-1) Scala 'type' operator, applied only to other AxLam-Core types
-  *These are completely erased at runtime.  We use them only as syntactic sugar. They are very useful as an organizing syntax.  
-  *Unlike macros they require no special considerations.
+#### 1) Use scala 'type' defintion operator, applied only to other AxLam-Core types
 
-2) Product types, isomorphic to cartesian products:
+  * These are completely erased at runtime.  We use them for readability and compile-time type safety.
+  * Unlike macros the abstract 'type' specs require no special compiler considerations.
+
+#### 2) Product types, isomorphic to cartesian products:
 
   * Tuples (of other AxLam-Core value)
   * Case classes (with field containing only AxLam-Core values)
     * fields, defs, vals of these case classes may only reference AxLam-Core values
     * _tight_ case classes have no contents besides their matchable constructor fields
 
-3) Sum types, equivalent to tagged unions
+#### 3) Sum types, equivalent to tagged unions
   * Option, Either (of Axlam Core types!)
   * All the related constructors:  Some, None, Left, Right
   * Sealed traits (which are usually implemented by neighboring case classes)
@@ -33,14 +37,14 @@ In all cases the fields and type parameters used by these core types may only re
     * mega-tightness : no defs either
   
 
-4) Immutable collections
+#### 4) Immutable collections
   * Seq
   * Includes related constructors like Nil
   * Map[String, AnyAxLamCoreType]
     * only Strings may be used as map keys in AxLam-Core.  
     * This restriction ensures that data translation to/from JSON is trivial
 
-5) Primitive value types, inheriting from AnyRef.  All values are 'boxed'.
+#### 5) Primitive value types, inheriting from AnyRef.  All values are 'boxed'.
 
   * String
   * java.lang.Char, java.lang,Boolean
@@ -63,8 +67,9 @@ In all cases the fields and type parameters used by these core types may only re
   * .equals and .hashCode are mostly trivial, and provided by platform (except for equality on numbers)
 
 ### Weaknesses
-We cannot cleanly define a Scala inheritance hierarchy of all Core/Data types, without introducing wrappers.  
-Our algebra of parameterized types is not easy to categorize.
+  * We cannot cleanly define a Scala inheritance hierarchy of all Core/Data types, without introducing wrappers.  
+  * Our algebra of parameterized types is not easy to categorize.
+  * We are limited in ability to express dependent types or refinement types.
 
 ### Not included
   * No throwables
