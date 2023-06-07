@@ -30,13 +30,14 @@ trait UnsafeTaskRunner {
 		println(s"======================= println: UnsafeTaskRunner.doRunUnsafeTaskToExit START, inputTask=${task}")
 		val zioRuntime: ZRuntime[Any] = ZRuntime.default
 		println(s"UnsafeTaskRunner zioRuntime=${zioRuntime}")
-		val exOut : Exit[Throwable, Rslt] = ZUnsafe.unsafe { implicit unsafeThingy =>
+		val xitOut : Exit[Throwable, Rslt] = ZUnsafe.unsafe { implicit unsafeThingy =>
 			val apiInst: zioRuntime.UnsafeAPI = zioRuntime.unsafe
+			// UnsafeAPI: run[E, A](zio : zio.ZIO[R, E, A])(implicit trace : zio.Trace, unsafe : zio.Unsafe) : zio.Exit[E, A]
 			val xit: Exit[Throwable, Rslt] = apiInst.run(task)
 			xit
 		}
-		println(s"======================== println: UnsafeTaskRunner.doRunUnsafeTaskToExit END with exit class=${exOut.getClass.getName}")
-		exOut
+		println(s"======================== println: UnsafeTaskRunner.doRunUnsafeTaskToExit END with exit class=${xitOut.getClass.getName}")
+		xitOut
 	}
 
 	def doRunUnsafeTaskToEither[Rslt](task : Task[Rslt]) : Either[Throwable, Rslt] = {
