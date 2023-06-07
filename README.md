@@ -11,4 +11,8 @@ Scratchpad Scala project containing mathematical computing experiments, used as 
   * Exact histograms (fed from FS2 streams) coded using immutable data structures
     * Monoidally combinable, allowing for parallel construction
 
-  
+### YaflSpec Docs
+  * [YaflSpec_22A01a.pdf](gravax_web/yafl_doc_drafts/YaflSpec_22A01a.pdf)
+
+### AxLam Impl Docs
+  * [axLamTypes.md](gravax_web/axLam_docs/axLamTypes.md)
