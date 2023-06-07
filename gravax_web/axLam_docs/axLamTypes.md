@@ -15,10 +15,10 @@ These are completely erased at runtime.  We use them only as sugar.  But they ar
 
 2) Product types, isomorphic to cartesian products:
 
-tuples (of other AxLam-Core value)
-case classes (with field containing only AxLam-Core values)
-fields, defs, vals of these case classes may only reference AxLam-Core values
-tight case classes have no contents besides their matchable constructor fields
+  * tuples (of other AxLam-Core value)
+  * case classes (with field containing only AxLam-Core values)
+    * fields, defs, vals of these case classes may only reference AxLam-Core values
+    * _tight_ case classes have no contents besides their matchable constructor fields
 
 3) Sum types, equivalent to tagged unions
   * Option, Either (of Axlam Core types!)
@@ -56,7 +56,7 @@ tight case classes have no contents besides their matchable constructor fields
   * Partly verifiable (as being "AxLam-Core-compliant") at compile time, and partly at runtime.  
   * Reliable behavior (except for numbers) across platforms.
   * Small classloader footprint
-  * .equals and .hashCode are mostly trivial, and provided by platform (except for decimal numbers)
+  * .equals and .hashCode are mostly trivial, and provided by platform (except for equality on numbers)
 
 ### Weaknesses
 We cannot cleanly define a Scala inheritance hierarchy of all Core/Data types, without introducing wrappers.  
