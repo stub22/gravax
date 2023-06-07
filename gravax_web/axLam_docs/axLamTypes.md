@@ -21,22 +21,20 @@ fields, defs, vals of these case classes may only reference AxLam-Core values
 tight case classes have no contents besides their matchable constructor fields
 
 3) Sum types, equivalent to tagged unions
-
-Option, Either (of Axlam Core types!)
-All the related constructors:  Some, None, Left, Right
-Sealed traits (which are usually implemented by neighboring case classes)
-defs and vals may only reference AxLam-Core types
-when tightness is desirable, lazy vals should usually be avoided here
-bonus-tightness:  no vals at all
-mega-tightness : no defs either
+  * Option, Either (of Axlam Core types!)
+  * All the related constructors:  Some, None, Left, Right
+  * Sealed traits (which are usually implemented by neighboring case classes)
+  * defs and vals may only reference AxLam-Core types
+  * when tightness is desirable, lazy vals should usually be avoided here
+  * bonus-tightness:  no vals at all
+  * mega-tightness : no defs either
 
 4) Immutable collections
-
-Seq
-Includes related constructors like Nil
-Map[String, AnyAxLamCoreType]
-only Strings may be used as map keys in AxLam-Core.  
-This restriction ensures that data translation to/from JSON is trivial
+  * Seq
+  * Includes related constructors like Nil
+  * Map[String, AnyAxLamCoreType]
+    * only Strings may be used as map keys in AxLam-Core.  
+    * This restriction ensures that data translation to/from JSON is trivial
 
 5) Primitive value types, inheriting from AnyRef.  All values are "boxed".
 
@@ -45,10 +43,9 @@ This restriction ensures that data translation to/from JSON is trivial
   * scala.math.BigInt, scala.math.BigDecimal
   * java.lang.Integer, java.lang.Long, java.lang.Short
   * java.lang.Float, java.lang.Double
-
-These floating point types are included as a compromise between convenience and correctness.
-BigDecimal or Spire types are preferable when correctness matters
-Spire numeric types
+    * These floating point types are included as a compromise between convenience and correctness.
+    * BigDecimal or Spire types are preferable when correctness matters
+  * [Spire](https://typelevel.org/spire/#number-types) numeric types
 
 ### Properties of AxLam Core values
 
