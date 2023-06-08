@@ -1,6 +1,7 @@
-This dry doc itemizes the basics of how AxLam implements YaflSpec for Scala 2.13.
+This note itemizes the implementaion layers of AxLam implementation of [YaflSpec](../yafl_doc_drafts/YaflSpec_22A01a.pdf) for Scala 2.13.
 
-Pieces of implementation are scattered in the gravax.fun repository.
+Status 2023-06-07:  Pieces of AxLam implementation are scattered in the gravax.fun github [repository](https://github.com/stub22/gravax/). 
+We are aligning that implementation with relevant platforms for math and interactive apps (e.g. Scala.js, Cats/ZIO, Feral serverless, Lean MathLib, ...). This note informs our alignment efforts and helps explain what AxLam is to our collaborators.
 
 ## AxLam-Core/Data
 AxLam-Core/Data is a pure-value definition language (a type universe), implemented with a restricted subset of Scala 2.13 syntax.
@@ -13,7 +14,7 @@ In all cases the fields and type parameters used by these core types may only re
   * no vars, no futures, no mutable collections, no hidden mutable data
   * no macros
   * avoid unnecessary imports
-  * extra-tightness : avoid implicits completely
+  * _optional_ extra-tightness : may avoid implicits completely
  
 #### 1) Use scala 'type' defintion operator, applied only to other AxLam-Core types
 
@@ -22,20 +23,20 @@ In all cases the fields and type parameters used by these core types may only re
 
 #### 2) Product types, isomorphic to cartesian products:
 
-  * Tuples (of other AxLam-Core value)
-  * Case classes (with field containing only AxLam-Core values)
-    * fields, defs, vals of these case classes may only reference AxLam-Core values
+  * Tuples (of other AxLam-Core/Data values)
+  * Case classes (using only AxLam-Core/Data values)
+    * fields, defs, vals, type-params of these case classes may only reference AxLam-Core values
     * _tight_ case classes have no contents besides their matchable constructor fields
 
+
 #### 3) Sum types, equivalent to tagged unions
-  * Option, Either (of Axlam Core types!)
+  * Option, Either (of AxLam-Core/Data types!)
   * All the related constructors:  Some, None, Left, Right
   * Sealed traits (which are usually implemented by neighboring case classes)
-  * defs and vals may only reference AxLam-Core types
+    * defs, vals, and type-params may only reference AxLam-Core types
     * when tightness is desirable, lazy vals should usually be avoided here
     * bonus-tightness:  no vals at all
     * mega-tightness : no defs either
-  
 
 #### 4) Immutable collections
   * Seq
@@ -54,26 +55,32 @@ In all cases the fields and type parameters used by these core types may only re
     * These floating point types are included as a compromise between convenience and correctness.
     * BigDecimal or Spire types are preferable when correctness matters
   * [Spire](https://typelevel.org/spire/#number-types) numeric types
+    * Edge case : allowing for implicits
+    * The rest of Typelevel Pure (Cats) comes in in Axlam-Core/Func   
 
-### Properties of AxLam Core values
-
+### Properties of AxLam Core/Data value universe
   * Composable
-  * Serializable to/from JSON, with known issues re: numbers, verbosity.
-  * 'Pure' when compliant, aside from RAM/heap consumption
-  * Finite extent (i.e. heap usage) when fully instantiated
-  * Partly verifiable (as being "AxLam-Core-compliant") at compile time, and partly at runtime.  
-  * Reliable behavior (except for numbers) across platforms.
+    * Algebra of type construction follows modern contours of elementary finite category theory and constructive type theory.
+    * See references on type universes, sum and product types.
+  * Finite extent when fully instantiated
+    * Serializable to/from JSON, with known issues re: numbers, verbosity.
+    * Mappable into off-heap storage 
+  * Expect reliable behavior (except for numbers) across platforms including Scala-JVM, Scala.js, Scala-Native
   * Small classloader footprint
   * .equals and .hashCode are mostly trivial, and provided by platform (except for equality on numbers)
+  * Generally (but not easily proven to be) pure when compliant, aside from RAM consumption, edgy number effects.
+  * Partly verifiable (as being "AxLam-Core-compliant") at compile time, and partly at runtime.  
 
 ### Weaknesses
   * We cannot cleanly define a Scala inheritance hierarchy of all Core/Data types, without introducing wrappers.  
+    * Interpreter code must often match against all subtypes of AnyRef.
   * Our algebra of parameterized types is not easy to categorize.
   * We are limited in ability to express dependent types or refinement types.
+  * No explicit proof capabilities.
 
-### Not included
+### Not included in AxLam-Core/Data
   * No throwables
-  * No functions
+  * No functions (but see next section on AxLam-Core/Func)
   * No references to Unit
   * No references to Nothing
   * No effects
@@ -81,25 +88,39 @@ In all cases the fields and type parameters used by these core types may only re
   * No RNGs
   * No "vars" or other explicit mutability
 
-### AxLam-Core/Func
+### AxLam-Core/Func (pure)
 This type universe includes 
 1) All of AxLam-Core/Data 
 2) "Haskell-like" one argument pure functions which accept and produce AxLam-Core instances
+  * `scala.Function1[-In,+Out]` where In and Out are in AxLam-Core
   * Clean interop with familiar functional operations:  map, flatMap, fold, filter, isEmpty
+  * Any functions which are recursive should be @tailrec  
+3) All the type construction mechanisms of AxLam-Core apply, so we may compliantly write:
+```
+val goodCoreThing : Map[String, Function1[Seq[Function1[Long,BigDecimal]], String]] 
+```
 
-## AxLam-Full/Func
-AxLam-Full allows us to build general pure functions and streams.  As a type-universe, it includes:
+#### Properties of AxLam Core/Func universe
+  * Pure(-ish, repeating caveats from above)
+  * Functions are limited to the most compiler-friendly, portable and optimizable kinds
+  * Not generally serializable to JSON.
+  * .hashcode and .equals are OK 
+
+## AxLam-Full/Func (pure)
+AxLam-Full allows us to use general pure functions and streams.  As a type-universe, it includes:
 
 1) All of AxLam-Core
 
 2) Function[] instances (whose arguments are in AxLam-Full/Func)
+
+3) Typelevel Pure features
 
 3) Pure lazy functional streams
   * fs2.Stream[Pure, AnyAxLamFullType]
   * zio.UStream[AnyAxLamFullType]
 4) Traits and classes that use only the above ingredients, and each other
 
-## AxLam-More/Code
+## AxLam-More/Code (impure)
 
 A restricted set of ordinary impure capabilities supporting execution
 
