@@ -8,7 +8,7 @@ import scala.util.Random
 // HADOOP_HOME=D:\_dmnt\axio_gclnz\axio_ide_03\adaxmvn\axmgc_dmo_bgdt\hdp_win_292
 object RunMinPrqtEx extends App {
 
-	val flg_doWrites = false
+	val flg_doWrites = true
 
 	case class TrifleRec(id: Int, text: String)
 

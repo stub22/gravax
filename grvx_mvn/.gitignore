@@ -3,4 +3,3 @@ target/
 *.iml
 *.log
 prqt_*/
-tmpdat/
