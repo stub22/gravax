@@ -1,5 +1,9 @@
 This note itemizes the implementaion layers of AxLam implementation of [YaflSpec](../yafl_doc_drafts/YaflSpec_22A01a.pdf) for Scala 2.13.
 
+AxLam is a Scala idiom for the YaflSpec layered type universes following [Intuitionistic Type Theory](https://en.wikipedia.org/wiki/Intuitionistic_type_theory) aka Martin-Löf's constructive type theory.  Functions, types and data made in this idiom should be generally compatible with other implementations of YaflSpec.
+
+The core of AxLam are the ability to create typed values and apply functions.  We use a subset of existing Scala facilities for these abilities, and define rules that must be followed in each type universe-layer.  A human writing code or models using AxLam/YaflSpec facilities is called an `author`. Improvements to AxLam are made with code facilities that facilitate and simplify an author's task. 
+
 Status 2023-06-07:  Pieces of AxLam implementation are scattered in the gravax.fun github [repository](https://github.com/stub22/gravax/). 
 We are aligning that implementation with relevant platforms for math and interactive apps (e.g. Scala.js, Cats/ZIO, Feral serverless, Lean MathLib, ...). This note informs our alignment efforts and helps explain what AxLam is to our collaborators.
 
