@@ -77,6 +77,7 @@ https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/mod
 		val listBucketsResponse: ListBucketsResponse = s3cli.listBuckets(listBucketsRequest);
 		val bcktNmLst: List[String] = printBucketResponse(listBucketsResponse)
 		bcktNmLst.foreach(bcktNm => {
+			println(s"Calling listBucktObjRefs for bcktNm=${bcktNm}")
 			val objRefs = listBucktObjRefs(s3cli, bcktNm)
 			printObjRefInfo(objRefs)
 		})

@@ -42,6 +42,18 @@ class WackySpec extends AnyFlatSpec {
 		assertCompiles("val a: Int = 1")
 		println("message 04 AFTER the third compile check")
 	}
+	/*
+	https://www.scalatest.org/scaladoc/3.0.6/org/scalatest/Assertions.html
+
+	  Asserts that a given string snippet of code passes both the Scala parser and type checker.
+
+  You can use this to make sure a snippet of code compiles:
+
+  assertCompiles("val a: Int = 1")
+  Although assertCompiles is implemented with a macro that determines at compile time whether the snippet of code
+  represented by the passed string compiles, errors (i.e., snippets of code that do not compile) are reported as
+  test failures at runtime.
+	 */
 
 
 	it  should "should FAIL and show assertions described in scalatest docs" taggedAs(Tag_NoBatch) in {
