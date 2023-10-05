@@ -7,7 +7,7 @@ private trait CattyDistribStuff {
 
 // An outcomeSet is an element of a (quasi-)borel set.
 // The most common form
-// . Event is the type of allowed  is anything that can have a computed probability, given this distribution.
+// Event is the type of allowed outcomes. Each outcome can have a computed probability in a distribution instance.
 trait Distrib[OutcomeQBS,Meas] {
 	// This is an OOP framing as a service-like object, rather than a data object.
 	// Get a probability measure for a given set

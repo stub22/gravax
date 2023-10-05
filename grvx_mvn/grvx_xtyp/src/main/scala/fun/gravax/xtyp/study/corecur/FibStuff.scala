@@ -27,7 +27,7 @@ object RunFibStuff {
 		println(s"The list is now: ${fibList01}")
 		val fz = fibList01.zipWithIndex
 		println(s"ZippedWithIndex = ${fz}")
-		println(s"fz(10) = ${fz(10)}")
+		println(s"fz(8) = ${fz(8)}")
 		println(s"fz is now: ${fz}")
 	}
 	def doGenStuff : Unit = {
@@ -54,9 +54,9 @@ object RunFibStuff {
 	def doFactorialStuff : Unit = {
 
 		val n = 50000
-		val bigFact = ete.factorial(n)
+		val bigFact: Eval[BigInt] = ete.factorial(n)
 		println(s"Factorial(${n}) = $bigFact")
-		val bfv = bigFact.value
+		val bfv: BigInt = bigFact.value
 		val bfvTxt = bfv.toString()
 		println(s"factorial.value has ${bfvTxt.length} digits, starts with ${bfvTxt.take(30)}...")
 
@@ -259,4 +259,44 @@ Patterns can be used in pattern matching, the left hand side of the <- in for co
 
 /*
 General "fold" has more restrictive conditions than foldLeft or foldRight
+ */
+
+/*
+To avoid surprises like this, the current Scala collections library has more regular rules.
+All collections except lazy lists and views are strict.
+The only way to go from a strict to a lazy collection is via the .view method. The only way to go back is via .to
+
+ */
+
+/*
+https://stackoverflow.com/questions/69997294/scala-2-13-views-vs-lazylist
+
+View can execute transformations multiple times.
+Iterator can be consumed only once.
+LazyList can allocate the memory for all the sequence elements.
+--------
+There are actually 3 basic possibilities for lazy sequences in Scala 2.13: View, Iterator and LazyList.
+
+View is the simplest lazy sequence with very little additional costs. It's good to use by default in general case
+to avoid allocations for intermediate results when working with large sequences.
+
+It's possible to traverse the View several times (using foreach, foldLeft, toMap, etc.).
+Transformations (map, flatMap, filter, etc.) will be executed separately for every traversal.
+So care has to be applied either to avoid time-consuming transformations, or to traverse the View only once.
+
+Iterator can be traversed only once. It's similar to Java Streams or Python generators.
+Most transformation methods on Iterator require that you only use the returned Iterator and discard the original object.
+
+It's also fast like a View and supports more operations, including distinct.
+
+LazyList is basically a real strict structure, which can be expanded automatically on the fly.
+LazyList memoizes all the generated elements. If you have a val with a LazyList, the memory will be allocated for all
+the generated elements. But if you traverse it on the fly and don't store in a val, the garbage collector can clean up
+the traversed elements.
+
+Stream in Scala 2.12 was considerably slower than Views or Iterators. I'm not sure if this applies to LazyList in Scala 2.13.
+
+
+
+
  */

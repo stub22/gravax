@@ -110,7 +110,7 @@ trait TriStreamMaker[Eff[_] ] { 	// User must bind an effect type when instantia
 	def mkXactTriJob(orderedSidesTup : (Int, Int, Int)) : Eff[TriGenRslt] = {
 		val (a, b, c) = orderedSidesTup
 		// mkFromSidesIncreasing may throw
-		// If we were committed to IO affect we could: IO.apply(myTsxMaker.mkFromSidesIncreasing(a, b, c))
+		// If we were committed to IO effect we could: IO.apply(myTsxMaker.mkFromSidesIncreasing(a, b, c))
 		// But using IO directly in this kind of domain-oriented compute is questionable as a practice.
 		// If we know an instance of some helper/companion for Eff, such as Sync[Eff], then we can lift the compute with that.
 		// At that point we are implying all the laws of Sync[Eff], but in a way that is a bit wobbly from proof standpoint.
