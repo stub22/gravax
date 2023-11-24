@@ -263,7 +263,6 @@ trait MakesGameFeatures {
 	}
 	// TODO:  Make a version of this that is able to run parallel folds over pieces of a concrete input data stream
 	//  (as if coming from a file).
-	//
 	def mkParJobForTotalHistos(maxPerim : Int, numStrms : Int) : IO[Unit] = {
 		val triEithStrmJob = mkJobProducingStreamOfTriEithers(maxPerim)
 		val dbgHead = "parJobForTotalHistos"

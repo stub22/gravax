@@ -39,6 +39,11 @@
             <version>1.0.2</version>
         </dependency>
 
+        <dependency>
+            <groupId>dev.zio</groupId>
+            <artifactId>zio-connect-s3_2.13</artifactId>
+            <version>0.4.4</version>
+        </dependency>
 
         <dependency>
             <groupId>org.scalatest</groupId>
