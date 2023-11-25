@@ -1,5 +1,6 @@
 package fun.gravax.zaxlam.fblob
 
+import zio.connect.s3.multiregion.MultiRegionS3Connector
 import zio.connect.s3.singleregion.SingleRegionS3Connector
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, Task, ZIO, ZIOAppArgs, ZIOAppDefault}
@@ -14,10 +15,15 @@ object RunDistribBlobSubmitter extends ZIOAppDefault {
 		println("RunDistribBlobSubmitter.run.BEGIN")
 		val x = Console.println("Console.println hooray")
 		val textScen = new BlobTextContentScenario {}
-		val wiredJob = textScen.mkWiredJob
+		val wiredJob = if (false) {
+			textScen.mkWritingWiredJob
+		} else {
+			textScen.mkReadingWiredJob("dumTxtBlob_1700904704498.txt")
+		}
 		println("RunDistribBlobSubmitter.run.END")
 		wiredJob
 	}
+
 }
 	// Write 1:
 	// PT1.4764396S,
@@ -27,19 +33,25 @@ object RunDistribBlobSubmitter extends ZIOAppDefault {
 	if that succeeds, executes io an additional time.
 	*/
 trait BlobTextContentScenario {
-	def mkWiredJob: ZIO[ZIOAppArgs, Any, Any] = {
-		val blobber = new StoreDistribBlobVariations {}
-		val buckNm = "bux-distrib-ingest-bucket-01"
+	val OUR_BUCKET_NAME_TXT : String = "bux-distrib-ingest-bucket-01"
+	val myBlobber = new StoreDistribBlobVariations {}
 
+	def mkReadingWiredJob(objKeyTxt : String) : ZIO[ZIOAppArgs, Any, Any] = {
+		val readJob = myBlobber.readStreamFromS3Obj(OUR_BUCKET_NAME_TXT, objKeyTxt)
+		val wiredReadJob = myBlobber.wireAwsJobSingR(readJob)
+		wiredReadJob
+	}
+
+	def mkWritingWiredJob: ZIO[ZIOAppArgs, Any, Any] = {
 		val contentPairJob = mkContentPairJob
 		val cwriteJob = contentPairJob.flatMap(cpair => {
 			val (blobNm, blobStrm) = cpair
-			val blobWriteJob = blobber.writeStreamToS3Obj(buckNm, blobNm, blobStrm).map(_ => blobNm)
+			val blobWriteJob = myBlobber.writeStreamToS3Obj(OUR_BUCKET_NAME_TXT, blobNm, blobStrm).map(_ => blobNm)
 			blobWriteJob.timed.debug(s"BlobTextContentScenario.mkWiredJob.cwriteJob: blobNm=[${blobNm}]")
 		})
 		// If we want all the results we need a Stream or...
 		val cwriteX3: ZIO[SingleRegionS3Connector, Object, (zio.Duration, String)] = cwriteJob.repeatN(2)
-		val wiredJob = blobber.wireAwsJobSingR(cwriteX3)
+		val wiredJob = myBlobber.wireAwsJobSingR(cwriteX3)
 		wiredJob
 
 	}
@@ -65,6 +77,7 @@ trait BlobTextContentScenario {
 	}
 }
 trait StoreDistribBlobVariations {
+
 	import software.amazon.awssdk.regions.Region
 	import zio._
 	import zio.aws.core.AwsError
@@ -74,7 +87,8 @@ trait StoreDistribBlobVariations {
 	import zio.aws.s3.model.primitives.{BucketName, ObjectKey}
 	import zio.connect.s3._
 	// #121  " S3 connector split into a single and multiregion version(
-	import zio.connect.s3.multiregion._
+	// import zio.connect.s3.multiregion._
+	import zio.connect.s3.singleregion._
 	import zio.stream._
 
 	lazy val zioAwsConfig = NettyHttpClient.default >>> AwsConfig.default
@@ -82,31 +96,44 @@ trait StoreDistribBlobVariations {
 
 	val x: ZIO[Any, Nothing, Array[Byte]] = Random.nextString(100).map(_.getBytes)
 	val xchnk: ZIO[Any, Nothing, Chunk[Byte]] = x.map(Chunk.fromArray)
-	lazy val xcxc : Chunk[Byte] = ???
+	lazy val xcxc: Chunk[Byte] = ???
 	lazy val xstrm: ZStream[Any, Nothing, Byte] = ZStream.fromChunk(xcxc)
-	lazy val pxstrm : UStream[Byte] = xstrm
+	lazy val pxstrm: UStream[Byte] = xstrm
 
-	def writeStreamToS3Obj(bucketNameTxt : String, objKeyTxt : String, strm : UStream[Byte]) = {
+	def writeStreamToS3Obj(bucketNameTxt: String, objKeyTxt: String, strm: UStream[Byte]) = {
 
 		val bucketName = BucketName(bucketNameTxt)
 		val objectKey = ObjectKey(objKeyTxt)
 		val singOpSink: ZSink[SingleRegionS3Connector, AwsError, Byte, Nothing, Unit] = putObject(bucketName, objectKey)
 		val singOpEff: ZIO[SingleRegionS3Connector, AwsError, Unit] = strm >>> singOpSink
-		// val multiOpSink: ZSink[MultiRegionS3Connector, AwsError, Byte, Nothing, Unit] = putObject(bucketName, objectKey, region)
-		// val multiOpEff: ZIO[MultiRegionS3Connector, AwsError, Unit] = strm >>> multiOpSink
 		singOpEff
+	}
+
+	def readStreamFromS3Obj(bucketNameTxt: String, objKeyTxt: String) = {
+		val bucketName = BucketName(bucketNameTxt)
+		val objectKey = ObjectKey(objKeyTxt)
+		getObject(bucketName, objectKey) >>> ZPipeline.utf8Decode >>> ZSink.mkString
 	}
 
 	// s3ConnectorLiveLayer
 	// multiRegionS3ConnectorLiveLayer
-	def wireAwsJobSingR[Output](prog : ZIO[SingleRegionS3Connector, Object, Output]) = {
-// 	def wireAwsJobSingR[Output](prog : ZIO[SingleRegionS3Connector, AwsError, Output]) = { // : Task[Unit] = {
+	def wireAwsJobSingR[Output](prog: ZIO[SingleRegionS3Connector, Object, Output]) = {
+		// 	def wireAwsJobSingR[Output](prog : ZIO[SingleRegionS3Connector, AwsError, Output]) = { // : Task[Unit] = {
 		val wiredJob = prog.provide(zioAwsConfig, S3.live, s3ConnectorLiveLayer)
 				.tapBoth(
 					error => Console.printLine(s"wireAwsJob.tapBoth.error: ${error}"),
 					data => Console.printLine(s"wireAwsJob.tapBoth.data: ${data}"))
 		wiredJob
 	}
+}
+	/*
+	def reallyWireMultiPlz[Output](prog : ZIO[MultiRegionS3Connector, Object, Output]) = {
+		val wired = prog.provide(zioAwsConfig, S3.live, multiRegionS3ConnectorLiveLayer)
+		val tapped = wired.tapBoth(
+					error => Console.printLine(s"wireAwsJob.tapBoth.error: ${error}"),
+					data => Console.printLine(s"wireAwsJob.tapBoth.data: ${data}"))
+		tapped
+	}*/
 	/*
 	def wireAwsJobMultiR(prog : ZIO[MultiRegionS3Connector, AwsError, Unit]) = { //  : Task[Unit] = {
 // For MultiR We need to provide a map of regions, which is not shown in the S3 connector examples we are starting from
@@ -122,7 +149,7 @@ Required by `package`.multiRegionS3ConnectorLiveLayer
 		wiredJob
 	}
 	*/
-}
+
 
 trait ZioS3ConnEx2 {
 	/*
