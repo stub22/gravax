@@ -1,6 +1,5 @@
 package fun.gravax.zaxlam.fblob
 
-import zio.aws.core.AwsError
 import zio.connect.s3.singleregion.SingleRegionS3Connector
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, Task, ZIO, ZIOAppArgs, ZIOAppDefault}
@@ -13,38 +12,20 @@ object RunDistribBlobSubmitter extends ZIOAppDefault {
 
 	override def run: ZIO[ZIOAppArgs, Any, Any] = {
 		println("RunDistribBlobSubmitter.run.BEGIN")
-		val x= Console.println("Console.println hooray")
+		val x = Console.println("Console.println hooray")
 		val textScen = new BlobTextContentScenario {}
 		val wiredJob = textScen.mkWiredJob
-/*
-		val blobber = new StoreDistribBlobVariations {}
-		val tqs =
-			"""This is a triple-quoted String defined in RunDistribBlobSubmitter.
-			  |Second line is here.
-			  |Third and final line.
-			  |""".stripMargin
-		val dateTxt = new Date().toString
-		val fullTxt = tqs + "\n" + dateTxt + "\n=========================================\n"
-		val blobBytes: Array[Byte] = fullTxt.getBytes
-		val blobChunk = Chunk.fromArray(blobBytes)
-		val blobStrm = ZStream.fromChunk(blobChunk)
-		val blobNm = "dumTxtBlob_" + System.currentTimeMillis()
-		val buckNm = "bux-distrib-ingest-bucket-01"
-		println(s"buckNm=[$buckNm], blobNm=[${blobNm}]")
-		val blobWriteJob = blobber.writeStreamToS3Obj(buckNm, blobNm, blobStrm)
-		val blobWriteX3 = blobWriteJob.repeatN(3)
-		val timedJob: ZIO[SingleRegionS3Connector, AwsError, (zio.Duration, Unit)] = blobWriteJob.timed
-		val wiredJob = blobber.wireAwsJobSingR(timedJob)
-		val wiredJobX3 = blobber.wireAwsJobSingR(timedJob).repeatN(3)
-
- */
 		println("RunDistribBlobSubmitter.run.END")
 		wiredJob
 	}
+}
 	// Write 1:
 	// PT1.4764396S,
-	// Write 5
-}
+	// Write 3  (PT1.2615884S,()) (PT0.1190645S,()) (PT0.102239S,())
+	/* zio.repeatN : Returns a new effect that repeats this effect the specified number of times or until the first failure.
+	Repeats are in addition to the first execution, so that io.repeatN(1) yields an effect that executes io, and then
+	if that succeeds, executes io an additional time.
+	*/
 trait BlobTextContentScenario {
 	def mkWiredJob: ZIO[ZIOAppArgs, Any, Any] = {
 		val blobber = new StoreDistribBlobVariations {}
@@ -53,36 +34,19 @@ trait BlobTextContentScenario {
 		val contentPairJob = mkContentPairJob
 		val cwriteJob = contentPairJob.flatMap(cpair => {
 			val (blobNm, blobStrm) = cpair
-			val blobWriteJob = blobber.writeStreamToS3Obj(buckNm, blobNm, blobStrm)
-			blobWriteJob.timed.debug
+			val blobWriteJob = blobber.writeStreamToS3Obj(buckNm, blobNm, blobStrm).map(_ => blobNm)
+			blobWriteJob.timed.debug(s"BlobTextContentScenario.mkWiredJob.cwriteJob: blobNm=[${blobNm}]")
 		})
-		/*
-Returns a new effect that repeats this effect the specified number of times or until the first failure.
-Repeats are in addition to the first execution, so that io.repeatN(1) yields an effect that executes io, and then
-if that succeeds, executes io an additional time.
-		 */
-		val cwriteX3: ZIO[SingleRegionS3Connector, Object, (zio.Duration, Unit)] = cwriteJob.repeatN(2)
+		// If we want all the results we need a Stream or...
+		val cwriteX3: ZIO[SingleRegionS3Connector, Object, (zio.Duration, String)] = cwriteJob.repeatN(2)
 		val wiredJob = blobber.wireAwsJobSingR(cwriteX3)
 		wiredJob
-		/*
-		val bytStrm = mkFreshBlobStrm
-		val blobNm = "dumTxtBlob_" + System.currentTimeMillis()
 
-		println(s"buckNm=[$buckNm], blobNm=[${blobNm}]")
-		val blobWriteJob = blobber.writeStreamToS3Obj(buckNm, blobNm, blobStrm)
-		// val blobWriteX3 = blobWriteJob.repeatN(3)
-		val timedJob: ZIO[SingleRegionS3Connector, AwsError, (zio.Duration, Unit)] = blobWriteJob.timed
-		val wiredJob = blobber.wireAwsJobSingR(timedJob)
-		val wiredJobX3 = blobber.wireAwsJobSingR(timedJob).repeatN(3)
-		println("RunDistribBlobSubmitter.run.END")
-		// wiredJob
-		wiredJobX3
-		 */
 	}
 	val mkContentPairJob: Task[(String, UStream[Byte])] = {
 		ZIO.attempt {
 			val blobStrm = mkFreshBlobStrm
-			val blobNm = "dumTxtBlob_" + System.currentTimeMillis()
+			val blobNm = "dumTxtBlob_" + System.currentTimeMillis() + ".txt"
 			(blobNm, blobStrm)
 		}
 	}
@@ -112,7 +76,6 @@ trait StoreDistribBlobVariations {
 	// #121  " S3 connector split into a single and multiregion version(
 	import zio.connect.s3.multiregion._
 	import zio.stream._
-
 
 	lazy val zioAwsConfig = NettyHttpClient.default >>> AwsConfig.default
 	// lazy val region = Region.US_WEST_2
@@ -160,13 +123,12 @@ Required by `package`.multiRegionS3ConnectorLiveLayer
 	}
 	*/
 }
-/*
-.provide(zioAwsConfig, S3.live, multiRegionS3ConnectorLiveLayer)
-.tapBoth(
-error => Console.printLine(s"error: ${error}"),
-text => Console.printLine(s"${text} ==\n ${quote}\nis ${text == quote}")
- */
+
 trait ZioS3ConnEx2 {
+	/*
+	Example code copied from:
+	https://github.com/zio/zio-connect/blob/master/examples/s3-connector-examples/src/main/scala/Example2.scala
+	 */
 
 	import software.amazon.awssdk.regions.Region
 	import zio._
@@ -212,33 +174,5 @@ trait ZioS3ConnEx2 {
 			_ <- ZStream(objectKey) >>> deleteObjects(bucketName, region)
 			_ <- ZStream(bucketName) >>> deleteEmptyBucket(region)
 		} yield ()
-/*
-	def run: ZIO[ZIOAppArgs, Any, Any] =
-		(program1 *> program2 *> program3 *> program4 <* program5)
-				.provide(zioAwsConfig, S3.live, s3ConnectorLiveLayer)
-				.tap(text => Console.printLine(s"content: ${text}"))
-*/
 }
 
-
-/**
- * Owner
-amzn
-AWS Region
-US West (Oregon) us-west-2
-Last modified
-November 24, 2023, 03:34:50 (UTC-08:00)
-Size
-185.0 B
-Type
-Key
-dumTxtBlob_1700825685916
-S3 URI
-s3://bux-distrib-ingest-bucket-01/dumTxtBlob_1700825685916
-Amazon Resource Name (ARN)
-arn:aws:s3:::bux-distrib-ingest-bucket-01/dumTxtBlob_1700825685916
-Entity tag (Etag)
-db977b2fe8cc08531d2d780e257a2abc
-Object URL
-https://bux-distrib-ingest-bucket-01.s3.us-west-2.amazonaws.com/dumTxtBlob_1700825685916
- */
