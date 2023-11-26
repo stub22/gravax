@@ -27,7 +27,7 @@ trait ReadS3Files {
 	val bcktNm_appOntMiscPub = "appstract-ont-misc-pub"
 
 	val objKey_kbPrefixes = "kbpedia_v250/supp/kbprc_prefixes.n3"
-	val (flg_scanBuckets, flg_loadText, flg_loadN3) = (true, false, true)
+	val (flg_scanBuckets, flg_loadText, flg_loadN3) = (false, false, true)
 	def doBucketStuff : Unit = {
 		val cli = mkS3Client
 		if (flg_scanBuckets)

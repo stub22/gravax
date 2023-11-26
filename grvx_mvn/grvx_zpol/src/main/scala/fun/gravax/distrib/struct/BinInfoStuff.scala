@@ -54,7 +54,6 @@ case class EzBinData(scenID : String, timeDat : BinTimeInfo, myTagInf : BinTagIn
 		extends BinDataCore(scenID, timeDat, myTagInf) {
 
 
-
 	override protected def getMeatInfoOp :  Task[BinMeatInfo] = ZIO.succeed(myMeatInf)
 
 	override protected def getMassInfo: BinMassInfo = myMassDat

@@ -1,6 +1,5 @@
 package fun.gravax.zaxlam.fblob
 
-import zio.connect.s3.multiregion.MultiRegionS3Connector
 import zio.connect.s3.singleregion.SingleRegionS3Connector
 import zio.stream.{UStream, ZStream}
 import zio.{Chunk, Task, ZIO, ZIOAppArgs, ZIOAppDefault}
@@ -17,13 +16,21 @@ object RunDistribBlobSubmitter extends ZIOAppDefault {
 		val textScen = new BlobTextContentScenario {}
 		val wiredJob = if (false) {
 			textScen.mkWritingWiredJob
-		} else {
+		} else if (false) {
 			textScen.mkReadingWiredJob("dumTxtBlob_1700904704498.txt")
+		} else {
+			runReadLambda
 		}
 		println("RunDistribBlobSubmitter.run.END")
 		wiredJob
 	}
 
+	def runReadLambda = {
+		val bz = new BlobbyZaxlam
+		val inMap = Map[String, AnyRef]("junk" -> "pile")
+		val outMap = bz.lambdaScala(inMap)
+		ZIO.succeed()
+	}
 }
 	// Write 1:
 	// PT1.4764396S,
@@ -34,11 +41,15 @@ object RunDistribBlobSubmitter extends ZIOAppDefault {
 	*/
 trait BlobTextContentScenario {
 	val OUR_BUCKET_NAME_TXT : String = "bux-distrib-ingest-bucket-01"
+	val OUR_BUCKET_ARN_TXT = "arn:aws:s3:::bux-distrib-ingest-bucket-01"
+	val OUR_BUCKET_AP_URI = "s3://arn:aws:s3:us-west-2:693649829226:accesspoint/west-bdib01-acc-aa"
+	val OUR_BUCKET_AP_ARN = "arn:aws:s3:us-west-2:693649829226:accesspoint/west-bdib01-acc-aa"
+	val OUR_BUCKET_AP_ALIAS = "west-bdib01-acc-aa-dn9y8m67asjjed3gx7cry7amy93causw2a-s3alias"
 	val myBlobber = new StoreDistribBlobVariations {}
 
-	def mkReadingWiredJob(objKeyTxt : String) : ZIO[ZIOAppArgs, Any, Any] = {
-		val readJob = myBlobber.readStreamFromS3Obj(OUR_BUCKET_NAME_TXT, objKeyTxt)
-		val wiredReadJob = myBlobber.wireAwsJobSingR(readJob)
+	def mkReadingWiredJob(objKeyTxt : String)  = {
+		val readJob: ZIO[SingleRegionS3Connector, Object, String] = myBlobber.readStreamFromS3Obj(OUR_BUCKET_AP_ALIAS, objKeyTxt)
+		val wiredReadJob: ZIO[Any, Object, String] = myBlobber.wireAwsJobSingR(readJob)
 		wiredReadJob
 	}
 

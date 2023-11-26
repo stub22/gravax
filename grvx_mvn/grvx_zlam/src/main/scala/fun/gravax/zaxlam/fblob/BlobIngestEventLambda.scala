@@ -4,16 +4,25 @@ import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.events.S3Event
 import com.amazonaws.services.lambda.runtime.events.models.s3.S3EventNotification
 import fun.gravax.zaxlam.plain.{AxLamHandler, KnowsHappyVocab, MappyZaxlam}
+import fun.gravax.zaxlam.srvlss.UnsafeTaskRunner
 import fun.gravax.zaxlam.xform.{ZaxTypes, ZaxlamMapReadHelper}
+import zio.{Cause, Task, ZIO, ZIOAppArgs}
 
 import java.util.{HashMap => JHMap, List => JList, Map => JMap}
 
 
-class BlobbyZaxlam extends AxLamHandler[S3Event,JMap[String, AnyRef]] {
-	override protected def handleRq(in: S3Event, ctx: Context): JMap[String, AnyRef] = {
-		println(s"BlobbyZaxlam.handleRq got in-S3Event=${in}")
+class StrongTypedBlobbyZaxlamAintWorkin extends AxLamHandler[S3Event,JMap[String, AnyRef]] {
+	// Gets invoked, but inS3evt is an empty collection.
+	// EventBridge format is different from what S3 publishes
+	// https: //stackoverflow.com/questions/71576949/map-eventbridge-json-for-an-s3-event-to-a-java-object
+	// https://github.com/aws/aws-lambda-java-libs/tree/main
+	// https://github.com/aws/aws-lambda-java-libs/issues/109
+	// https://docs.aws.amazon.com/AmazonS3/latest/userguide/notification-content-structure.html
+	// https://github.com/aws/aws-lambda-java-libs/tree/events-v4-serialization-v2/aws-lambda-java-events/src/main/java/com/amazonaws/services/lambda/runtime/events
+	override protected def handleRq(inS3evt: S3Event, ctx: Context): JMap[String, AnyRef] = {
+		println(s"BlobbyZaxlam.handleRq got in-S3Event=${inS3evt}")
 
-		val x: JList[S3EventNotification.S3EventNotificationRecord] = in.getRecords
+		val x: JList[S3EventNotification.S3EventNotificationRecord] = inS3evt.getRecords
 		println(s"Got notice list: ${x})")
 		val x1: S3EventNotification.S3EventNotificationRecord = x.get(0)
 		val s3info: S3EventNotification.S3Entity = x1.getS3
@@ -26,19 +35,125 @@ class BlobbyZaxlam extends AxLamHandler[S3Event,JMap[String, AnyRef]] {
 		outMap
 	}
 }
+/*
+When run with local invoke it appears the function is running in us-east-1, even though that is not our default
+region, and even though we specify --region like
+sam local invoke --region us-west-2  -e .\blobCreateEvtFromS3.json
 
-class JsonLovinBlobbyZaxlam extends MappyZaxlam with ZaxTypes with KnowsHappyVocab {
+funcArn=arn:aws:lambda:us-east-1:012345678912:function:BlobbyZaxlamRsrc
+
+Direct access using S3 client in AWS SDK is working under local Lambda.
+
+ */
+class BlobbyZaxlam extends MappyZaxlam with ZaxTypes with KnowsHappyVocab {
 
 	val myMRH = new ZaxlamMapReadHelper {}
+	lazy private val myUnsafeRunner = new UnsafeTaskRunner {}
 
 	override def lambdaScala(inZSMap: ZaxSMap): ZaxSMap = {
 		println(s"BlobbyZaxlam.lambdaScala got inZSMap=${inZSMap}")
-		val detailMap = inZSMap.get("detail")
+		val detailMap: Option[AnyRef] = inZSMap.get("detail")
+		println(s"BlobbyZaxlam.lambdaScala.detail = ${detailMap}")
+		val blobScen = new BlobTextContentScenario{}
+		val objectKey = "dumTxtBlob_1700904704498.txt"
+		val readJob: ZIO[Any, Object, String] = blobScen.mkReadingWiredJob(objectKey)
+		val readJobDT = readJob.timed.debug("readJob.timed output: ")
+	//	val s: ZIO[Any, Cause[Object], String] = readJob.sandbox
+//		val x: ZIO[Any, Exception, String] = readJob.orElseFail(new Exception("oops readJob failed"))
+		val rjwex: ZIO[Any, Exception, (zio.Duration, String)] = readJobDT.mapError(obj => new Exception(s"readJob failed with err: ${obj.toString}"))
+		val readTask : Task[(zio.Duration, String)] =  rjwex
+		// val readTask = readJob.p
+		if (false) {
+			val out: Either[Throwable, (zio.Duration, String)] = myUnsafeRunner.doRunUnsafeTaskToEither(readTask)
+			val outTxt = out.toString
+			println(s"BlobbyZaxlam.lambdaScala got read task output as either: ${outTxt}")
+		} else if (false) {
+			val otherTask = readJob.mapError(obj => new Exception(s"readJob failed with err: ${obj.toString}"))
+			val taskOutput: String = myUnsafeRunner.doRunUnsafeTaskMightThrow(otherTask)
+			println(s"BlobbyZaxlam.lambdaScala got read task output: ${taskOutput}")
+		} else {
+			// Seems that when we access using this AP-name, Lambda role needs to have permissions to access the
+			// arn of the access point (which is different from the arn of the bucket itself).
+			val blobBucketName = "west-bdib01-acc-aa-dn9y8m67asjjed3gx7cry7amy93causw2a-s3alias"
+			val oldSynk = new ReadS3LikeGravcld {}
+			val x = oldSynk.fetchBlob(blobBucketName, objectKey)
+		}
 		val outSMap = inZSMap
 		outSMap
 	}
-}
 
+	def readSync = {
+	// 	val r3sf = new ReadS3Files{}
+
+	}
+}
+trait ReadS3LikeGravcld {
+
+	import java.time.Instant
+	import java.util.{List => JList}
+	import java.util.stream
+
+	import software.amazon.awssdk.core.{ResponseBytes, SdkField}
+	import software.amazon.awssdk.regions.Region
+	import software.amazon.awssdk.services.s3.S3Client
+	import software.amazon.awssdk.services.s3.model.{Bucket, GetObjectRequest, GetObjectResponse, ListBucketsRequest, ListBucketsResponse, ListObjectsRequest, ListObjectsResponse, S3Object}
+
+	def fetchBlob(blobBucketNm : String, blobObjKey : String) : String = {
+		// First we fetch a prefixes blob, as validation that we can talk to S3.
+		val bcktNm_appOntMiscPub = "appstract-ont-misc-pub"
+		val objKey_kbPrefixes = "kbpedia_v250/supp/kbprc_prefixes.n3"
+		val s3cli = mkS3Client
+		val kbPrfxTxt = loadKbPrefixesText(s3cli, bcktNm_appOntMiscPub, objKey_kbPrefixes)
+		// OK now try fetching the blob we were asked for.
+		val blobTxt = getBucktObjBytesAsUtf8(s3cli, blobBucketNm, blobObjKey)
+		println(s"Got blobTxt: ${blobTxt}")
+		blobTxt
+	}
+	def mkS3Client: S3Client = {
+		val region = Region.US_WEST_2;
+		println("Building s3Cli")
+		/*
+	https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/S3ClientBuilder.html
+	BuilderT region(Region region)
+	Configure the region with which the SDK should communicate.
+	If this is not specified, the SDK will attempt to identify the endpoint automatically using the following logic:
+
+	Check the 'aws.region' system property for the region.
+	Check the 'AWS_REGION' environment variable for the region.
+	Check the {user.home}/.aws/credentials and {user.home}/.aws/config files for the region.
+	If running in EC2, check the EC2 metadata service for the region.
+	If the region is not found in any of the locations above, an exception will be thrown at SdkBuilder.build() time.
+		*/
+
+		val s3cli = S3Client.builder().region(region).build();
+		/*
+	https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/S3Client.html
+		*/
+		println(s"Made s3Cli ${s3cli.toString}")
+		s3cli
+	}
+
+	def loadKbPrefixesText(s3cli: S3Client, bcktNm: String, kbprfxObjKey: String): String = {
+		val kbprfxTxt = getBucktObjBytesAsUtf8(s3cli, bcktNm, kbprfxObjKey)
+		println(s"Loaded kb-prefix text of length=${kbprfxTxt.length}")
+		println(s"First 127 chars: ", kbprfxTxt.take(127))
+		kbprfxTxt
+	}
+
+	def getBucktObjBytesAsUtf8(s3cli: S3Client, bcktNm: String, objKy: String): String = {
+		val gobjRq = buildGetObjRq(bcktNm, objKy)
+		val respBytesObj: ResponseBytes[GetObjectResponse] = s3cli.getObjectAsBytes(gobjRq)
+		respBytesObj.asUtf8String()
+		//  GetObjectData.getObjectBytes(s3,bucketName,objectKey, path);
+	}
+
+	def buildGetObjRq(bcktNm: String, objKy: String): GetObjectRequest = {
+		val emptyBldr = GetObjectRequest.builder()
+		val readyBldr = emptyBldr.bucket(bcktNm).key(objKy)
+		val rq = readyBldr.build()
+		rq
+	}
+}
 /*
 BlobbyZaxlam.lambdaScala got inZSMap=HashMap(
 detail-type -> Object Created,
