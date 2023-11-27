@@ -1,6 +1,6 @@
-package com.appstract
+package fun.gravax.dbin.tapend
 
-import com.appstract.Endpoints.{*, given}
+import Endpoints.{*, given}
 import org.scalatest.EitherValues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers

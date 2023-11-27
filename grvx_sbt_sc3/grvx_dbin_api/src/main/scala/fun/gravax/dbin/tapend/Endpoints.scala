@@ -1,4 +1,4 @@
-package com.appstract
+package fun.gravax.dbin.tapend
 
 import sttp.tapir.*
 
@@ -25,7 +25,7 @@ object Endpoints:
   val booksListingServerEndpoint: ServerEndpoint[Any, IO] = booksListing.serverLogicSuccess(_ => IO.pure(Library.books))
 
   val apiEndpoints: List[ServerEndpoint[Any, IO]] = List(helloServerEndpoint, booksListingServerEndpoint) ++
-          StoryVolumeEndpts.storyVolEndpts
+          StoryVolumeEndpts.storyVolEndpts ++ DbinEndpts.binEndpts
           // DistBinCalcEndpts.storyServerEndpoint)
 
   val docEndpoints: List[ServerEndpoint[Any, IO]] = SwaggerInterpreter()

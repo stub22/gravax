@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  TestsFunction:
+    Properties:
+      Timeout: 20
+      MemorySize: 1024
+      Events:
+        GetStory:
+          Properties:
+            ApiId: !Ref 'TestsHttpApi'
+            Method: GET
+            Path: /story
+            TimeoutInMillis: 20000
+            PayloadFormatVersion: '2.0'
+          Type: HttpApi
+        GetVolumeWmet:
+          Properties:
+            ApiId: !Ref 'TestsHttpApi'
+            Method: GET
+            Path: /volume/wmet
+            TimeoutInMillis: 20000
+            PayloadFormatVersion: '2.0'
+          Type: HttpApi
+        GetVolumeListAll:
+          Properties:
+            ApiId: !Ref 'TestsHttpApi'
+            Method: GET
+            Path: /volume/list/all
+            TimeoutInMillis: 20000
+            PayloadFormatVersion: '2.0'
+          Type: HttpApi
+        GetHello:
+          Properties:
+            ApiId: !Ref 'TestsHttpApi'
+            Method: GET
+            Path: /hello
+            TimeoutInMillis: 20000
+            PayloadFormatVersion: '2.0'
+          Type: HttpApi
+        GetBooksListAll:
+          Properties:
+            ApiId: !Ref 'TestsHttpApi'
+            Method: GET
+            Path: /books/list/all
+            TimeoutInMillis: 20000
+            PayloadFormatVersion: '2.0'
+          Type: HttpApi
+        GetBinListAll:
+          Properties:
+            ApiId: !Ref 'TestsHttpApi'
+            Method: GET
+            Path: /bin/list/all
+            TimeoutInMillis: 20000
+            PayloadFormatVersion: '2.0'
+          Type: HttpApi
+      Runtime: java11
+      CodeUri: E:\_emnt\_prj_mnt\grvx_ide_04\grvx_sbt_sc3\grvx_dbin_api\serverless\aws\lambda-cats-effect-tests\target\jvm-2.13\tapir-aws-lambda-cats-effect-tests.jar
+      Handler: sttp.tapir.serverless.aws.lambda.tests.IOLambdaHandlerV2::handleRequest
+    Type: AWS::Serverless::Function
+  TestsHttpApi:
+    Properties:
+      StageName: $default
+    Type: AWS::Serverless::HttpApi
+Outputs:
+  TestsUrl:
+    Description: Base URL of your endpoints
+    Value:
+      Fn::Sub: https://${TestsHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}

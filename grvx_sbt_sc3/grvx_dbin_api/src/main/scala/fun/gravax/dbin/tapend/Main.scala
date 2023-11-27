@@ -1,4 +1,4 @@
-package com.appstract
+package fun.gravax.dbin.tapend
 
 import cats.effect.{ExitCode, IO, IOApp}
 import com.comcast.ip4s.{Host, Port, port}

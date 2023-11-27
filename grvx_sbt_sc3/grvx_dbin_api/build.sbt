@@ -1,10 +1,12 @@
 val tapirVersion = "1.8.1"
 
+Compile / run / fork := true
+
 lazy val rootProject = (project in file(".")).settings(
   Seq(
-    name := "tapgen",
+    name := "grvx-dbin-api",
     version := "0.1.0-SNAPSHOT",
-    organization := "com.appstract",
+    organization := "fun.gravax",
     scalaVersion := "3.3.1",
     libraryDependencies ++= Seq(
       "com.softwaremill.sttp.tapir" %% "tapir-http4s-server" % tapirVersion,
