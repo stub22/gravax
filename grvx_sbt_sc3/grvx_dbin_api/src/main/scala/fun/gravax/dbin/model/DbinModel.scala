@@ -13,7 +13,8 @@ object DbinModelTypes {
 	type BinRelWt = BigDecimal // Relative weight of a sub-bin within a parent.
 	type BinAbsWt = BigDecimal // Absolute weight of a bin within some root, which is the product of the relWeights on the bin's path from root.
 
-	// type DistTime =
+	type DistScenario = String
+	type DistTime = String
 }
 
 case class BinEntry(key : EntryKey, mean : EntryMean, variance : EntryVariance)
@@ -31,7 +32,10 @@ case class Bin(tag: BinTag, parentTag : Option[BinTag],
 			   entries : Map[EntryKey, BinEntry],
 			   subWeights : Map[BinTag, BinRelWt])
 
-case class DistribKeys()
+case class DistribKeys(scenarioID : DistScenario, obsTime : DistTime, calcTime : DistTime, predTime : DistTime)
+
+case class DistribRoot(keys : DistribKeys, rootBin : Bin)
+// .getChildren   .getDescendants(numLevels)
 
 object TestBins {
 

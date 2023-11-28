@@ -1,6 +1,10 @@
 val tapirVersion = "1.8.1"
+val MunitCatsEffectVersion = "1.0.7"
+
+val MUnitFramework = new TestFramework("munit.Framework")
 
 Compile / run / fork := true
+
 
 lazy val rootProject = (project in file(".")).settings(
   Seq(
@@ -20,8 +24,10 @@ lazy val rootProject = (project in file(".")).settings(
 
       "ch.qos.logback" % "logback-classic" % "1.4.11",
       "com.softwaremill.sttp.tapir" %% "tapir-sttp-stub-server" % tapirVersion % Test,
-      "org.scalatest" %% "scalatest" % "3.2.17" % Test,
-      "com.softwaremill.sttp.client3" %% "circe" % "3.9.1" % Test
+      "com.softwaremill.sttp.client3" %% "circe" % "3.9.1" % Test,
+      // "org.scalatest" %% "scalatest" % "3.2.17" % Test,
+
+      "org.typelevel" %% "munit-cats-effect-3" % MunitCatsEffectVersion % Test
     )
   )
 )

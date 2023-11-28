@@ -1,5 +1,7 @@
 package fun.gravax.dbin.tapend
 
+class JunkIgnore
+/*
 import Endpoints.{*, given}
 import org.scalatest.EitherValues
 import org.scalatest.flatspec.AnyFlatSpec
@@ -17,6 +19,8 @@ import sttp.tapir.integ.cats.effect.CatsMonadError
 
 class EndpointsSpec extends AnyFlatSpec with Matchers with EitherValues:
 
+  val myHelpers = new EndpointTestHelpers
+
   it should "return hello message" in {
     // given
     val backendStub = TapirStubInterpreter(SttpBackendStub(new CatsMonadError[IO]()))
@@ -29,6 +33,7 @@ class EndpointsSpec extends AnyFlatSpec with Matchers with EitherValues:
       .send(backendStub)
 
     // then
+
     response.map(_.body.value shouldBe "Hello adam").unwrap
   }
 
@@ -49,3 +54,4 @@ class EndpointsSpec extends AnyFlatSpec with Matchers with EitherValues:
   }
 
   extension [T](t: IO[T]) def unwrap: T = t.unsafeRunSync()
+*/
