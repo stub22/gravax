@@ -1,6 +1,7 @@
 package fun.gravax.dbin.model
 
-import fun.gravax.dbin.model.DbinModelTypes._
+import cats.effect.IO
+import fun.gravax.dbin.model.DbinModelTypes.*
 
 object DbinModelTypes {
 	type EntryKey = String
@@ -28,6 +29,7 @@ case class BinEntry(key : EntryKey, mean : EntryMean, variance : EntryVariance)
 // (e.g. in order to compute covariances), without bloating the Bin to be too large.  This allows us to
 // stream a sequence of Bins
 
+// Bin at a tag is immutable.  We may think of bins as a function (distKeys, tag) -> (entries, subWeights)
 case class Bin(tag: BinTag, parentTag : Option[BinTag],
 			   entries : Map[EntryKey, BinEntry],
 			   subWeights : Map[BinTag, BinRelWt])
@@ -35,6 +37,8 @@ case class Bin(tag: BinTag, parentTag : Option[BinTag],
 case class DistribKeys(scenarioID : DistScenario, obsTime : DistTime, calcTime : DistTime, predTime : DistTime)
 
 case class DistribRoot(keys : DistribKeys, rootBin : Bin)
+
+
 // .getChildren   .getDescendants(numLevels)
 
 object TestBins {

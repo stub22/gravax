@@ -13,7 +13,22 @@ object CovarTypes {
 	type EEProduct = BigDecimal
 }
 
-// If we assume that CovarMatrix "has access" to the required data, then we are thinking in OOP style.
+// If we assume that CovarMatrix "has access" to the required data, then we probably wind up relying on a cache.
+// If we want to get benefits from streaming the bins, we have to orchestrate a calculation scenario that is
+// not strictly on-demand.  These matrices are sink-like destinations.  They capture a currently interesting
+// subset of a Distrib in a reasonably dense form, in memory, as the accumulated result of a streamed calc.
+
+/*
+We need to clarify the scenarios that the Covar is needed for, so we know 'who is asking' for Covars?
+
+One answer is that we need covars to optimize a portfolio in traditional style (efficient horizon).
+
+In principle a CovarMatrix can be computed *or* stored, or even input directly as a form of model, possibly
+using some hypothetical assets in addition to real ones.
+
+We may think of a matrix as a function that produces values.  Then the data of the matrix is subsumed into
+the mapping-rule of the function.
+*/
 
 trait CovarMatrix {
 	def getCovarOrThrow(e1 : EntryKey, e2 : EntryKey) : EntryCovariance
@@ -69,14 +84,25 @@ object PortfolioTypes {
 }
 trait PortfolioOps {
 
+	// A general assumption here is that our portfolio numbers (which are usually some form of predicted return)
+	// must be summable.
+	// So additive returns like 0.05, 0.00, -0.05 make sense, but not multiplicative ones like 0.95, 1.05.
+
+	// pweights and binWeights MIGHT be assumed to be Convex (i.e. sum to 1.0).
+	// Let's note exactly when this assump needs to be applied.
+
+
+	// Here we don't assume that a CovarMatrix is already available.
 	def estimPortfolioVariance(pweights: Map[EntryKey, AssetWeight], globalMeans: Map[EntryKey, EntryMean],
 							   weightedBins: Seq[(BinRelWt, Bin)]): EntryVariance = ???
 
-	// pweights and binWeights may be assumed to be Convex (i.e. sum to 1.0).
-	// Let's note exactly when this assump needs to be applied.
 
-	// The key assumption here is that the portfolio numbers must be summable.
-	// So additive returns like 0.05, 0.00, -0.05 make sense, but not multiplicative ones like 0.95, 1.05.
+	/* In this version, we do require a pre-existing covarMatrix.  Of course it *could* be lazy.
+	* But if it needed to load binData from some BinSource, that would usually require an effect.
+	
+	We are leaning towards paying the price of abstraction over the nature of the BinSource.
+	Is it an in-memory cache backed by a DB Table?  Or is it somehow going to be streamed later in an optimized job?
+	*/
 	def estimPortfolioVariance(pweights: Map[EntryKey, AssetWeight], covarMatrix : CovarMatrix): PortfVar = {
 		// https://en.wikipedia.org/wiki/Covariance#Covariance_of_linear_combinations
 		val ekvs: Seq[(EntryKey, AssetWeight)] = pweights.toSeq
@@ -84,6 +110,8 @@ trait PortfolioOps {
 		val terms: Seq[BigDecimal] = ekvtmps.map((pairA, pairB) => {
 			val (ekA, awA) = pairA
 			val (ekB, awB) = pairB
+			// So far we assume that .getCovar can be done without any effects, but maybe this is a spot where we could
+			// benefit by using a generic effect-wrapper, defaulting to Identity or Eval.
 			val covAB: EntryCovariance = covarMatrix.getCovarOrThrow(ekA, ekB)
 			// Terms on the diagonal are self-variance
 			// Terms off the diagonal are co-variance and need to be counted twice
