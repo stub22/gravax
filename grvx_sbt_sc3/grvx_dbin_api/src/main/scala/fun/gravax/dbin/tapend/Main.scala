@@ -27,7 +27,7 @@ object Main extends IOApp:
       .default[IO]
       .withHost(Host.fromString("localhost").get)
       .withPort(port)
-      .withHttpApp(Router("/" -> routes).orNotFound)
+      .withHttpApp(Router("/main" -> routes, "/strmy" -> StreamyEnds.streamingRoutes).orNotFound)
       .build
       .use { server =>
         for {

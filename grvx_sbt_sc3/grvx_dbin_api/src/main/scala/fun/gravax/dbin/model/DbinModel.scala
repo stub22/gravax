@@ -29,7 +29,7 @@ case class BinEntry(key : EntryKey, mean : EntryMean, variance : EntryVariance)
 // (e.g. in order to compute covariances), without bloating the Bin to be too large.  This allows us to
 // stream a sequence of Bins
 
-// Bin at a tag is immutable.  We may think of bins as a function (distKeys, tag) -> (entries, subWeights)
+// Bin at a tag is immutable.  We may think of bins as a function (distKeys, tag) => (entries, subWeights)
 case class Bin(tag: BinTag, parentTag : Option[BinTag],
 			   entries : Map[EntryKey, BinEntry],
 			   subWeights : Map[BinTag, BinRelWt])

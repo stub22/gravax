@@ -36,7 +36,7 @@ object Endpoints:
   val prometheusMetrics: PrometheusMetrics[IO] = PrometheusMetrics.default[IO]()
   val metricsEndpoint: ServerEndpoint[Any, IO] = prometheusMetrics.metricsEndpoint
 
-  val all: List[ServerEndpoint[Any, IO]] = apiEndpoints ++ docEndpoints ++ List(metricsEndpoint)
+  val all: List[ServerEndpoint[Any, IO]] = apiEndpoints ++ docEndpoints ++ List(metricsEndpoint) // ++ List(StreamyEnds.realizedStreamyEndy)
 
 object Library:
   case class Author(name: String)

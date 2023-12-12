@@ -1,0 +1,43 @@
+interface DumEdgeProperties @relationshipProperties {
+	fond: String!
+	sweet: String!
+}
+
+type Fund {
+	fundStyle: String!
+	holdsStocks: [Stock!]! @relationship(type: "HOLDS", direction: OUT, properties: "HoldsProperties")
+	issuerShortName: String!
+	portfoliosHolds: [Portfolio!]! @relationship(type: "HOLDS", direction: IN, properties: "HoldsProperties")
+	shortName: String!
+	symbol: String!
+}
+
+interface HoldsProperties @relationshipProperties {
+	heldQty: Float!
+}
+
+type Portfolio {
+	holdsFunds: [Fund!]! @relationship(type: "HOLDS", direction: OUT, properties: "HoldsProperties")
+	holdsPortfolios: [Portfolio!]! @relationship(type: "HOLDS", direction: OUT, properties: "HoldsProperties")
+	holdsStocks: [Stock!]! @relationship(type: "HOLDS", direction: OUT, properties: "HoldsProperties")
+	portfName: String!
+	portfoliosHolds: [Portfolio!]! @relationship(type: "HOLDS", direction: IN, properties: "HoldsProperties")
+}
+
+type Stock {
+	fundsHolds: [Fund!]! @relationship(type: "HOLDS", direction: IN, properties: "HoldsProperties")
+	portfoliosHolds: [Portfolio!]! @relationship(type: "HOLDS", direction: IN, properties: "HoldsProperties")
+	shortName: String!
+	symbol: String!
+}
+
+type dumLab01 @node(labels: ["dumLab01", "dumLab02"]) {
+	dumEdgedumLab01S: [dumLab01!]! @relationship(type: "dumEdge", direction: OUT, properties: "DumEdgeProperties")
+	dumLab01SdumEdge: [dumLab01!]! @relationship(type: "dumEdge", direction: IN, properties: "DumEdgeProperties")
+	dumProp01: String!
+	dumProp02: String!
+}
+
+type Query {
+    portfolios:  [Portfolio!]!
+}

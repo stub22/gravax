@@ -5,6 +5,7 @@ val MUnitFramework = new TestFramework("munit.Framework")
 
 Compile / run / fork := true
 
+enablePlugins(CalibanPlugin)
 
 lazy val rootProject = (project in file(".")).settings(
   Seq(
@@ -22,6 +23,9 @@ lazy val rootProject = (project in file(".")).settings(
       "com.softwaremill.sttp.tapir" %% "tapir-aws-lambda" % tapirVersion, // Docs say "1.9.0"
       "com.softwaremill.sttp.tapir" %% "tapir-aws-sam" % tapirVersion, // "1.9.0"
 
+      "com.github.ghostdogpr" %% "caliban-client" % "2.4.3",
+      "com.softwaremill.sttp.client3"         %% "zio"                   % "3.9.1",
+
       "ch.qos.logback" % "logback-classic" % "1.4.11",
       "com.softwaremill.sttp.tapir" %% "tapir-sttp-stub-server" % tapirVersion % Test,
       "com.softwaremill.sttp.client3" %% "circe" % "3.9.1" % Test,
@@ -29,5 +33,7 @@ lazy val rootProject = (project in file(".")).settings(
 
       "org.typelevel" %% "munit-cats-effect-3" % MunitCatsEffectVersion % Test
     )
+
+
   )
 )
