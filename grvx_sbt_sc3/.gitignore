@@ -4,6 +4,7 @@
 .vscode/
 
 # build tool specific entries
+.bsp
 .bloop
 target
 metals.sbt

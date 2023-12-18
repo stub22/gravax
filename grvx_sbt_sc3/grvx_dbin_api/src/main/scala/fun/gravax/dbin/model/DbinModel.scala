@@ -3,16 +3,18 @@ package fun.gravax.dbin.model
 import cats.effect.IO
 import fun.gravax.dbin.model.DbinModelTypes.*
 
-object DbinModelTypes {
-	type EntryKey = String
-	type EntryMean = BigDecimal
-	type EntryVariance = BigDecimal
-	type EntryExpectedSquare = BigDecimal
+object DbinModelTypes extends EntryStatTypes {
+	override type EntryKey = String
+	override type EntryMean = BigDecimal
+	override type EntryVariance = BigDecimal
+	override type EntryExpectedSquare = BigDecimal
 
 	type BinTag = String
 	type BinFlavor = String	// TODO: Let's make a Scala 3 enum!
-	type BinRelWt = BigDecimal // Relative weight of a sub-bin within a parent.
-	type BinAbsWt = BigDecimal // Absolute weight of a bin within some root, which is the product of the relWeights on the bin's path from root.
+	type BinRelWt = BigDecimal // Relative weight of a sub-bin within a direct parent.  Weight of all siblings must sum to 1.0.
+	type BinAbsMass = BigDecimal
+	// Absolute mass of a bin within some root, which is the product of the relWeights on the bin's path from root.
+    // AbsMass of all root's leaf descendants must sum to 1.0.   For direct children of root, AbsMass == RelWt.
 
 	type DistScenario = String
 	type DistTime = String
@@ -24,15 +26,15 @@ case class BinEntry(key : EntryKey, mean : EntryMean, variance : EntryVariance)
 
 // In the spirit of combinability, each bin is a model which may be referenced by multiple parent bins.
 // The Bin doesn't know its own weight in any parent scheme.
-// But it does know the weights of its own subBins, which must sum to 1.0 when present.
+// But it does know the weights of its own subBins (normalSubWeights), which must sum to 1.0 when present.
 // This map of tags to weights gives us the identifying info we need to find/query sub-bins when desired
 // (e.g. in order to compute covariances), without bloating the Bin to be too large.  This allows us to
 // stream a sequence of Bins
 
 // Bin at a tag is immutable.  We may think of bins as a function (distKeys, tag) => (entries, subWeights)
-case class Bin(tag: BinTag, parentTag : Option[BinTag],
-			   entries : Map[EntryKey, BinEntry],
-			   subWeights : Map[BinTag, BinRelWt])
+// The normalSubWeights must sum to exactly 1.0 for the direct children of the bin.
+case class Bin(tag: BinTag, parentTag : Option[BinTag], entries : Map[EntryKey, BinEntry],
+			   normalSubWeights : Map[BinTag, BinRelWt])
 
 case class DistribKeys(scenarioID : DistScenario, obsTime : DistTime, calcTime : DistTime, predTime : DistTime)
 
